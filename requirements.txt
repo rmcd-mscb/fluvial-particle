@@ -1,0 +1,4 @@
+# Production dependencies, also should be specified in environment.yml
+click
+vtk
+numpy

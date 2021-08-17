@@ -1,0 +1,14 @@
+{
+  "_template": "https://code.usgs.gov/wma/nhgf/pygeoapi-plugin-cookiecutter.git",
+  "author": "Richard McDonald",
+  "description": "More detailed description of Fluvial Particle.",
+  "development_status": "Development Status :: 1 - Planning",
+  "email": "rmcd@usgs.gov",
+  "friendly_name": "Fluvial Particle",
+  "github_user": "rmcd-mscb",
+  "license": "MIT",
+  "package_name": "fluvial_particle",
+  "project_name": "fluvial-particle",
+  "summary": "Lagrangian particle-tracking for fluvial environments",
+  "version": "0.0.1-dev0"
+}

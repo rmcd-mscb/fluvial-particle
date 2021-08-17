@@ -1,0 +1,11 @@
+---
+name: fluvial-particle
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.8
+  - pip
+  # Production dependencies defined here (as well as in requirements.txt)
+  - click
+  - vtk
+  - numpy

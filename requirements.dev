@@ -1,0 +1,26 @@
+# Development dependencies.
+black
+darglint
+flake8
+flake8-bandit
+flake8-bugbear
+flake8-docstrings
+flake8-rst-docstrings
+nox
+pep8-naming
+pre-commit
+pre-commit-hooks
+safety
+mypy
+pytest
+coverage[toml]
+pygments
+typeguard
+xdoctest
+sphinx
+sphinx-click
+sphinx-autobuild
+sphinx-rtd-theme
+reorder-python-imports
+ipython
+bump2version
