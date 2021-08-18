@@ -39,7 +39,7 @@ beta_x = 0.067
 beta_y = 0.067
 beta_z = 0.067
 
-NumPart = 10000
+NumPart = 1000
 
 # A Tick = seconds * delta so  7200 ticks ==  1 hour
 # A Tick = seconds * delta so 14400 ticks ==  2 hour
@@ -76,15 +76,15 @@ TrackwDrift = 0
 A2DFile = "Result_2D_1.vtk"
 A3DFile = "Result_3D_1.vtk"
 
-out_dir = r"D:\GitRepos\Python\ParticleTrack_LarvalDriftPaper\TestFirst"
+
 out_2d_dir = "Sim2D"
 out_3d_dir = "Sim3D"
 # out_part = 'NoStrmLnCurv_185cms2d1_part.vtk'
 out_part = "Result_2D_Part.vtk"
 
-file_name_3da = r"C:\Users\rmcd\GitRepos\ParticleTrack_LarvalDriftPaper\Result_FM_MEander_1_long_3D1.vtk"
-file_name_2da = r"C:\Users\rmcd\GitRepos\ParticleTrack_LarvalDriftPaper\Result_FM_MEander_1_long_2D1.vtk"
-out_dir = r"E:\LaptopSims\MeanderExpts\Sim2b"
+file_name_3da = "./data/Result_FM_MEander_1_long_3D1.vtk"
+file_name_2da = "./data/Result_FM_MEander_1_long_2D1.vtk"
+out_dir = r"./output"
 
 
 def printtimes():

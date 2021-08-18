@@ -6,10 +6,11 @@ import random
 from itertools import count
 
 import numpy as np
-import src.fluvial_particle.settings as settings
 import vtk
-from src.fluvial_particle import Particle
 from vtk.util import numpy_support  # type:ignore
+
+import fluvial_particle.settings as settings
+from fluvial_particle.Particle import Particle
 
 
 def dist(x1, y1, x2, y2, x3, y3):  # x3,y3 is the point
@@ -265,7 +266,7 @@ def calc_grid_metrics(xx, yy):  # noqa
         [type]: [description]
     """
     nn, ns = xx.shape
-    jmid = (nn + 1) / 2
+    jmid = int((nn + 1) / 2)
 
     stot = 0.0
     for i in range(1, ns):
@@ -632,7 +633,7 @@ DDDN_2D = numpy_support.numpy_to_vtk(
 
 
 TotTime = 0.0
-CountIndex = 0
+count_index = 0
 # if Track2D:
 #     os.chdir("C:\GitRepos\Python\ParticleTracking\MeanderTest\VTKSol_t_32400\MeanderOut_4")
 # if Track3D:
@@ -645,11 +646,11 @@ ggg = gen_filenames("Sim_Result_2D_", ".vtk")
 g4 = gen_filenames("Sim_Result_3D_", ".vtk")
 while TotTime <= EndTime:  # noqa C901
     TotTime = TotTime + dt
-    CountIndex += 1
+    count_index += 1
     PartInNSCellPTime[:] = 0
     NumPartIn3DCell[:] = 0
     NumPartInCell[:] = 0
-    print(TotTime, CountIndex)
+    print(TotTime, count_index)
     for n in range(npart):
         # get random numbers
         xrnum = random.gauss(0.0, 1.0)
@@ -687,7 +688,7 @@ while TotTime <= EndTime:  # noqa C901
 
         tmpustar = math.sqrt(tmpss / 1000.0)
         # Set particle 0.5 meters above bed
-        if CountIndex <= 1:  # initialize starting depth of particles
+        if count_index <= 1:  # initialize starting depth of particles
             # pz = tmpelev+0.5
             if pz > tmpwse:
                 pz = tmpelev + 0.5 * tmpdepth
@@ -735,7 +736,7 @@ while TotTime <= EndTime:  # noqa C901
         # if result != 1:
         #     print n, result, dist, maxdist, CellId3D, tmp3dux, tmp3duy, tmp3duz
         if CellId3D == 0:
-            print(n, CountIndex, "no 3dcell found")
+            print(n, count_index, "no 3dcell found")
             CellId3D = 0
 
         #        CellId3D = CellLocator3D.FindCell(Point3D, .1, tmpcell, tpcoords, tweights)
@@ -743,7 +744,14 @@ while TotTime <= EndTime:  # noqa C901
         if CellId3D < 0:
             print("part out of 3d grid")
             print(
-                n, CountIndex, pz, tmpelev, tmpwse, (tmpwse - tmpelev), tmp3dux, tmp3duy
+                n,
+                count_index,
+                pz,
+                tmpelev,
+                tmpwse,
+                (tmpwse - tmpelev),
+                tmp3dux,
+                tmp3duy,
             )
             tmp3dux = 0.0
             tmp3duy = 0.0
@@ -780,7 +788,7 @@ while TotTime <= EndTime:  # noqa C901
         if Track2D:
             if TrackwDrift:
                 p2x, p2y, p2z = particles[n].movewithdrift(
-                    CountIndex,
+                    count_index,
                     tmpvelx,
                     tmpvely,
                     0.0,
@@ -794,12 +802,12 @@ while TotTime <= EndTime:  # noqa C901
                 )
             else:
                 p2x, p2y, p2z = particles[n].move(
-                    CountIndex, tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt
+                    count_index, tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt
                 )
         else:
             if TrackwDrift:
                 p2x, p2y, p2z = particles[n].movewithdrift(
-                    CountIndex,
+                    count_index,
                     tmp3dux,
                     tmp3duy,
                     0.0,
@@ -813,7 +821,7 @@ while TotTime <= EndTime:  # noqa C901
                 )
             else:
                 p2x, p2y, p2z = particles[n].move(
-                    CountIndex, tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt
+                    count_index, tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt
                 )
         newpoint2d = [p2x, p2y, 0.0]
         # check: inWetCell?
@@ -870,7 +878,7 @@ while TotTime <= EndTime:  # noqa C901
             if (
                 wse2 - elev2
             ) < min_depth:  # Don't allow to move into depths less than min_depth
-                #                 particles[n].update_position(CountIndex, px, py, pz, TotTime, tmpelev, tmpwse)
+                #                 particles[n].update_position(count_index, px, py, pz, TotTime, tmpelev, tmpwse)
                 particles[n].keep_postition(TotTime)
                 # if partInCell[cellid, n] == 0:
                 #     partInCell[cellid, n] = 1
@@ -880,7 +888,7 @@ while TotTime <= EndTime:  # noqa C901
                 print("In Min Depth")
             else:
                 particles[n].update_position(
-                    CountIndex, cellidb, p2x, p2y, p2z, TotTime, elev2, wse2
+                    count_index, cellidb, p2x, p2y, p2z, TotTime, elev2, wse2
                 )
                 # if partInCell[cellidb, n] == 0:
                 #     partInCell[cellidb, n] = 1
@@ -889,20 +897,20 @@ while TotTime <= EndTime:  # noqa C901
                 PartInNSCellPTime[CI_IDB] += 1
         else:
             prx, pry, prz = particles[n].move_random_only_2d(
-                CountIndex, avg_shear_dev, avg_shear_dev, xrnum, yrnum, dt
+                count_index, avg_shear_dev, avg_shear_dev, xrnum, yrnum, dt
             )
             # if Track2D:
             #     if TrackwDrift:
-            #         prx, pry, prz = particles[n].movewithdrift(CountIndex, -1 * tmpvelx, -1 * tmpvely, 0.0, Dx, Dy,
+            #         prx, pry, prz = particles[n].movewithdrift(count_index, -1 * tmpvelx, -1 * tmpvely, 0.0, Dx, Dy,
             #                                                    tmpddds, tmpdddn, xrnum, yrnum, dt)
             #     else:
-            #         prx, pry, prz = particles[n].move(CountIndex, -1*tmpvelx, -1*tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
+            #         prx, pry, prz = particles[n].move(count_index, -1*tmpvelx, -1*tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
             # else:
             #     if TrackwDrift:
-            #         prx, pry, prz = particles[n].movewithdrift(CountIndex, -1*tmp3dux, -1*tmp3duy, 0.0, Dx, Dy,
+            #         prx, pry, prz = particles[n].movewithdrift(count_index, -1*tmp3dux, -1*tmp3duy, 0.0, Dx, Dy,
             #                                                    tmpddds, tmpdddn, xrnum, yrnum, dt)
             #     else:
-            #         prx, pry, prz = particles[n].move(CountIndex, -1*tmp3dux, -1*tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
+            #         prx, pry, prz = particles[n].move(count_index, -1*tmp3dux, -1*tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
             newpoint2db = [prx, pry, 0.0]
             cellidc = CellLocator2D.FindCell(newpoint2db)
             #             if cellidc < 0:
@@ -946,7 +954,7 @@ while TotTime <= EndTime:  # noqa C901
                     wse2b - elev2b
                 ) < min_depth:  # Don't allow to move into depths less than min_depth
                     particles[n].update_position(
-                        CountIndex, cellid, px, py, pz, TotTime, tmpelev, tmpwse
+                        count_index, cellid, px, py, pz, TotTime, tmpelev, tmpwse
                     )
                     # if partInCell[cellid, n] == 0:
                     #     partInCell[cellid, n] = 1
@@ -956,7 +964,7 @@ while TotTime <= EndTime:  # noqa C901
                 #                     print 'cell wet min_depth'
                 else:
                     particles[n].update_position(
-                        CountIndex, cellidc, prx, pry, p2zb, TotTime, elev2b, wse2b
+                        count_index, cellidc, prx, pry, p2zb, TotTime, elev2b, wse2b
                     )
                     # if partInCell[cellidc, n] == 0:
                     #     partInCell[cellidc, n] = 1
@@ -966,7 +974,7 @@ while TotTime <= EndTime:  # noqa C901
             #                     print 'cell wet new position'
             else:
 
-                #                 particles[n].update_position(CountIndex, px, py, pz, TotTime, tmpelev, tmpwse)
+                #                 particles[n].update_position(count_index, px, py, pz, TotTime, tmpelev, tmpwse)
                 particles[n].keep_postition(TotTime)
                 # if partInCell[cellid, n] == 0:
                 #     partInCell[cellid, n] = 1
@@ -987,11 +995,11 @@ while TotTime <= EndTime:  # noqa C901
     carray6 = vtk.vtkFloatArray()
     carray6.SetNumberOfValues(num2dcells)
 
-    # for t in range(CountIndex):
-    if CountIndex % print_inc == 0:
+    # for t in range(count_index):
+    if count_index % print_inc == 0:
         print(TotTime)
-        t = CountIndex
-        with open(next(g), "wb") as tfile:
+        t = count_index
+        with open(next(g), "w") as tfile:
             writer = csv.writer(tfile)
             writer.writerow(
                 (
@@ -1012,7 +1020,7 @@ while TotTime <= EndTime:  # noqa C901
                 ].get_total_position()
                 writer.writerow((tind, tt, cind, tx, ty, tz, telev, thtabvbed, twse))
 
-        with open(next(gg), "wb") as t2file:
+        with open(next(gg), "w") as t2file:
             writer2 = csv.writer(t2file)
             writer2.writerow(("index", "NumPart"))
             for i_ind in range(nsc):
