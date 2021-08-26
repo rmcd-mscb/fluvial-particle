@@ -84,39 +84,39 @@ class Particles:
         #        + ((yranwalk * vx) / velmag)
         #    )
 
-    def vert_random_walk(self, time, bedelev, wse, vx, vy, vz, z_diff, zrnum, dt):
+    def vert_random_walk(self, bedelev, wse, vx, vy, vz, z_diff, zrnum, dt):
         """Set particle postion as a random walk above the bed.
 
         Args:
-            time ([type]): [description]
-            bedelev ([type]): [description]
-            wse ([type]): [description]
-            vx ([type]): [description]
-            vy ([type]): [description]
-            vz ([type]): [description]
-            z_diff ([type]): [description]
-            zrnum ([type]): [description]
-            dt ([type]): [description]
-
-        Returns:
-            [type]: [description]
+            bedelev (float): elevation of the channel bed [m]
+            wse (float): elevation of the water surface [m]
+            vx (float): velocity along x-coordinate axis [m/s]
+            vy (float): velocity along y-coordinate axis [m/s]
+            vz (float): velocity along z-coordinate axis [m/s]
+            z_diff (float): diffusion coefficient (>=0) along z-coordinate axis [m^2/s]
+            zrnum (float): drawn from standard normal distribution, scales z random walk
+            dt (float): time step [s]
         """
-        velmag = math.sqrt((vx * vx) + (vy * vy))
-        dv = zrnum * math.sqrt(2.0 * z_diff * dt)
+        velmag = (vx ** 2 + vy ** 2) ** 0.5
+        dv = zrnum * (2.0 * z_diff * dt) ** 0.5
         tdepth = wse - bedelev
-        #        tmpz = bedelev
-        if velmag == 0:
-            tmpz = self.z + (vz * dt)
-        else:
-            tmpz = self.z + (vz * dt) + dv
+        tmpz = np.where(velmag > 0.0, self.z + (vz * dt) + dv, self.z + (vz * dt))
+        # Array checks on elevation; keep these here?
+        tmpz = np.where(tmpz < wse, tmpz, wse - 0.01 * tdepth)
+        tmpz = np.where(tmpz > bedelev, tmpz, bedelev + 0.01 * tdepth)
+        self.z = tmpz
 
-        if tmpz >= wse:
-            # tmpz = (wse - (0.05*tdepth))
-            tmpz = wse - 0.01 * tdepth
-        if tmpz <= bedelev:
-            # tmpz = (wse - (0.05*tdepth))
-            tmpz = bedelev + 0.01 * tdepth
-        return tmpz
+    #        if velmag == 0:
+    #            tmpz = self.z + (vz * dt)
+    #        else:
+    #            tmpz = self.z + (vz * dt) + dv
+    #        if tmpz >= wse:
+    #            # tmpz = (wse - (0.05*tdepth))
+    #            tmpz = wse - 0.01 * tdepth
+    #        if tmpz <= bedelev:
+    #            # tmpz = (wse - (0.05*tdepth))
+    #            tmpz = bedelev + 0.01 * tdepth
+    #        return tmpz
 
     def move_random_only_2d(self, x_diff, y_diff, xrnum, yrnum, dt):
         """Update position based on speed, angle."""
