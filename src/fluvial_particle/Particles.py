@@ -1,6 +1,4 @@
 """Particles Class module."""
-import math
-
 import numpy as np
 
 
@@ -119,18 +117,39 @@ class Particles:
     #        return tmpz
 
     def move_random_only_2d(self, x_diff, y_diff, xrnum, yrnum, dt):
-        """Update position based on speed, angle."""
-        tmpx = self.x + xrnum * math.sqrt(2.0 * x_diff * dt)
-        tmpy = self.y + yrnum * math.sqrt(2.0 * y_diff * dt)
-        tmpz = self.z
-        return tmpx, tmpy, tmpz
+        """Update position based on random walk in x and y directions.
+
+        Args:
+            x_diff (float): diffusion coefficient (>=0) along x-coordinate axis [m^2/s]
+            y_diff (float): diffusion coefficient (>=0) along y-coordinate axis [m^2/s]
+            xrnum (float): drawn from standard normal distribution, scales x random walk
+            yrnum (float): drawn from standard normal distribution, scales y random walk
+            dt (float): time step [s]
+        """
+        self.x = self.x + xrnum * (2.0 * x_diff * dt) ** 0.5
+        self.y = self.y + yrnum * (2.0 * y_diff * dt) ** 0.5
+        self.z = self.z
+
+    #        tmpx = self.x + xrnum * math.sqrt(2.0 * x_diff * dt)
+    #        tmpy = self.y + yrnum * math.sqrt(2.0 * y_diff * dt)
+    #        tmpz = self.z
+    #        return tmpx, tmpy, tmpz
 
     def move_random_only_3d(self, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, dt):
-        """Update position based on speed, angle."""
-        tmpx = self.x + xrnum * math.sqrt(2.0 * x_diff * dt)
-        tmpy = self.y + yrnum * math.sqrt(2.0 * y_diff * dt)
-        tmpz = self.z + zrnum * math.sqrt(2.0 * z_diff * dt)
-        return tmpx, tmpy, tmpz
+        """Update position based on random walk in x, y, z directions.
+
+        Args:
+            x_diff (float): diffusion coefficient (>=0) along x-coordinate axis [m^2/s]
+            y_diff (float): diffusion coefficient (>=0) along y-coordinate axis [m^2/s]
+            z_diff (float): diffusion coefficient (>=0) along z-coordinate axis [m^2/s]
+            xrnum (float): drawn from standard normal distribution, scales x random walk
+            yrnum (float): drawn from standard normal distribution, scales y random walk
+            zrnum (float): drawn from standard normal distribution, scales z random walk
+            dt (float): time step [s]
+        """
+        self.x = self.x + xrnum * (2.0 * x_diff * dt) ** 0.5
+        self.y = self.y + yrnum * (2.0 * y_diff * dt) ** 0.5
+        self.z = self.z + zrnum * (2.0 * z_diff * dt) ** 0.5
 
     def update_position(self, cellind, xt, yt, zt, time, bedelev, wse):
         """Update position of particle."""
@@ -155,7 +174,6 @@ class Particles:
         if self.z <= self.bedElev:
             self.z = self.bedElev + 0.5 * (self.wse - self.bedElev)
 
-    #            print "error: index %i: z: %f bed: %f wse: %f" %(index, z, bedelev, wse)
     def get_position(self):
         """Return position of particle."""
         return self.x, self.y, self.z
