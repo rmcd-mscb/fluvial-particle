@@ -1,6 +1,8 @@
 """Particles Class module."""
 import math
 
+import numpy as np
+
 
 class Particles:
     """A class of particles, each with a velocity, size, and mass."""
@@ -9,30 +11,30 @@ class Particles:
         """[summary].
 
         Args:
-            nparts (int): number of particles in this instance, i.e. length of numpy arrays
-            x (float): numpy array that holds the x-coordinate of each particle
-            y (float): numpy array that holds the y-coordinate of each particle
-            z (float): numpy array that holds the z-coordinate of each particle
-            time_offset ([type]): [description]
+            nparts (int): number of particles in this instance
+            x (float): x-coordinate of each particle, numpy array of length nparts
+            y (float): y-coordinate of each particle, numpy array of length nparts
+            z (float): z-coordinate of each particle, numpy array of length nparts
+            time_offset (float): random offset for sinusoidal movement, numpy array of length nparts
             amplitude ([type]): [description]
             period ([type]): [description]
             min_elev ([type]): [description]
         """
-        self.nparts = nparts  # integer
-        self.x = x  # numpy array
-        self.y = y  # numpy array
-        self.z = z  # numpy array
-        self.time = 0.0  # numpy array
-        self.bedElev = 0.0  # numpy array
-        self.htabvbed = 0.0  # numpy array
-        self.wse = 0.0
-        # self.index = index  # numpy array (?)
-        self.time_offset = time_offset  # numpy array
+        self.nparts = nparts
+        self.x = x
+        self.y = y
+        self.z = z
+        self.time_offset = time_offset
+        self.time = np.zeros(nparts, dtype=float)
+        self.bedElev = np.zeros(nparts, dtype=float)
+        self.htabvbed = np.zeros(nparts, dtype=float)
+        self.wse = np.zeros(nparts, dtype=float)
+        # self.index = index
         self.sawtthAmplitude = amplitude  # numpy array if each particle can vary; scalar if constant for class instance
         self.sawtthPeriod = period  # same as amplitude
         self.sawtthmin_elev = min_elev  # same as amplitude
         self.vertConstElev = 0.55  # same as amplitude
-        self.cellindex = 0  # numpy array
+        self.cellindex = np.zeros(nparts, dtype=int)  # numpy array
 
     def setz(self, tz):
         """Set z-value.

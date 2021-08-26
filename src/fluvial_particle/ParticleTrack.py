@@ -348,7 +348,6 @@ def calc_grid_metrics(xx, yy):  # noqa
 
 
 random.seed()  # remove this in favor of np.random ?
-np.random.seed()
 # Some Variables
 # EndTime = 14400  # end time of simulation
 EndTime = settings.SimTime
@@ -413,19 +412,9 @@ xstart, ystart, zstart = settings.StartLoc
 x = np.zeros(npart, dtype=float) + xstart  # broadcasting correctly?
 y = np.zeros(npart, dtype=float) + ystart
 z = np.zeros(npart, dtype=float) + zstart
-ttime = np.random.uniform(0.0, period, npart)
+rng = np.random.default_rng()  # recommended method for new code
+ttime = rng.uniform(0.0, period, npart)
 particles = Particles(npart, x, y, z, ttime, amplitude, period, min_elev)
-
-# Initialize particles with initial location
-# for i in range(npart):
-#    ttime = random.uniform(0, period)  # noqa S311
-#    particle = Particle(i,(920.585, -161.145, 66.29), ttime, amplitude, period, min_elev)
-#    particle = Particle(i, xstart, ystart, zstart, ttime, amplitude, period, min_elev)
-
-#    particles.append(particle)
-
-# px,py,pz = particles[0].get_position()
-# print px, py, pz
 
 # The source file
 file_name_3da = r"C:\GitRepos\Python\ParticleTracking\Sum3_Result_3D_1.vtk"
