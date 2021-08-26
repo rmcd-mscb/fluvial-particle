@@ -524,120 +524,8 @@ yy = np_coords[:, 1]
 xx = xx.reshape((nn, ns))
 yy = yy.reshape((nn, ns))
 
-rn = np.zeros((nn, ns))
-phirot = np.zeros(ns)
-DDDX = np.zeros((nn, ns))
-DDDY = np.zeros((nn, ns))
-
-fsin, fcos, ds, dn, phirot, rn = calc_grid_metrics(xx, yy)
-DDDS = np.zeros((nn, ns))
-DDDN = np.zeros((nn, ns))
-
-for i in range(ns):
-    for j in range(nn):
-        if i == 0:
-            DDDS[j, i] = (
-                beta_x
-                * (
-                    (
-                        Depth_2D_np[j, 1]
-                        * np.sqrt(ShearStress_2D_np[j, 1] / 1000)
-                        * IBC_2D_np[j, 1]
-                    )
-                    - (
-                        Depth_2D_np[j, 0]
-                        * np.sqrt(ShearStress_2D_np[j, 0] / 1000)
-                        * IBC_2D_np[j, 0]
-                    )
-                )
-                / (ds * rn[j, i])
-            )
-        else:
-            if i == ns - 1:
-                DDDS[j, i] = (
-                    beta_x
-                    * (
-                        (
-                            Depth_2D_np[j, i]
-                            * np.sqrt(ShearStress_2D_np[j, i] / 1000)
-                            * IBC_2D_np[j, i]
-                        )
-                        - (
-                            Depth_2D_np[j, i - 1]
-                            * np.sqrt(ShearStress_2D_np[j, i - 1] / 1000)
-                            * IBC_2D_np[j, i - 1]
-                        )
-                    )
-                    / (ds * rn[j, i])
-                )
-            else:
-                DDDS[j, i] = (
-                    beta_x
-                    * (
-                        (
-                            Depth_2D_np[j, i + 1]
-                            * np.sqrt(ShearStress_2D_np[j, i + 1] / 1000)
-                            * IBC_2D_np[j, i + 1]
-                        )
-                        - (
-                            Depth_2D_np[j, i]
-                            * np.sqrt(ShearStress_2D_np[j, i] / 1000)
-                            * IBC_2D_np[j, i]
-                        )
-                    )
-                    / (ds * rn[j, i])
-                )
-
-        if j == 1:
-            DDDN[j, i] = 0.0
-        else:
-            if j == nn - 1:
-                DDDN[j, i] = 0.0
-            else:
-                DDDN[j, i] = (
-                    beta_y
-                    * (
-                        (
-                            Depth_2D_np[j + 1, i]
-                            * np.sqrt(ShearStress_2D_np[j + 1, i] / 1000)
-                            * IBC_2D_np[j + 1, i]
-                        )
-                        - (
-                            Depth_2D_np[j, i]
-                            * np.sqrt(ShearStress_2D_np[j, i] / 1000)
-                            * IBC_2D_np[j, i]
-                        )
-                    )
-                    / (dn)
-                )
-
-for i in range(ns):
-    rcos = np.cos(phirot[i])
-    rsin = np.sin(phirot[i])
-    for j in range(nn):
-
-        tux = DDDS[j, i] * rcos - DDDN[j, i] * rsin
-        tuy = DDDS[j, 1] * rsin + DDDN[j, i] * rcos
-        xx = tux * fcos - tuy * fsin
-        yy = tux * fsin + tuy * fcos
-
-        DDDX[j, i] = xx
-        DDDY[j, i] = yy
-
-DDDS_2D = numpy_support.numpy_to_vtk(
-    num_array=DDDX.ravel(), deep=True, array_type=vtk.VTK_DOUBLE
-)
-DDDN_2D = numpy_support.numpy_to_vtk(
-    num_array=DDDY.ravel(), deep=True, array_type=vtk.VTK_DOUBLE
-)
-
-
 TotTime = 0.0
 count_index = 0
-# if Track2D:
-#     os.chdir("C:\GitRepos\Python\ParticleTracking\MeanderTest\VTKSol_t_32400\MeanderOut_4")
-# if Track3D:
-#     os.chdir("C:\GitRepos\Python\ParticleTracking\MeanderTest\VTKSol_t_32400\MeanderOut_4")
 
 os.chdir(settings.out_dir)
 g = gen_filenames("fish1_", ".csv")
@@ -672,8 +560,6 @@ while TotTime <= EndTime:  # noqa C901
         tmpibc = get_cell_value(Point2D, cellid, IBC_2D)
         tmpvel = get_cell_value(Point2D, cellid, Velocity_2D)
         tmpss = get_cell_value(Point2D, cellid, ShearStress2D)
-        tmpddds = get_cell_value(Point2D, cellid, DDDS_2D)
-        tmpdddn = get_cell_value(Point2D, cellid, DDDN_2D)
         tmpvelx, tmpvely = get_2d_vec_value(Point2D, cellid)
 
         if pz < tmpelev:
@@ -733,14 +619,10 @@ while TotTime <= EndTime:  # noqa C901
                 tmp3duz = t_tmp3duz
                 CellId3D = idlist1.GetId(t)
                 # print n, result, CellId3D, tmp3dux, tmp3duy, tmp3duz
-        # if result != 1:
-        #     print n, result, dist, maxdist, CellId3D, tmp3dux, tmp3duy, tmp3duz
         if CellId3D == 0:
             print(n, count_index, "no 3dcell found")
             CellId3D = 0
 
-        #        CellId3D = CellLocator3D.FindCell(Point3D, .1, tmpcell, tpcoords, tweights)
-        #         tmp3dux, tmp3duy, tmp3duz = get_3d_vec_value(Point3D, CellId3D)
         if CellId3D < 0:
             print("part out of 3d grid")
             print(
@@ -786,43 +668,13 @@ while TotTime <= EndTime:  # noqa C901
             Dz = avg_shear_devz + settings.LEV
         #   Get new location of particle
         if Track2D:
-            if TrackwDrift:
-                p2x, p2y, p2z = particles[n].movewithdrift(
-                    count_index,
-                    tmpvelx,
-                    tmpvely,
-                    0.0,
-                    Dx,
-                    Dy,
-                    tmpddds,
-                    tmpdddn,
-                    xrnum,
-                    yrnum,
-                    dt,
-                )
-            else:
-                p2x, p2y, p2z = particles[n].move(
-                    count_index, tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt
-                )
+            p2x, p2y, p2z = particles[n].move(
+                count_index, tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt
+            )
         else:
-            if TrackwDrift:
-                p2x, p2y, p2z = particles[n].movewithdrift(
-                    count_index,
-                    tmp3dux,
-                    tmp3duy,
-                    0.0,
-                    Dx,
-                    Dy,
-                    tmpddds,
-                    tmpdddn,
-                    xrnum,
-                    yrnum,
-                    dt,
-                )
-            else:
-                p2x, p2y, p2z = particles[n].move(
-                    count_index, tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt
-                )
+            p2x, p2y, p2z = particles[n].move(
+                count_index, tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt
+            )
         newpoint2d = [p2x, p2y, 0.0]
         # check: inWetCell?
 
@@ -839,11 +691,6 @@ while TotTime <= EndTime:  # noqa C901
         p2z = elev1 + (PartNormDepth * tdepth1)
         particles[n].setz(p2z)
 
-        #         if Track2D:
-        #             p2z = particles[n].vert_mean_depth(TotTime,elev1, wse1)
-        #         else:
-        #             p2z = particles[n].vert_const_depth(TotTime, elev1, wse1)
-        #
         if p2z <= elev1:
             print("error pt <= elev")
         if p2z >= wse1:
@@ -880,8 +727,6 @@ while TotTime <= EndTime:  # noqa C901
             ) < min_depth:  # Don't allow to move into depths less than min_depth
                 #                 particles[n].update_position(count_index, px, py, pz, TotTime, tmpelev, tmpwse)
                 particles[n].keep_postition(TotTime)
-                # if partInCell[cellid, n] == 0:
-                #     partInCell[cellid, n] = 1
                 NumPartInCell[cellid] += 1
                 PartTimeInCell[cellid] += dt
                 PartInNSCellPTime[CI_ID] += 1
@@ -890,8 +735,6 @@ while TotTime <= EndTime:  # noqa C901
                 particles[n].update_position(
                     count_index, cellidb, p2x, p2y, p2z, TotTime, elev2, wse2
                 )
-                # if partInCell[cellidb, n] == 0:
-                #     partInCell[cellidb, n] = 1
                 NumPartInCell[cellidb] += 1
                 PartTimeInCell[cellidb] += dt
                 PartInNSCellPTime[CI_IDB] += 1
@@ -899,28 +742,14 @@ while TotTime <= EndTime:  # noqa C901
             prx, pry, prz = particles[n].move_random_only_2d(
                 count_index, avg_shear_dev, avg_shear_dev, xrnum, yrnum, dt
             )
-            # if Track2D:
-            #     if TrackwDrift:
-            #         prx, pry, prz = particles[n].movewithdrift(count_index, -1 * tmpvelx, -1 * tmpvely, 0.0, Dx, Dy,
-            #                                                    tmpddds, tmpdddn, xrnum, yrnum, dt)
-            #     else:
-            #         prx, pry, prz = particles[n].move(count_index, -1*tmpvelx, -1*tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
-            # else:
-            #     if TrackwDrift:
-            #         prx, pry, prz = particles[n].movewithdrift(count_index, -1*tmp3dux, -1*tmp3duy, 0.0, Dx, Dy,
-            #                                                    tmpddds, tmpdddn, xrnum, yrnum, dt)
-            #     else:
-            #         prx, pry, prz = particles[n].move(count_index, -1*tmp3dux, -1*tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
+
             newpoint2db = [prx, pry, 0.0]
             cellidc = CellLocator2D.FindCell(newpoint2db)
-            #             if cellidc < 0:
-            #                 print'random cell -1'
             CI_IDC = cellidc % nsc
             if is_cell_wet(newpoint2db, cellidc):
                 elev2b = get_cell_value(newpoint2db, cellid, Elevation_2D)
                 wse2b = get_cell_value(newpoint2db, cellid, WSE_2D)
-                #                 if elev2b>wse2b:
-                #                     print 'Error elev > wse'
+
                 if Track2D:
                     p2zb = particles[n].vert_mean_depth(TotTime, elev2b, wse2b)
                 else:
@@ -944,11 +773,6 @@ while TotTime <= EndTime:  # noqa C901
                         )
                     else:
                         print("vert_type not defined")
-                #  p2zb = particles[n].vert_const_depth(TotTime, elev2b, wse2b)
-                #  p2zb = particles[n].vert_sinusoid(TotTime, elev2b, wse2b)
-                #  p2zb = particles[n].vert_sinusoid_bottom(TotTime, elev2b, wse2b, 0.2)
-                #  p2zb = particles[n].vert_random_walk(TotTime, elev2b, wse2b, tmp3dux, tmp3duy, 0.0, Dz, zrnum, dt)
-                #  p2zb = particles[n].vert_sawtooth(TotTime,elev2b, wse2b)
 
                 if (
                     wse2b - elev2b
@@ -956,8 +780,7 @@ while TotTime <= EndTime:  # noqa C901
                     particles[n].update_position(
                         count_index, cellid, px, py, pz, TotTime, tmpelev, tmpwse
                     )
-                    # if partInCell[cellid, n] == 0:
-                    #     partInCell[cellid, n] = 1
+
                     NumPartInCell[cellid] += 1
                     PartTimeInCell[cellid] += dt
                     PartInNSCellPTime[CI_ID] += 1
@@ -966,27 +789,20 @@ while TotTime <= EndTime:  # noqa C901
                     particles[n].update_position(
                         count_index, cellidc, prx, pry, p2zb, TotTime, elev2b, wse2b
                     )
-                    # if partInCell[cellidc, n] == 0:
-                    #     partInCell[cellidc, n] = 1
+
                     NumPartInCell[cellidc] += 1
                     PartTimeInCell[cellidc] += dt
                     PartInNSCellPTime[CI_IDC] += 1
             #                     print 'cell wet new position'
             else:
 
-                #                 particles[n].update_position(count_index, px, py, pz, TotTime, tmpelev, tmpwse)
                 particles[n].keep_postition(TotTime)
-                # if partInCell[cellid, n] == 0:
-                #     partInCell[cellid, n] = 1
                 NumPartInCell[cellid] += 1
                 PartTimeInCell[cellid] += dt
                 PartInNSCellPTime[CI_ID] += 1
                 tmppt = [px, py, 0.0]
                 cellidd = CellLocator2D.FindCell(tmppt)
                 print("cell wet old pos")
-    #                 if is_cell_wet(tmppt, cellidd) == False:
-    #                     print "error: Point in Dry Cell - Reflected into Dry Cell"
-    #        print particles[n].get_position()
 
     carray4 = vtk.vtkFloatArray()
     carray4.SetNumberOfValues(num2dcells)
@@ -1065,14 +881,6 @@ carray3.SetNumberOfValues(num2dcells)
 
 
 for n in range(num2dcells):
-    #     carray.SetValue(n, 0.0)
-    #     totcnt = 0.0
-    #     for p in range(npart):
-    #         if PartTimeInCell[p,n] >= 1:
-    #             NumPartInCell[n] += 1
-    #         totcnt = totcnt + PartTimeInCell[p,n]
-    #     tmp1 = float(sum(partInCell[n,:]))
-    #     carray.SetValue(n, tmp1)
     carray.SetValue(n, NumPartInCell[n])
 
 # Total time of particles in cell divided by
@@ -1097,39 +905,6 @@ wsg.SetInputData(vtksgrid2d)
 wsg.SetFileTypeToBinary()
 wsg.SetFileName("NoStrmLnCurv_185cms2d1_part.vtk")
 wsg.Write()
-#         for x in range(0,numpts):
-#     #         print f, x, numpts, weights[x], IBC_2D.GetTuple(idlist1.GetId(x))[0]
-#             tmpibc = tmpibc + weights[x]*IBC_2D.GetTuple(idlist1.GetId(x))[0]
-#
-#         IBC2D[f] = tmpibc
-#         if IBC2D[f] > 0.99:
-#             #Fish in wet cell
-#             for x in range(0,numpts):
-#                 tmpelev = tmpelev + weights[x]*Elevation_2D.GetTuple(idlist1.GetId(x))[0]
-#                 tmpwse = tmpwse + weights[x]*WSE_2D.GetTuple(idlist1.GetId(x))[0]
-#                 tmpvel = tmpvel + weights[x]*Velocity_2D.GetTuple(idlist1.GetId(x))[0]
-#                 tmpvelx = VelocityVec2D.GetTuple(idlist1.GetId(x))[0]
-#                 tmpvely = VelocityVec2D.GetTuple(idlist1.GetId(x))[1]
-#                 tmpss = tmpss + weights[x]*ShearStress2D.GetTuple(idlist1.GetId(x))[0]
-#             Elevation2D[f] = tmpelev
-#             WSE2D[f] = tmpwse
-#             Velocity2D[f] = tmpvel
-#             VelVec2DX[f] = tmpvelx
-#             VelVec2DY[f] = tmpvely
-#             FishElev[f] = tmpwse - depth[f]
-#             if FishElev[f] <= Elevation2D[f]:
-#                 FishElev[f] = Elevation2D[f] + 0.25
-#                 FishBlwBed[f] = 1
-#         else:
-#             #Fish in dry cell
-#             print IBC2D[f]
-#             Elevation2D[f] = 0
-#             WSE2D[f] = 0
-#             FishElev[f] = 0
-#             Velocity2D[f] = 0
-#             VelVec2DX[f] = 0
-#             VelVec2DY[f] = 0
-#         print f, IBC2D[f], Elevation2D[f], WSE2D[f], FishElev[f], Velocity2D[f]
 
 if __name__ == "__main__":
     pass

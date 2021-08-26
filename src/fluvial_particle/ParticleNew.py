@@ -18,12 +18,12 @@ class Particle:
             period ([type]): [description]
             min_elev ([type]): [description]
         """
-        self.x = x # numpy array
-        self.y = y # numpy array
-        self.z = z # numpy array
-        self.lastx = x # remove
-        self.lasty = y # remove
-        self.lastz = z # remove
+        self.x = x  # numpy array
+        self.y = y  # numpy array
+        self.z = z  # numpy array
+        self.lastx = x  # remove
+        self.lasty = y  # remove
+        self.lastz = z  # remove
         self.time = 0.0
         self.bedElev = 0.0
         self.htabvbed = 0.0
