@@ -1,15 +1,15 @@
-"""Particle Class module."""
+"""Particles Class module."""
 import math
 
 
 class Particles:
     """A class of particles, each with a velocity, size, and mass."""
 
-    def __init__(self, index, x, y, z, time_offset, amplitude, period, min_elev):
+    def __init__(self, nparts, x, y, z, time_offset, amplitude, period, min_elev):
         """[summary].
 
         Args:
-            index ([type]): [description]
+            nparts (int): number of particles in this instance, i.e. length of numpy arrays
             x (float): numpy array that holds the x-coordinate of each particle
             y (float): numpy array that holds the y-coordinate of each particle
             z (float): numpy array that holds the z-coordinate of each particle
@@ -18,7 +18,7 @@ class Particles:
             period ([type]): [description]
             min_elev ([type]): [description]
         """
-        # add self.nparts which stores the number of particles in the given instance, and hence the length of np arrays
+        self.nparts = nparts  # integer
         self.x = x  # numpy array
         self.y = y  # numpy array
         self.z = z  # numpy array
@@ -26,7 +26,7 @@ class Particles:
         self.bedElev = 0.0  # numpy array
         self.htabvbed = 0.0  # numpy array
         self.wse = 0.0
-        self.index = index  # numpy array (?)
+        # self.index = index  # numpy array (?)
         self.time_offset = time_offset  # numpy array
         self.sawtthAmplitude = amplitude  # numpy array if each particle can vary; scalar if constant for class instance
         self.sawtthPeriod = period  # same as amplitude

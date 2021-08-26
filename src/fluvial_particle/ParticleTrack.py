@@ -10,7 +10,7 @@ import vtk
 from vtk.util import numpy_support  # type:ignore
 
 import fluvial_particle.settings as settings
-from fluvial_particle.Particle import Particle
+from fluvial_particle.Particles import Particles
 
 
 def dist(x1, y1, x2, y2, x3, y3):  # x3,y3 is the point
@@ -347,7 +347,8 @@ def calc_grid_metrics(xx, yy):  # noqa
     return fcos, fsin, ds, dn, phirotation, rn
 
 
-random.seed()
+random.seed()  # remove this in favor of np.random ?
+np.random.seed()
 # Some Variables
 # EndTime = 14400  # end time of simulation
 EndTime = settings.SimTime
@@ -408,15 +409,20 @@ npart = 300  # number of particles
 npart = settings.NumPart
 xstart, ystart, zstart = settings.StartLoc
 
-particles = []
+# Initialize particles class with initial location
+x = np.zeros(npart, dtype=float) + xstart  # broadcasting correctly?
+y = np.zeros(npart, dtype=float) + ystart
+z = np.zeros(npart, dtype=float) + zstart
+ttime = np.random.uniform(0.0, period, npart)
+particles = Particles(npart, x, y, z, ttime, amplitude, period, min_elev)
 
 # Initialize particles with initial location
-for i in range(npart):
-    ttime = random.uniform(0, period)  # noqa S311
-    # particle = Particle(i,(920.585, -161.145, 66.29), ttime, amplitude, period, min_elev)
-    particle = Particle(i, xstart, ystart, zstart, ttime, amplitude, period, min_elev)
+# for i in range(npart):
+#    ttime = random.uniform(0, period)  # noqa S311
+#    particle = Particle(i,(920.585, -161.145, 66.29), ttime, amplitude, period, min_elev)
+#    particle = Particle(i, xstart, ystart, zstart, ttime, amplitude, period, min_elev)
 
-    particles.append(particle)
+#    particles.append(particle)
 
 # px,py,pz = particles[0].get_position()
 # print px, py, pz
