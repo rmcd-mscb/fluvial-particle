@@ -80,65 +80,6 @@ class Particle:
         tmpz = self.z + (vz * dt)
         return tmpx, tmpy, tmpz
 
-    def movewithdrift(
-        self,
-        index,
-        vx,
-        vy,
-        vz,
-        x_diff,
-        y_diff,
-        x_dgrad,
-        y_dgrad,
-        xrnum,
-        yrnum,
-        dt,
-        type=1,
-    ):
-        """Update position based on speed, angle."""
-        #         self.x = self.px[index-1] + (vx*dt) + xrnum*math.sqrt(2.0*x_diff*dt)
-        #         self.y = self.py[index-1] + (vy*dt) + yrnum*math.sqrt(2.0*y_diff*dt)
-        #         self.z = self.pz[index-1] + (vz*dt)
-        velmag = math.sqrt((vx * vx) + (vy * vy))
-        dgradmag = math.sqrt((x_dgrad * x_dgrad) + (y_dgrad * y_dgrad))
-        dlong = xrnum * math.sqrt(2.0 * x_diff * dt)
-        dtrans = yrnum * math.sqrt(2.0 * y_diff * dt)
-        if velmag == 0:
-            tmpx = self.x + ((vx + x_dgrad) * dt)
-            tmpy = self.y + ((vy + y_dgrad) * dt)
-        else:
-            if type == 1:
-                tmpx = (
-                    self.x
-                    + (vx * dt)
-                    + x_dgrad * dt
-                    + (dlong * vx / velmag - dtrans * vy / velmag)
-                )
-                tmpy = (
-                    self.y
-                    + (vy * dt)
-                    + y_dgrad * dt
-                    + (dlong * vy / velmag + dtrans * vx / velmag)
-                )
-            else:
-                tmpx = (
-                    self.x
-                    + ((vx) * dt)
-                    + (x_dgrad / dgradmag - y_dgrad / dgradmag) * dt
-                    + (dlong * vx / velmag - dtrans * vy / velmag)
-                )
-                tmpy = (
-                    self.y
-                    + ((vy) * dt)
-                    + (x_dgrad / dgradmag + dgradmag / dgradmag) * dt
-                    + (dlong * vy / velmag + dtrans * vx / velmag)
-                )
-
-        #         tmpx = self.lastx + (vx*dt) + xrnum*math.sqrt(2.0*x_diff*dt)
-        #         tmpy = self.lasty + (vy*dt) + yrnum*math.sqrt(2.0*y_diff*dt)
-        tmpz = self.z + (vz * dt)
-        return tmpx, tmpy, tmpz
-
     def move3d(
         self, index, vx, vy, vz, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, dt
     ):
