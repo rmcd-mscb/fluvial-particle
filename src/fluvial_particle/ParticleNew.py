@@ -2,39 +2,37 @@
 import math
 
 
-class Particle:
-    """Class of a particle."""
+class Particles:
+    """A class of particles, each with a velocity, size, and mass."""
 
     def __init__(self, index, x, y, z, time_offset, amplitude, period, min_elev):
         """[summary].
 
         Args:
             index ([type]): [description]
-            x ([type]): [description]
-            y ([type]): [description]
-            z ([type]): [description]
+            x (float): numpy array that holds the x-coordinate of each particle
+            y (float): numpy array that holds the y-coordinate of each particle
+            z (float): numpy array that holds the z-coordinate of each particle
             time_offset ([type]): [description]
             amplitude ([type]): [description]
             period ([type]): [description]
             min_elev ([type]): [description]
         """
+        # add self.nparts which stores the number of particles in the given instance, and hence the length of np arrays
         self.x = x  # numpy array
         self.y = y  # numpy array
         self.z = z  # numpy array
-        self.lastx = x  # remove
-        self.lasty = y  # remove
-        self.lastz = z  # remove
-        self.time = 0.0
-        self.bedElev = 0.0
-        self.htabvbed = 0.0
+        self.time = 0.0  # numpy array
+        self.bedElev = 0.0  # numpy array
+        self.htabvbed = 0.0  # numpy array
         self.wse = 0.0
-        self.index = index
-        self.time_offset = time_offset
-        self.sawtthAmplitude = amplitude
-        self.sawtthPeriod = period
-        self.sawtthmin_elev = min_elev
-        self.vertConstElev = 0.55
-        self.cellindex = 0
+        self.index = index  # numpy array (?)
+        self.time_offset = time_offset  # numpy array
+        self.sawtthAmplitude = amplitude  # numpy array if each particle can vary; scalar if constant for class instance
+        self.sawtthPeriod = period  # same as amplitude
+        self.sawtthmin_elev = min_elev  # same as amplitude
+        self.vertConstElev = 0.55  # same as amplitude
+        self.cellindex = 0  # numpy array
 
     def setz(self, tz):
         """Set z-value.
