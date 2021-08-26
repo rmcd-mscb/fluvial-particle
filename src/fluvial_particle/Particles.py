@@ -39,104 +39,66 @@ class Particles:
     def setz(self, tz):
         """Set z-value.
 
+        TO BE REMOVED ?z
+
         Args:
             tz (float): z-value of particle
         """
         self.z = tz
 
-    def move(self, index, vx, vy, vz, x_diff, y_diff, xrnum, yrnum, dt):
-        """Update position based on speed, angle."""
-        #         self.x = self.px[index-1] + (vx*dt) + xrnum*math.sqrt(2.0*x_diff*dt)
-        #         self.y = self.py[index-1] + (vy*dt) + yrnum*math.sqrt(2.0*y_diff*dt)
-        #         self.z = self.pz[index-1] + (vz*dt)
-        velmag = math.sqrt((vx * vx) + (vy * vy))
-        xranwalk = xrnum * math.sqrt(2.0 * x_diff * dt)
-        yranwalk = yrnum * math.sqrt(2.0 * y_diff * dt)
-        if velmag == 0:
-            tmpx = self.x + (vx * dt)
-            tmpy = self.y + (vy * dt)
-        else:
-            tmpx = (
-                self.x
-                + (vx * dt)
-                + ((xranwalk * vx) / velmag)
-                - ((yranwalk * vy) / velmag)
-            )
-            tmpy = (
-                self.y
-                + (vy * dt)
-                + ((xranwalk * vy) / velmag)
-                + ((yranwalk * vx) / velmag)
-            )
+    def move(self, vx, vy, vz, x_diff, y_diff, xrnum, yrnum, dt):
+        """Update position based on speed, angle.
 
-            # tmpx = self.x + (vx*dt) + xrnum*math.sqrt(2.0*x_diff*dt)
-            # tmpy = self.x + (vy*dt) + yrnum*math.sqrt(2.0*y_diff*dt)
-        tmpz = self.z + (vz * dt)
-        return tmpx, tmpy, tmpz
+        Args:
+            vx (float): velocity along x-coordinate axis [m/s]
+            vy (float): velocity along y-coordinate axis [m/s]
+            vz (float): velocity along z-coordinate axis [m/s]
+            x_diff (float): diffusion coefficient (>=0) along x-coordinate axis [m^2/s]
+            y_diff (float): diffusion coefficient (>=0) along y-coordinate axis [m^2/s]
+            xrnum (float): drawn from standard normal distribution, scales x random walk
+            yrnum (float): drawn from standard normal distribution, scales y random walk
+            dt (float): time step [s]
+        """
+        velmag = (vx ** 2 + vy ** 2) ** 0.5
+        xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
+        yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
 
-    def movewithdrift(
-        self,
-        index,
-        vx,
-        vy,
-        vz,
-        x_diff,
-        y_diff,
-        x_dgrad,
-        y_dgrad,
-        xrnum,
-        yrnum,
-        dt,
-        type=1,
-    ):
-        """Update position based on speed, angle."""
-        #         self.x = self.px[index-1] + (vx*dt) + xrnum*math.sqrt(2.0*x_diff*dt)
-        #         self.y = self.py[index-1] + (vy*dt) + yrnum*math.sqrt(2.0*y_diff*dt)
-        #         self.z = self.pz[index-1] + (vz*dt)
-        velmag = math.sqrt((vx * vx) + (vy * vy))
-        dgradmag = math.sqrt((x_dgrad * x_dgrad) + (y_dgrad * y_dgrad))
-        dlong = xrnum * math.sqrt(2.0 * x_diff * dt)
-        dtrans = yrnum * math.sqrt(2.0 * y_diff * dt)
-        if velmag == 0:
-            tmpx = self.x + ((vx + x_dgrad) * dt)
-            tmpy = self.y + ((vy + y_dgrad) * dt)
-        else:
-            if type == 1:
-                tmpx = (
-                    self.x
-                    + (vx * dt)
-                    + x_dgrad * dt
-                    + (dlong * vx / velmag - dtrans * vy / velmag)
-                )
-                tmpy = (
-                    self.y
-                    + (vy * dt)
-                    + y_dgrad * dt
-                    + (dlong * vy / velmag + dtrans * vx / velmag)
-                )
-            else:
-                tmpx = (
-                    self.x
-                    + ((vx) * dt)
-                    + (x_dgrad / dgradmag - y_dgrad / dgradmag) * dt
-                    + (dlong * vx / velmag - dtrans * vy / velmag)
-                )
-                tmpy = (
-                    self.y
-                    + ((vy) * dt)
-                    + (x_dgrad / dgradmag + dgradmag / dgradmag) * dt
-                    + (dlong * vy / velmag + dtrans * vx / velmag)
-                )
+        # numpy conditional evaluations
+        # Move and update positions in-place on each array
+        self.x = self.x + np.where(
+            velmag > 0.0,
+            vx * dt + ((xranwalk * vx) / velmag) - ((yranwalk * vy) / velmag),
+            0.0,
+        )
+        self.y = self.y + np.where(
+            velmag > 0.0,
+            vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
+            0.0,
+        )
+        self.z = self.z + (vz * dt)
 
-        #         tmpx = self.lastx + (vx*dt) + xrnum*math.sqrt(2.0*x_diff*dt)
-        #         tmpy = self.lasty + (vy*dt) + yrnum*math.sqrt(2.0*y_diff*dt)
-        tmpz = self.z + (vz * dt)
-        return tmpx, tmpy, tmpz
+        # if velmag == 0:
+        #    tmpx = self.x + (vx * dt)
+        #    tmpy = self.y + (vy * dt)
+        # else:
+        #    tmpx = (
+        #        self.x
+        #        + (vx * dt)
+        #        + ((xranwalk * vx) / velmag)
+        #        - ((yranwalk * vy) / velmag)
+        #    )
+        #    tmpy = (
+        #        self.y
+        #        + (vy * dt)
+        #        + ((xranwalk * vy) / velmag)
+        #        + ((yranwalk * vx) / velmag)
+        #    )
 
     def move3d(
         self, index, vx, vy, vz, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, dt
     ):
         """Update position based on speed, angle."""
+        # TO BE REMOVED ?
         velmag = math.sqrt((vx * vx) + (vy * vy))
         dl = xrnum * math.sqrt(2.0 * x_diff * dt)
         dt = yrnum * math.sqrt(2.0 * y_diff * dt)
