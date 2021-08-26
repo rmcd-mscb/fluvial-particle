@@ -3,7 +3,7 @@ import math
 
 
 class Particle:
-    """A circular object with a velocity, size and mass."""
+    """Class of a particle."""
 
     def __init__(self, index, x, y, z, time_offset, amplitude, period, min_elev):
         """[summary].
