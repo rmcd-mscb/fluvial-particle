@@ -7,10 +7,11 @@ from itertools import count
 
 import numpy as np
 import vtk
-from vtk.util import numpy_support  # type:ignore
 
 import fluvial_particle.settings as settings
 from fluvial_particle.Particles import Particles
+
+# from vtk.util import numpy_support  # type:ignore
 
 
 def dist(x1, y1, x2, y2, x3, y3):  # x3,y3 is the point
@@ -500,25 +501,6 @@ ShearStress2D = vtksgrid2d.GetPointData().GetScalars("ShearStress (magnitude)")
 # Get Velocity from 3D
 VelocityVec3D = vtksgrid3d.GetPointData().GetScalars("Velocity")
 
-# Calculate the gradient of the main dispersion terms depth*ustar
-WSE_2D_np = numpy_support.vtk_to_numpy(WSE_2D)
-WSE_2D_np = WSE_2D_np.reshape(nn, ns)
-IBC_2D_np = numpy_support.vtk_to_numpy(IBC_2D)
-IBC_2D_np = IBC_2D_np.reshape(nn, ns)
-Depth_2D_np = numpy_support.vtk_to_numpy(Depth_2D)
-Depth_2D_np = Depth_2D_np.reshape(nn, ns)
-ShearStress_2D_np = numpy_support.vtk_to_numpy(ShearStress2D)
-ShearStress_2D_np = ShearStress_2D_np.reshape(nn, ns)
-coords = vtksgrid2d.GetPoints().GetData()
-# print coords
-np_coords = numpy_support.vtk_to_numpy(coords)
-# print np_coords
-xx = np_coords[:, 0]
-yy = np_coords[:, 1]
-# print xx.shape
-xx = xx.reshape((nn, ns))
-yy = yy.reshape((nn, ns))
-
 TotTime = 0.0
 count_index = 0
 
@@ -534,11 +516,17 @@ while TotTime <= EndTime:  # noqa C901
     NumPartIn3DCell[:] = 0
     NumPartInCell[:] = 0
     print(TotTime, count_index)
+
+    # get random numbers
+    xrnum = rng.standard_normal(npart)
+    yrnum = rng.standard_normal(npart)
+    zrnum = rng.standard_normal(npart)
+
     for n in range(npart):
         # get random numbers
-        xrnum = random.gauss(0.0, 1.0)
-        yrnum = random.gauss(0.0, 1.0)
-        zrnum = random.gauss(0.0, 1.0)
+        # xrnum = random.gauss(0.0, 1.0)
+        # yrnum = random.gauss(0.0, 1.0)
+        # zrnum = random.gauss(0.0, 1.0)
 
         # Find particles 2D position in 2DCell
         px, py, pz = particles[n].get_position()
