@@ -729,11 +729,31 @@ while TotTime <= EndTime:  # noqa C901
                     "WSE",
                 )
             )
-            for p in range(npart):
-                tind, tt, cind, tx, ty, tz, telev, thtabvbed, twse = particles[
-                    p
-                ].get_total_position()
-                writer.writerow((tind, tt, cind, tx, ty, tz, telev, thtabvbed, twse))
+            # this may be wrong, but try it out
+            (
+                tind,
+                tt,
+                cind,
+                tx,
+                ty,
+                tz,
+                telev,
+                thtabvbed,
+                twse,
+            ) = particles.get_total_position()
+            for p in range(npart):  # need research on how to write full arrays
+                writer.writerow(
+                    (
+                        tt[p],
+                        cind[p],
+                        tx[p],
+                        ty[p],
+                        tz[p],
+                        telev[p],
+                        thtabvbed[p],
+                        twse[p],
+                    )
+                )
 
         with open(next(gg), "w") as t2file:
             writer2 = csv.writer(t2file)
@@ -782,15 +802,15 @@ carray3.SetNumberOfValues(num2dcells)
 for n in range(num2dcells):
     carray.SetValue(n, NumPartInCell[n])
 
-# Total time of particles in cell divided by
-# the number of particles in that cell
-if NumPartInCell[n] == 0:
-    tmpval = 0
-else:
-    tmpval = float(PartTimeInCell[n] / NumPartInCell[n])
+    # Total time of particles in cell divided by
+    # the number of particles in that cell
+    if NumPartInCell[n] == 0:
+        tmpval = 0
+    else:
+        tmpval = float(PartTimeInCell[n] / NumPartInCell[n])
 
-carray2.SetValue(n, tmpval)
-carray3.SetValue(n, float(PartTimeInCell[n] / EndTime))
+    carray2.SetValue(n, tmpval)
+    carray3.SetValue(n, float(PartTimeInCell[n] / EndTime))
 
 vtksgrid2d.GetCellData().AddArray(carray)
 carray.SetName("Particle Count in Cell")
