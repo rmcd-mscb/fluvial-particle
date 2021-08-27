@@ -522,52 +522,53 @@ while TotTime <= EndTime:  # noqa C901
     yrnum = rng.standard_normal(npart)
     zrnum = rng.standard_normal(npart)
 
+    # Find 2D positions of particles in 2D cell
+    # does vtk.vtkCellLocator accept ndarrays as input/output?
+    # if not, can we use a ufunc (or something similar) to vectorize ...
+    # the process of finding the cell index corresponding to each point?
+    # vtkCellLocatorInterpolatedVelocityField Class may be useful
+    # per documentation, vtkCellLocator is not thread safe; use vtkStaticCellLocator instead
+
+    px = np.copy(
+        particles.x
+    )  # this copies data into new memory; maybe not necessary if px,py,pz never updated
+    py = np.copy(particles.y)
+    pz = np.copy(particles.z)
+    Point2D = np.vstack((px, py, np.zeros_like(pz)))  # Point2D.size = (3,npart)
+    cellid = CellLocator2D.FindCell(
+        Point2D
+    )  # won't work as written (I think) because vtkCellLocator expects input tuple of size 3
+    np.where(
+        cellid < 0,
+        print("initial cell -1"),
+    )
+    CI_ID = cellid % nsc  # should still work on np array
+
+    # Get information from vtk 2D grids for each particle
+    # these functions also expect inputs for a single point, need modification for an array input (or ufunc wrapper)
+    tmpelev = get_cell_value(Point2D, cellid, Elevation_2D)
+    tmpwse = get_cell_value(Point2D, cellid, WSE_2D)
+    tmpdepth = get_cell_value(Point2D, cellid, Depth_2D)
+    tmpibc = get_cell_value(Point2D, cellid, IBC_2D)
+    tmpvel = get_cell_value(Point2D, cellid, Velocity_2D)
+    tmpss = get_cell_value(Point2D, cellid, ShearStress2D)
+    tmpvelx, tmpvely = get_2d_vec_value(Point2D, cellid)
+    # check elevation vs bed elevation, shear stress (without error print statements)
+    pz = np.where(pz < tmpelev, tmpelev + 0.5 * tmpdepth, tmpelev)
+    tmpss = np.where(tmpss < 0.0, 0.0, tmpss)
+    tmpustar = (tmpss / 1000.0) ** 0.5
+    # initialize starting depth of particles (move out of time loop?)
+    if count_index <= 1:
+        pz = np.where(pz > tmpwse, tmpelev + 0.5 * tmpdepth, pz)
+    else:
+        np.where(pz > tmpwse - 0.025 * tmpdepth, tmpwse - 0.025 * tmpdepth, pz)
+        np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
+    PartNormDepth = (pz - tmpelev) / tmpdepth
+
+    # Get 3D Velocity Components
+    Point3D = np.vstack((px, py, pz))
+
     for n in range(npart):
-        # get random numbers
-        # xrnum = random.gauss(0.0, 1.0)
-        # yrnum = random.gauss(0.0, 1.0)
-        # zrnum = random.gauss(0.0, 1.0)
-
-        # Find particles 2D position in 2DCell
-        px, py, pz = particles[n].get_position()
-        Point2D = [px, py, 0.0]
-        Point3D = [px, py, pz]
-        cellid = CellLocator2D.FindCell(Point2D)
-        if cellid < 0:
-            print("initial cell -1")
-        CI_ID = cellid % nsc  # this is the cell along the centerline of the grid
-
-        tmpelev = get_cell_value(Point2D, cellid, Elevation_2D)
-        tmpwse = get_cell_value(Point2D, cellid, WSE_2D)
-        tmpdepth = get_cell_value(Point2D, cellid, Depth_2D)
-        tmpibc = get_cell_value(Point2D, cellid, IBC_2D)
-        tmpvel = get_cell_value(Point2D, cellid, Velocity_2D)
-        tmpss = get_cell_value(Point2D, cellid, ShearStress2D)
-        tmpvelx, tmpvely = get_2d_vec_value(Point2D, cellid)
-
-        if pz < tmpelev:
-            print("Error z < bedelev")
-            pz = tmpelev + 0.5 * tmpdepth
-
-        if tmpss < 0:
-            print(
-                f"error: ustar < 0, elev: {tmpelev}, depth: {tmpdepth}, wse: {tmpwse}, ibc: {tmpibc}, shear: {tmpss}"
-            )
-            tmpss = 0.0
-
-        tmpustar = math.sqrt(tmpss / 1000.0)
-        # Set particle 0.5 meters above bed
-        if count_index <= 1:  # initialize starting depth of particles
-            # pz = tmpelev+0.5
-            if pz > tmpwse:
-                pz = tmpelev + 0.5 * tmpdepth
-        else:
-            if pz >= tmpwse - 0.025 * (tmpdepth):
-                pz = tmpwse - 0.025 * (tmpdepth)
-                # print('part above surface')
-            elif pz <= tmpelev + 0.025 * tmpdepth:
-                pz = tmpelev + 0.025 * tmpdepth
-                # print("part below bed")
 
         PartNormDepth = (pz - tmpelev) / tmpdepth
         Point3D = [px, py, pz]
@@ -786,6 +787,7 @@ while TotTime <= EndTime:  # noqa C901
                 tmppt = [px, py, 0.0]
                 cellidd = CellLocator2D.FindCell(tmppt)
                 print("cell wet old pos")
+    # end loop over particles[n]
 
     carray4 = vtk.vtkFloatArray()
     carray4.SetNumberOfValues(num2dcells)
