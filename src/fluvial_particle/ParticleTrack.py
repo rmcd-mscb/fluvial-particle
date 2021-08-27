@@ -526,8 +526,8 @@ while TotTime <= EndTime:  # noqa C901
     # does vtk.vtkCellLocator accept ndarrays as input/output?
     # if not, can we use a ufunc (or something similar) to vectorize ...
     # the process of finding the cell index corresponding to each point?
-    # vtkCellLocatorInterpolatedVelocityField Class may be useful
     # per documentation, vtkCellLocator is not thread safe; use vtkStaticCellLocator instead
+    # question; is python smart enough to reuse the same memory locations on every loop?
 
     px = np.copy(
         particles.x
@@ -541,7 +541,7 @@ while TotTime <= EndTime:  # noqa C901
     np.where(
         cellid < 0,
         print("initial cell -1"),
-    )
+    )  # won't work
     CI_ID = cellid % nsc  # should still work on np array
 
     # Get information from vtk 2D grids for each particle
@@ -561,233 +561,147 @@ while TotTime <= EndTime:  # noqa C901
     if count_index <= 1:
         pz = np.where(pz > tmpwse, tmpelev + 0.5 * tmpdepth, pz)
     else:
-        np.where(pz > tmpwse - 0.025 * tmpdepth, tmpwse - 0.025 * tmpdepth, pz)
-        np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
+        pz = np.where(pz > tmpwse - 0.025 * tmpdepth, tmpwse - 0.025 * tmpdepth, pz)
+        pz = np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
     PartNormDepth = (pz - tmpelev) / tmpdepth
 
-    # Get 3D Velocity Components
+    # Get 3D Velocity Components; NOT UPDATED fully
     Point3D = np.vstack((px, py, pz))
-
-    for n in range(npart):
-
-        PartNormDepth = (pz - tmpelev) / tmpdepth
-        Point3D = [px, py, pz]
-        # Get3D Velocity Components
-        tmpcell = vtk.vtkGenericCell()
-        tpcoords = [0.0, 0.0, 0.0]
-        tweights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-
-        idlist1 = vtk.vtkIdList()
-        pp1 = [px, py, tmpwse + 10]
-        pp2 = [px, py, tmpelev - 10]
-        tmp3duz = tmp3duy = tmp3dux = 0.0
-        CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
+    tmpcell = vtk.vtkGenericCell()
+    tpcoords = np.zeros_like(Point3D)
+    tweights = np.zeros((8, npart))
+    # vtkCellLocatorInterpolatedVelocityField Class may be useful
+    idlist1 = vtk.vtkIdList()
+    pp1 = np.vstack((px, py, tmpwse + 10))
+    pp2 = np.vstack((px, py, tmpelev - 10))
+    tmp3duz = np.zeros_like(px)
+    tmp3duy = np.zeros_like(px)
+    tmp3dux = np.zeros_like(py)
+    CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)  # probably doesn't work
+    CellId3D = np.zeros_like(px)
+    maxdist = 1e6
+    for t in range(0, idlist1.GetNumberOfIds()):  # probably doesn't work
+        result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_3d_vec_value(
+            Point3D, idlist1.GetId(t)
+        )
+        if result == 1:
+            tmp3dux = t_tmp3dux
+            tmp3duy = t_tmp3duy
+            tmp3duz = t_tmp3duz
+            CellId3D = idlist1.GetId(t)
+            break
+        elif t_dist < maxdist:
+            maxdist = t_dist
+            tmp3dux = t_tmp3dux
+            tmp3duy = t_tmp3duy
+            tmp3duz = t_tmp3duz
+            CellId3D = idlist1.GetId(t)
+    if CellId3D == 0:  # not updated
+        print("no 3dcell found")
         CellId3D = 0
-        maxdist = 1e6
-        # print idlist1.GetNumberOfIds()
-        for t in range(0, idlist1.GetNumberOfIds()):
-            result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_3d_vec_value(
-                Point3D, idlist1.GetId(t)
-            )
-            if result == 1:
-                tmp3dux = t_tmp3dux
-                tmp3duy = t_tmp3duy
-                tmp3duz = t_tmp3duz
-                CellId3D = idlist1.GetId(t)
-                #               print n, result, CellId3D, tmp3dux, tmp3duy, tmp3duz
-                break
-            elif t_dist < maxdist:
-                maxdist = t_dist
-                tmp3dux = t_tmp3dux
-                tmp3duy = t_tmp3duy
-                tmp3duz = t_tmp3duz
-                CellId3D = idlist1.GetId(t)
-                # print n, result, CellId3D, tmp3dux, tmp3duy, tmp3duz
-        if CellId3D == 0:
-            print(n, count_index, "no 3dcell found")
-            CellId3D = 0
+    if CellId3D < 0:  # not updated
+        print("part out of 3d grid")
+        tmp3dux = np.zeros_like(px)
+        tmp3duy = np.zeros_like(px)
+        tmp3duz = np.zeros_like(px)
+    else:  # not updated
+        NumPartIn3DCell[CellId3D] += 1
 
-        if CellId3D < 0:
-            print("part out of 3d grid")
-            print(
-                n,
-                count_index,
-                pz,
-                tmpelev,
-                tmpwse,
-                (tmpwse - tmpelev),
-                tmp3dux,
-                tmp3duy,
-            )
-            tmp3dux = 0.0
-            tmp3duy = 0.0
-            tmp3duz = 0.0
+    # Calculate dispersion terms
+    Dx = settings.LEV + beta_x * (tmpwse - tmpelev) * tmpustar  # should be fine
+    Dy = settings.LEV + beta_y * (tmpwse - tmpelev) * tmpustar
+    Dz = settings.LEV + beta_z * (tmpwse - tmpelev) * tmpustar
 
-        else:
-            NumPartIn3DCell[CellId3D] += 1
+    # Get new location of particle
+    if Track2D:
+        particles.move(tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
+    else:
+        particles.move(tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
+    p2x = np.copy(particles.x)
+    p2y = np.copy(particles.y)
+    newpoint2d = np.vstack((p2x, p2y, 0.0))
 
-        Dx = beta_x * (tmpwse - tmpelev) * tmpustar
-        Dy = beta_y * (tmpwse - tmpelev) * tmpustar
-        Dz = beta_z * (tmpwse - tmpelev) * tmpustar
+    cellidb = CellLocator2D.FindCell(newpoint2d)  # won't work
+    np.where(
+        cellidb < 0,
+        print("cellidb error"),
+    )  # won't work
+    elev1 = get_cell_value(newpoint2d, cellidb, Elevation_2D)  # won't work
+    wse1 = get_cell_value(newpoint2d, cellidb, WSE_2D)  # won't work
+    tdepth1 = wse1 - elev1
+    p2z = elev1 + (PartNormDepth * tdepth1)
+    particles.setz(p2z)
 
-        if settings.DispersionType == 1:
-            Dx = beta_x * (tmpwse - tmpelev) * tmpustar
-            Dy = beta_y * (tmpwse - tmpelev) * tmpustar
-            Dz = beta_z * (tmpwse - tmpelev) * tmpustar
+    if p2z <= elev1:  # not updated
+        print("error pt <= elev")
+    if p2z >= wse1:  # not updated
+        print("error pt >= wse")
 
-        elif settings.DispersionType == 2:
+    CI_IDB = cellidb % nsc  # should work
 
-            Dx = settings.LEV + (beta_x * (tmpwse - tmpelev) * tmpustar)
-            Dy = settings.LEV + (beta_y * (tmpwse - tmpelev) * tmpustar)
-            Dz = settings.LEV + (beta_z * (tmpwse - tmpelev) * tmpustar)
-
-        elif settings.DispersionType == 3:
-            Dx = avg_shear_devx
-            Dy = avg_shear_devy
-            Dz = avg_shear_devz
-
-        elif settings.DispersionType == 4:
-            Dx = avg_shear_devx + settings.LEV
-            Dy = avg_shear_devy + settings.LEV
-            Dz = avg_shear_devz + settings.LEV
-        #   Get new location of particle
+    if is_cell_wet(newpoint2d, cellidb):  # won't work
+        elev2 = get_cell_value(newpoint2d, cellidb, Elevation_2D)  # won't work
+        wse2 = get_cell_value(newpoint2d, cellidb, WSE_2D)  # won't work
         if Track2D:
-            p2x, p2y, p2z = particles[n].move(
-                count_index, tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt
-            )
+            particles.vert_mean_depth(TotTime, elev2, wse2)  # no longer part of class
         else:
-            p2x, p2y, p2z = particles[n].move(
-                count_index, tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt
+            particles.vert_random_walk(
+                elev2, wse2, tmp3dux, tmp3duy, 0.0, Dz, zrnum, dt
             )
-        newpoint2d = [p2x, p2y, 0.0]
-        # check: inWetCell?
+        p2z = np.copy(particles.z)
+        if (wse2 - elev2) < min_depth:  # won't work
+            particles.keep_postition(TotTime)
+            NumPartInCell[cellid] += 1
+            PartTimeInCell[cellid] += dt
+            PartInNSCellPTime[CI_ID] += 1
+        else:
+            particles.update_position(cellidb, p2x, p2y, p2z, TotTime, elev2, wse2)
+            NumPartInCell[cellidb] += 1
+            PartTimeInCell[cellidb] += dt
+            PartInNSCellPTime[CI_IDB] += 1
+    else:
+        particles.move_random_only_2d(avg_shear_dev, avg_shear_dev, xrnum, yrnum, dt)
+        prx = np.copy(particles.x)
+        pry = np.copy(particles.y)
+        newpoint2db = [prx, pry, 0.0]
+        cellidc = CellLocator2D.FindCell(newpoint2db)  # won't work
+        CI_IDC = cellidc % nsc
+        if is_cell_wet(newpoint2db, cellidc):  # won't work
+            elev2b = get_cell_value(newpoint2db, cellid, Elevation_2D)  # won't work
+            wse2b = get_cell_value(newpoint2db, cellid, WSE_2D)  # won't work
 
-        #         newpoint3d = [p2x, p2y, p2z]
-
-        # Check if new position is in wet or dry cell
-        cellidb = CellLocator2D.FindCell(newpoint2d)
-        if cellidb < 0:
-            print("cellidB error")
-
-        elev1 = get_cell_value(newpoint2d, cellidb, Elevation_2D)
-        wse1 = get_cell_value(newpoint2d, cellidb, WSE_2D)
-        tdepth1 = wse1 - elev1
-        p2z = elev1 + (PartNormDepth * tdepth1)
-        particles[n].setz(p2z)
-
-        if p2z <= elev1:
-            print("error pt <= elev")
-        if p2z >= wse1:
-            print("error pt >= wse")
-
-        CI_IDB = cellidb % nsc
-        if is_cell_wet(newpoint2d, cellidb):
-            elev2 = get_cell_value(newpoint2d, cellidb, Elevation_2D)
-            wse2 = get_cell_value(newpoint2d, cellidb, WSE_2D)
-            #             if elev2>wse2:
-            #                 print 'Error elev > wse'
             if Track2D:
-                p2z = particles[n].vert_mean_depth(TotTime, elev2, wse2)
+                particles.vert_mean_depth(
+                    TotTime, elev2, wse2
+                )  # no longer part of class
             else:
-                if vert_type == 0:
-                    p2z = particles[n].vert_const_depth(TotTime, elev2, wse2)
-                elif vert_type == 1:
-                    p2z = particles[n].vert_sinusoid(TotTime, elev2, wse2)
-                elif vert_type == 2:
-                    p2z = particles[n].vert_sinusoid_bottom(TotTime, elev2, wse2, 0.2)
-                elif vert_type == 3:
-                    p2z = particles[n].vert_sinusoid_surface(TotTime, elev2, wse2, 0.2)
-                elif vert_type == 4:
-                    p2z = particles[n].vert_sawtooth(TotTime, elev2, wse2)
-                elif vert_type == 5:
-                    p2z = particles[n].vert_random_walk(
-                        TotTime, elev2, wse2, tmp3dux, tmp3duy, 0.0, Dz, zrnum, dt
-                    )
-                else:
-                    print("vert_type not defined")
-
-            if (
-                wse2 - elev2
-            ) < min_depth:  # Don't allow to move into depths less than min_depth
-                #                 particles[n].update_position(count_index, px, py, pz, TotTime, tmpelev, tmpwse)
-                particles[n].keep_postition(TotTime)
-                NumPartInCell[cellid] += 1
-                PartTimeInCell[cellid] += dt
-                PartInNSCellPTime[CI_ID] += 1
-                print("In Min Depth")
-            else:
-                particles[n].update_position(
-                    count_index, cellidb, p2x, p2y, p2z, TotTime, elev2, wse2
+                particles.vert_random_walk(
+                    elev2, wse2, tmp3dux, tmp3duy, 0.0, Dz, zrnum, dt
                 )
-                NumPartInCell[cellidb] += 1
-                PartTimeInCell[cellidb] += dt
-                PartInNSCellPTime[CI_IDB] += 1
-        else:
-            prx, pry, prz = particles[n].move_random_only_2d(
-                count_index, avg_shear_dev, avg_shear_dev, xrnum, yrnum, dt
-            )
+            p2zb = np.copy(particles.z)  # like many of these, will delete eventually
 
-            newpoint2db = [prx, pry, 0.0]
-            cellidc = CellLocator2D.FindCell(newpoint2db)
-            CI_IDC = cellidc % nsc
-            if is_cell_wet(newpoint2db, cellidc):
-                elev2b = get_cell_value(newpoint2db, cellid, Elevation_2D)
-                wse2b = get_cell_value(newpoint2db, cellid, WSE_2D)
+            if (wse2b - elev2b) < min_depth:  # won't work
+                particles.update_position(cellid, px, py, pz, TotTime, tmpelev, tmpwse)
 
-                if Track2D:
-                    p2zb = particles[n].vert_mean_depth(TotTime, elev2b, wse2b)
-                else:
-                    if vert_type == 0:
-                        p2zb = particles[n].vert_const_depth(TotTime, elev2b, wse2b)
-                    elif vert_type == 1:
-                        p2zb = particles[n].vert_sinusoid(TotTime, elev2b, wse2b)
-                    elif vert_type == 2:
-                        p2zb = particles[n].vert_sinusoid_bottom(
-                            TotTime, elev2b, wse2b, 0.2
-                        )
-                    elif vert_type == 3:
-                        p2zb = particles[n].vert_sinusoid_surface(
-                            TotTime, elev2b, wse2b, 0.2
-                        )
-                    elif vert_type == 4:
-                        p2zb = particles[n].vert_sawtooth(TotTime, elev2b, wse2b)
-                    elif vert_type == 5:
-                        p2zb = particles[n].vert_random_walk(
-                            TotTime, elev2b, wse2b, tmp3dux, tmp3duy, 0.0, Dz, zrnum, dt
-                        )
-                    else:
-                        print("vert_type not defined")
-
-                if (
-                    wse2b - elev2b
-                ) < min_depth:  # Don't allow to move into depths less than min_depth
-                    particles[n].update_position(
-                        count_index, cellid, px, py, pz, TotTime, tmpelev, tmpwse
-                    )
-
-                    NumPartInCell[cellid] += 1
-                    PartTimeInCell[cellid] += dt
-                    PartInNSCellPTime[CI_ID] += 1
-                #                     print 'cell wet min_depth'
-                else:
-                    particles[n].update_position(
-                        count_index, cellidc, prx, pry, p2zb, TotTime, elev2b, wse2b
-                    )
-
-                    NumPartInCell[cellidc] += 1
-                    PartTimeInCell[cellidc] += dt
-                    PartInNSCellPTime[CI_IDC] += 1
-            #                     print 'cell wet new position'
-            else:
-
-                particles[n].keep_postition(TotTime)
                 NumPartInCell[cellid] += 1
                 PartTimeInCell[cellid] += dt
                 PartInNSCellPTime[CI_ID] += 1
-                tmppt = [px, py, 0.0]
-                cellidd = CellLocator2D.FindCell(tmppt)
-                print("cell wet old pos")
-    # end loop over particles[n]
+            else:
+                particles.update_position(
+                    count_index, cellidc, prx, pry, p2zb, TotTime, elev2b, wse2b
+                )
+                NumPartInCell[cellidc] += 1
+                PartTimeInCell[cellidc] += dt
+                PartInNSCellPTime[CI_IDC] += 1
+
+        else:
+            particles.keep_postition(TotTime)
+            NumPartInCell[cellid] += 1
+            PartTimeInCell[cellid] += dt
+            PartInNSCellPTime[CI_ID] += 1
+            tmppt = [px, py, 0.0]
+            cellidd = CellLocator2D.FindCell(tmppt)
+            print("cell wet old pos")
 
     carray4 = vtk.vtkFloatArray()
     carray4.SetNumberOfValues(num2dcells)
