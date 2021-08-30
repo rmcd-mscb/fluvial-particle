@@ -82,6 +82,16 @@ class Particles:
         #        + ((yranwalk * vx) / velmag)
         #    )
 
+    def vert_mean_depth(self, bedelev, wse):
+        """Set verticle postion of particle at the mean depth of the water column.
+
+        Args:
+            bedelev (float): elevation of the channel bed
+            wse (float): elevation of the water surface
+        """
+        fishelev = bedelev + 0.5 * (wse - bedelev)
+        self.z = fishelev
+
     def vert_random_walk(self, bedelev, wse, vx, vy, vz, z_diff, zrnum, dt):
         """Set particle postion as a random walk above the bed.
 
