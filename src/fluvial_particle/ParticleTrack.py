@@ -160,9 +160,7 @@ avg_shear_dev = 0.01  # for simple meander Tut5
 avg_shear_dev = settings.avg_shear_dev
 avg_bed_shearstress = settings.avg_bed_shearstress
 avg_depth = settings.avg_depth
-avg_shear_dev = (
-    0.067 * settings.avg_depth * np.sqrt(settings.avg_bed_shearstress / 1000)
-)
+avg_shear_dev = 0.067 * avg_depth * np.sqrt(avg_bed_shearstress / 1000)
 min_depth = 0.01  # Minimum depth particles can enter]
 min_depth = settings.min_depth
 
@@ -306,12 +304,18 @@ TotTime = 0.0
 count_index = 0
 
 # Create vectorized functions; not tested yet
-CellLoc2DVec = np.vectorize(CellLocator2D.FindCell())
+CellLoc2DVec = np.vectorize(CellLocator2D.FindCell(), otypes=[int])
+is_cell_wet_vec = np.vectorize(is_cell_wet, otypes=[bool])
+get_2d_vec_value_vec = np.vectorize(get_2d_vec_value, otypes=[float, float])
+get_3d_vec_value_vec = np.vectorize(
+    get_3d_vec_value, otypes=[int, float, float, float, float]
+)
+get_cell_value_vec = np.vectorize(get_cell_value, otypes=[float], excluded=["valarray"])
+# don't see an easy solution to next one because the orig method returns void
+# writes to a list whose pointer is given as input
+# vectorize requires >= 1 return array
+# wrap CellLocator3D.FindCellsAlongLine() in another function and vectorize that?
 CellLoc3DVec = np.vectorize(CellLocator3D.FindCellsAlongLine())
-is_cell_wet_vec = np.vectorize(is_cell_wet)
-get_2d_vec_value_vec = np.vectorize(get_2d_vec_value)
-get_3d_vec_value_vec = np.vectorize(get_3d_vec_value)
-get_cell_value_vec = np.vectorize(get_cell_value)
 
 os.chdir(settings.out_dir)
 g = gen_filenames("fish1_", ".csv")
@@ -332,40 +336,35 @@ while TotTime <= EndTime:  # noqa C901
     zrnum = rng.standard_normal(npart)
 
     # Find 2D positions of particles in 2D cell
-    # does vtk.vtkCellLocator accept ndarrays as input/output?
-    # if not, can we use a ufunc (or something similar) to vectorize ...
-    # the process of finding the cell index corresponding to each point?
+    # try: np.vectorize functions to work with array inputs
     # per documentation, vtkCellLocator is not thread safe; use vtkStaticCellLocator instead
     # question; is python smart enough to reuse the same memory locations on every loop?
 
-    # this copies x,y,z into new memory; maybe not necessary if px,py,pz never updated
-    px = np.copy(particles.x)
+    px = np.copy(particles.x)  # maybe unnecesary to copy
     py = np.copy(particles.y)
     pz = np.copy(particles.z)
     # Stack coordinates into a single array; better to do Point2D.size = (npart,3)?
     Point2D = np.vstack((px, py, np.zeros_like(pz)))  # Point2D.size = (3,npart)
-    cellid = CellLocator2D.FindCell(
-        Point2D
-    )  # won't work as written (I think) because vtkCellLocator expects input tuple of size 3
-    np.where(
-        cellid < 0,
-        print("initial cell -1"),
-    )  # won't work
+    cellid = CellLoc2DVec(Point2D)  # untested
+    if np.any(cellid < 0):
+        print("initial cell -1")  # untested
     CI_ID = cellid % nsc  # should still work on np array
 
     # Get information from vtk 2D grids for each particle
-    # these functions also expect inputs for a single point, need modification for an array input (or ufunc wrapper)
-    tmpelev = get_cell_value(Point2D, cellid, Elevation_2D)
-    tmpwse = get_cell_value(Point2D, cellid, WSE_2D)
-    tmpdepth = get_cell_value(Point2D, cellid, Depth_2D)
-    tmpibc = get_cell_value(Point2D, cellid, IBC_2D)
-    tmpvel = get_cell_value(Point2D, cellid, Velocity_2D)
-    tmpss = get_cell_value(Point2D, cellid, ShearStress2D)
-    tmpvelx, tmpvely = get_2d_vec_value(Point2D, cellid)
+    tmpelev = get_cell_value_vec(
+        Point2D, cellid, Elevation_2D
+    )  # untested (same with rest)
+    tmpwse = get_cell_value_vec(Point2D, cellid, WSE_2D)
+    tmpdepth = get_cell_value_vec(Point2D, cellid, Depth_2D)
+    tmpibc = get_cell_value_vec(Point2D, cellid, IBC_2D)
+    tmpvel = get_cell_value_vec(Point2D, cellid, Velocity_2D)
+    tmpss = get_cell_value_vec(Point2D, cellid, ShearStress2D)
+    tmpvelx, tmpvely = get_2d_vec_value_vec(Point2D, cellid)
     # check elevation vs bed elevation, shear stress (without error print statements)
     pz = np.where(pz < tmpelev, tmpelev + 0.5 * tmpdepth, tmpelev)
     tmpss = np.where(tmpss < 0.0, 0.0, tmpss)
     tmpustar = (tmpss / 1000.0) ** 0.5
+
     # initialize starting depth of particles (move out of time loop?)
     if count_index <= 1:
         pz = np.where(pz > tmpwse, tmpelev + 0.5 * tmpdepth, pz)
@@ -374,18 +373,18 @@ while TotTime <= EndTime:  # noqa C901
         pz = np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
     PartNormDepth = (pz - tmpelev) / tmpdepth
 
-    # Get 3D Velocity Components; NOT UPDATED fully
-    Point3D = np.vstack((px, py, pz))
-    tmpcell = vtk.vtkGenericCell()
-    tpcoords = np.zeros_like(Point3D)
-    tweights = np.zeros((8, npart))
+    # Get 3D Velocity Components; DOESN'T WORK as-is
+    # We may need to rethink this section in order for it to work with array inputs...
+    # as the output destination (idlist1) is included in the list of pointers; ...
+    # np.vectorize requires at least one array function output
     # vtkCellLocatorInterpolatedVelocityField Class may be useful
+    Point3D = np.vstack((px, py, pz))
     idlist1 = vtk.vtkIdList()
     pp1 = np.vstack((px, py, tmpwse + 10))
     pp2 = np.vstack((px, py, tmpelev - 10))
-    tmp3duz = np.zeros_like(px)
+    tmp3dux = np.zeros_like(px)
     tmp3duy = np.zeros_like(px)
-    tmp3dux = np.zeros_like(py)
+    tmp3duz = np.zeros_like(px)
     CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)  # probably doesn't work
     CellId3D = np.zeros_like(px)
     maxdist = 1e6
