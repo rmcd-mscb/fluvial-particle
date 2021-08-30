@@ -305,6 +305,14 @@ VelocityVec3D = vtksgrid3d.GetPointData().GetScalars("Velocity")
 TotTime = 0.0
 count_index = 0
 
+# Create vectorized functions; not tested yet
+CellLoc2DVec = np.vectorize(CellLocator2D.FindCell())
+CellLoc3DVec = np.vectorize(CellLocator3D.FindCellsAlongLine())
+is_cell_wet_vec = np.vectorize(is_cell_wet)
+get_2d_vec_value_vec = np.vectorize(get_2d_vec_value)
+get_3d_vec_value_vec = np.vectorize(get_3d_vec_value)
+get_cell_value_vec = np.vectorize(get_cell_value)
+
 os.chdir(settings.out_dir)
 g = gen_filenames("fish1_", ".csv")
 gg = gen_filenames("nsPart_", ".csv")
@@ -330,11 +338,11 @@ while TotTime <= EndTime:  # noqa C901
     # per documentation, vtkCellLocator is not thread safe; use vtkStaticCellLocator instead
     # question; is python smart enough to reuse the same memory locations on every loop?
 
-    px = np.copy(
-        particles.x
-    )  # this copies data into new memory; maybe not necessary if px,py,pz never updated
+    # this copies x,y,z into new memory; maybe not necessary if px,py,pz never updated
+    px = np.copy(particles.x)
     py = np.copy(particles.y)
     pz = np.copy(particles.z)
+    # Stack coordinates into a single array; better to do Point2D.size = (npart,3)?
     Point2D = np.vstack((px, py, np.zeros_like(pz)))  # Point2D.size = (3,npart)
     cellid = CellLocator2D.FindCell(
         Point2D
