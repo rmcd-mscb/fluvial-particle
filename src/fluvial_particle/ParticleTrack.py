@@ -1,7 +1,6 @@
 """ParticleTrack."""
 import csv
 import os
-import random
 from itertools import count
 
 import numpy as np
@@ -149,7 +148,6 @@ def is_cell_wet(newpoint2d, cellid):
         return False
 
 
-random.seed()  # remove this in favor of np.random ?
 # Some Variables
 # EndTime = 14400  # end time of simulation
 EndTime = settings.SimTime
@@ -304,6 +302,7 @@ TotTime = 0.0
 count_index = 0
 
 # Create vectorized functions; not tested yet
+# also, per online reading, not idea; maybe use numba, or write in C?
 CellLoc2DVec = np.vectorize(CellLocator2D.FindCell(), otypes=[int])
 is_cell_wet_vec = np.vectorize(is_cell_wet, otypes=[bool])
 get_2d_vec_value_vec = np.vectorize(get_2d_vec_value, otypes=[float, float])
@@ -351,9 +350,8 @@ while TotTime <= EndTime:  # noqa C901
     CI_ID = cellid % nsc  # should still work on np array
 
     # Get information from vtk 2D grids for each particle
-    tmpelev = get_cell_value_vec(
-        Point2D, cellid, Elevation_2D
-    )  # untested (same with rest)
+    # untested (all below)
+    tmpelev = get_cell_value_vec(Point2D, cellid, Elevation_2D)
     tmpwse = get_cell_value_vec(Point2D, cellid, WSE_2D)
     tmpdepth = get_cell_value_vec(Point2D, cellid, Depth_2D)
     tmpibc = get_cell_value_vec(Point2D, cellid, IBC_2D)
@@ -378,42 +376,45 @@ while TotTime <= EndTime:  # noqa C901
     # as the output destination (idlist1) is included in the list of pointers; ...
     # np.vectorize requires at least one array function output
     # vtkCellLocatorInterpolatedVelocityField Class may be useful
-    Point3D = np.vstack((px, py, pz))
-    idlist1 = vtk.vtkIdList()
-    pp1 = np.vstack((px, py, tmpwse + 10))
-    pp2 = np.vstack((px, py, tmpelev - 10))
+    # for demo, write as a for loop
     tmp3dux = np.zeros_like(px)
     tmp3duy = np.zeros_like(px)
     tmp3duz = np.zeros_like(px)
-    CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)  # probably doesn't work
-    CellId3D = np.zeros_like(px)
-    maxdist = 1e6
-    for t in range(0, idlist1.GetNumberOfIds()):  # probably doesn't work
-        result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_3d_vec_value(
-            Point3D, idlist1.GetId(t)
-        )
-        if result == 1:
-            tmp3dux = t_tmp3dux
-            tmp3duy = t_tmp3duy
-            tmp3duz = t_tmp3duz
-            CellId3D = idlist1.GetId(t)
-            break
-        elif t_dist < maxdist:
-            maxdist = t_dist
-            tmp3dux = t_tmp3dux
-            tmp3duy = t_tmp3duy
-            tmp3duz = t_tmp3duz
-            CellId3D = idlist1.GetId(t)
-    if CellId3D == 0:  # not updated
-        print("no 3dcell found")
-        CellId3D = 0
-    if CellId3D < 0:  # not updated
-        print("part out of 3d grid")
-        tmp3dux = np.zeros_like(px)
-        tmp3duy = np.zeros_like(px)
-        tmp3duz = np.zeros_like(px)
-    else:  # not updated
-        NumPartIn3DCell[CellId3D] += 1
+    CellId3D = np.zeros_like(px, dtype=int)
+    for n in range(npart):  # not ideal but no better solution a.t.m.
+        Point3D = [px[n], py[n], pz[n]]
+        idlist1 = vtk.vtkIdList()
+        pp1 = [px[n], py[n], tmpwse[n] + 10]
+        pp2 = [px[n], py[n], tmpwse[n] + 10]
+        CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
+        maxdist = 1e6
+        for t in range(0, idlist1.GetNumberOfIds()):
+            result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_3d_vec_value(
+                Point3D, idlist1.GetId(t)
+            )
+            if result == 1:
+                tmp3dux[n] = t_tmp3dux
+                tmp3duy[n] = t_tmp3duy
+                tmp3duz[n] = t_tmp3duz
+                CellId3D[n] = idlist1.GetId(t)
+                break
+            elif t_dist < maxdist:
+                maxdist = t_dist
+                tmp3dux[n] = t_tmp3dux
+                tmp3duy[n] = t_tmp3duy
+                tmp3duz[n] = t_tmp3duz
+                CellId3D[n] = idlist1.GetId(t)
+        if CellId3D[n] == 0:  # could this be the cell containing the point?
+            print("no 3dcell found")
+            CellId3D[n] = 0
+        if CellId3D[n] < 0:
+            print("part out of 3d grid")
+            tmp3dux[n] = 0.0
+            tmp3duy[n] = 0.0
+            tmp3duz[n] = 0.0
+        else:
+            NumPartIn3DCell[CellId3D[n]] += 1
+    # End 3D Cell Section
 
     # Calculate dispersion terms
     Dx = settings.LEV + beta_x * (tmpwse - tmpelev) * tmpustar  # should be fine
@@ -429,13 +430,14 @@ while TotTime <= EndTime:  # noqa C901
     p2y = np.copy(particles.y)
     newpoint2d = np.vstack((p2x, p2y, 0.0))
 
-    cellidb = CellLocator2D.FindCell(newpoint2d)  # won't work
-    np.where(
-        cellidb < 0,
-        print("cellidb error"),
-    )  # won't work
-    elev1 = get_cell_value(newpoint2d, cellidb, Elevation_2D)  # won't work
-    wse1 = get_cell_value(newpoint2d, cellidb, WSE_2D)  # won't work
+    cellidb = CellLoc2DVec(newpoint2d)  # untested
+    if np.any(cellidb < 0):  # untested
+        print("cellidb error")
+
+    # untested below
+    elev1 = get_cell_value_vec(newpoint2d, cellidb, Elevation_2D)
+    wse1 = get_cell_value_vec(newpoint2d, cellidb, WSE_2D)
+    # STOPPED here 8/30
     tdepth1 = wse1 - elev1
     p2z = elev1 + (PartNormDepth * tdepth1)
     particles.setz(p2z)
