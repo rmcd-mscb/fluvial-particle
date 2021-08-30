@@ -114,18 +114,6 @@ class Particles:
         tmpz = np.where(tmpz > bedelev, tmpz, bedelev + 0.01 * tdepth)
         self.z = tmpz
 
-    #        if velmag == 0:
-    #            tmpz = self.z + (vz * dt)
-    #        else:
-    #            tmpz = self.z + (vz * dt) + dv
-    #        if tmpz >= wse:
-    #            # tmpz = (wse - (0.05*tdepth))
-    #            tmpz = wse - 0.01 * tdepth
-    #        if tmpz <= bedelev:
-    #            # tmpz = (wse - (0.05*tdepth))
-    #            tmpz = bedelev + 0.01 * tdepth
-    #        return tmpz
-
     def move_random_only_2d(self, x_diff, y_diff, xrnum, yrnum, dt):
         """Update position based on random walk in x and y directions.
 
@@ -139,11 +127,6 @@ class Particles:
         self.x = self.x + xrnum * (2.0 * x_diff * dt) ** 0.5
         self.y = self.y + yrnum * (2.0 * y_diff * dt) ** 0.5
         self.z = self.z
-
-    #        tmpx = self.x + xrnum * math.sqrt(2.0 * x_diff * dt)
-    #        tmpy = self.y + yrnum * math.sqrt(2.0 * y_diff * dt)
-    #        tmpz = self.z
-    #        return tmpx, tmpy, tmpz
 
     def move_random_only_3d(self, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, dt):
         """Update position based on random walk in x, y, z directions.
