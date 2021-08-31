@@ -34,6 +34,34 @@ class Particles:
         """
         self.z = tz
 
+    def move_all(
+        self, vx, vy, vz, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, zmean, dt
+    ):
+        """Update position based on speed, angle.
+
+        Args:
+            vx ([type]): [description]
+            vy ([type]): [description]
+            vz ([type]): [description]
+            x_diff ([type]): [description]
+            y_diff ([type]): [description]
+            z_diff ([type]): [description]
+            xrnum ([type]): [description]
+            yrnum ([type]): [description]
+            zrnum ([type]): [description]
+            zmean ([type]): [description]
+            dt ([type]): [description]
+        """
+        # This method meant to handle all move cases
+        xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
+        yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
+        zranwalk = zrnum * (2.0 * z_diff * dt) ** 0.5
+        # Move and update positions in-place on each array
+        self.x = self.x + vx * dt + xranwalk
+        self.y = self.y + vy * dt + yranwalk
+        # Update z with either random walk OR mean depth; at least one must be 0
+        self.z = self.z + vz * dt + zranwalk + zmean
+
     def move(self, vx, vy, vz, x_diff, y_diff, xrnum, yrnum, dt):
         """Update position based on speed, angle.
 

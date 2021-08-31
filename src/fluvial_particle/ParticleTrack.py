@@ -199,6 +199,7 @@ x = np.zeros(npart, dtype=float) + xstart  # broadcasting correctly?
 y = np.zeros(npart, dtype=float) + ystart
 z = np.zeros(npart, dtype=float) + zstart
 particles = Particles(npart, x, y, z)
+particles_last = Particles(npart, x, y, z)
 
 # Sinusoid properties; these aren't used, REMOVE?
 # Will be used for larval drift subclass eventually
@@ -208,7 +209,7 @@ min_elev = 0.5
 amplitude = settings.amplitude
 period = settings.period
 min_elev = settings.min_elev
-rng = np.random.default_rng()  # recommended method for new code
+rng = np.random.default_rng()  # Numpy recommended method for new code
 ttime = rng.uniform(0.0, period, npart)
 
 # The source file
@@ -504,6 +505,8 @@ while TotTime <= EndTime:  # noqa C901
             tmppt = [px, py, 0.0]
             cellidd = CellLocator2D.FindCell(tmppt)
             print("cell wet old pos")
+    px, py, pz = particles.get_position(particles)
+    particles_last.update_position(px, py, pz)
 
     carray4 = vtk.vtkFloatArray()
     carray4.SetNumberOfValues(num2dcells)
