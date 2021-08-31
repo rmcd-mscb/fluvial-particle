@@ -176,26 +176,14 @@ avg_shear_devx = beta_x * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)
 avg_shear_devy = beta_y * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)
 avg_shear_devz = beta_z * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)
 
-amplitude = 1.0
-period = 60.0
-min_elev = 0.5
-
-amplitude = settings.amplitude
-period = settings.period
-min_elev = settings.min_elev
-
 # 2D or 3D particle tracking
 Track2D = 1
 Track3D = 1
 
-TrackwDrift = 0
-
 Track2D = settings.Track2D
 Track3D = settings.Track3D
 
-TrackwDrift = settings.TrackwDrift
-
-# Grid xstart, ystart, zstart = settings.StartLoc
+# Grid; these aren't used, REMOVE?
 x_offset = 0.0  # x coordinate offset
 y_offset = 0.0  # ycoordinate offset
 
@@ -210,9 +198,18 @@ xstart, ystart, zstart = settings.StartLoc
 x = np.zeros(npart, dtype=float) + xstart  # broadcasting correctly?
 y = np.zeros(npart, dtype=float) + ystart
 z = np.zeros(npart, dtype=float) + zstart
+particles = Particles(npart, x, y, z)
+
+# Sinusoid properties; these aren't used, REMOVE?
+# Will be used for larval drift subclass eventually
+amplitude = 1.0
+period = 60.0
+min_elev = 0.5
+amplitude = settings.amplitude
+period = settings.period
+min_elev = settings.min_elev
 rng = np.random.default_rng()  # recommended method for new code
 ttime = rng.uniform(0.0, period, npart)
-particles = Particles(npart, x, y, z, ttime, amplitude, period, min_elev)
 
 # The source file
 file_name_3da = r"C:\GitRepos\Python\ParticleTracking\Sum3_Result_3D_1.vtk"
@@ -268,12 +265,12 @@ ns, nn, nz = vtksgrid2d.GetDimensions()
 nsc = ns - 1
 nnc = nn - 1
 
-NumPartInCell = np.zeros((num2dcells), dtype=float)
-NumPartIn3DCell = np.zeros((num3dcells), dtype=float)
+NumPartInCell = np.zeros(num2dcells, dtype=float)
+NumPartIn3DCell = np.zeros(num3dcells, dtype=float)
 # partInCell = np.zeros((num2dcells,npart), dtype = int)
-PartTimeInCell = np.zeros((num2dcells), dtype=float)
-TotPartInCell = np.zeros((num2dcells), dtype=float)
-PartInNSCellPTime = np.zeros((nsc), dtype=int)
+PartTimeInCell = np.zeros(num2dcells, dtype=float)
+TotPartInCell = np.zeros(num2dcells, dtype=float)
+PartInNSCellPTime = np.zeros(nsc, dtype=int)
 
 
 CellLocator3D = vtk.vtkCellLocator()
@@ -302,7 +299,7 @@ TotTime = 0.0
 count_index = 0
 
 # Create vectorized functions; not tested yet
-# also, per online reading, not idea; maybe use numba, or write in C?
+# also, per online reading, not optimal; maybe use numba, or write in C?
 CellLoc2DVec = np.vectorize(CellLocator2D.FindCell(), otypes=[int])
 is_cell_wet_vec = np.vectorize(is_cell_wet, otypes=[bool])
 get_2d_vec_value_vec = np.vectorize(get_2d_vec_value, otypes=[float, float])
@@ -310,11 +307,6 @@ get_3d_vec_value_vec = np.vectorize(
     get_3d_vec_value, otypes=[int, float, float, float, float]
 )
 get_cell_value_vec = np.vectorize(get_cell_value, otypes=[float], excluded=["valarray"])
-# don't see an easy solution to next one because the orig method returns void
-# writes to a list whose pointer is given as input
-# vectorize requires >= 1 return array
-# wrap CellLocator3D.FindCellsAlongLine() in another function and vectorize that?
-CellLoc3DVec = np.vectorize(CellLocator3D.FindCellsAlongLine())
 
 os.chdir(settings.out_dir)
 g = gen_filenames("fish1_", ".csv")
@@ -338,7 +330,6 @@ while TotTime <= EndTime:  # noqa C901
     # try: np.vectorize functions to work with array inputs
     # per documentation, vtkCellLocator is not thread safe; use vtkStaticCellLocator instead
     # question; is python smart enough to reuse the same memory locations on every loop?
-
     px = np.copy(particles.x)  # maybe unnecesary to copy
     py = np.copy(particles.y)
     pz = np.copy(particles.z)
@@ -359,7 +350,7 @@ while TotTime <= EndTime:  # noqa C901
     tmpss = get_cell_value_vec(Point2D, cellid, ShearStress2D)
     tmpvelx, tmpvely = get_2d_vec_value_vec(Point2D, cellid)
     # check elevation vs bed elevation, shear stress (without error print statements)
-    pz = np.where(pz < tmpelev, tmpelev + 0.5 * tmpdepth, tmpelev)
+    pz = np.where(pz < tmpelev, tmpelev + 0.5 * tmpdepth, pz)
     tmpss = np.where(tmpss < 0.0, 0.0, tmpss)
     tmpustar = (tmpss / 1000.0) ** 0.5
 
@@ -371,15 +362,15 @@ while TotTime <= EndTime:  # noqa C901
         pz = np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
     PartNormDepth = (pz - tmpelev) / tmpdepth
 
-    # Get 3D Velocity Components; DOESN'T WORK as-is
-    # We may need to rethink this section in order for it to work with array inputs...
-    # as the output destination (idlist1) is included in the list of pointers; ...
-    # np.vectorize requires at least one array function output
+    # Get 3D Velocity Components
+    # Pointer to output (idlist1) is included in the list of inputs; ...
+    # np.vectorize requires at least one array function output; ...
+    # could maybe use a wrapper function that is vectorized?
     # vtkCellLocatorInterpolatedVelocityField Class may be useful
-    # for demo, write as a for loop
-    tmp3dux = np.zeros_like(px)
-    tmp3duy = np.zeros_like(px)
-    tmp3duz = np.zeros_like(px)
+    # for now, write explicitly as a for-loop
+    tmp3dux = np.zeros_like(px, dtype=float)
+    tmp3duy = np.zeros_like(px, dtype=float)
+    tmp3duz = np.zeros_like(px, dtype=float)
     CellId3D = np.zeros_like(px, dtype=int)
     for n in range(npart):  # not ideal but no better solution a.t.m.
         Point3D = [px[n], py[n], pz[n]]
@@ -404,7 +395,7 @@ while TotTime <= EndTime:  # noqa C901
                 tmp3duy[n] = t_tmp3duy
                 tmp3duz[n] = t_tmp3duz
                 CellId3D[n] = idlist1.GetId(t)
-        if CellId3D[n] == 0:  # could this be the cell containing the point?
+        if CellId3D[n] == 0:  # couldn't ID=0 be the cell containing the point?
             print("no 3dcell found")
             CellId3D[n] = 0
         if CellId3D[n] < 0:
@@ -426,7 +417,7 @@ while TotTime <= EndTime:  # noqa C901
         particles.move(tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
     else:
         particles.move(tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
-    p2x = np.copy(particles.x)
+    p2x = np.copy(particles.x)  # again, copy maybe unnecessary
     p2y = np.copy(particles.y)
     newpoint2d = np.vstack((p2x, p2y, 0.0))
 
@@ -437,29 +428,30 @@ while TotTime <= EndTime:  # noqa C901
     # untested below
     elev1 = get_cell_value_vec(newpoint2d, cellidb, Elevation_2D)
     wse1 = get_cell_value_vec(newpoint2d, cellidb, WSE_2D)
-    # STOPPED here 8/30
     tdepth1 = wse1 - elev1
     p2z = elev1 + (PartNormDepth * tdepth1)
-    particles.setz(p2z)
-
-    if p2z <= elev1:  # not updated
+    particles.setz(p2z)  # Remove? what's the point of this?
+    if np.any(p2z <= elev1):  # untested
         print("error pt <= elev")
-    if p2z >= wse1:  # not updated
+    if np.any(p2z >= wse1):  # untested
         print("error pt >= wse")
-
     CI_IDB = cellidb % nsc  # should work
 
-    if is_cell_wet(newpoint2d, cellidb):  # won't work
-        elev2 = get_cell_value(newpoint2d, cellidb, Elevation_2D)  # won't work
-        wse2 = get_cell_value(newpoint2d, cellidb, WSE_2D)  # won't work
+    # As written with the classes, won't work
+    # Need a way to tell class "move these particles this way", ...
+    # and "move these other particles that way"
+    if is_cell_wet_vec(newpoint2d, cellidb):  # untested
+        elev2 = get_cell_value_vec(newpoint2d, cellidb, Elevation_2D)  # untested
+        wse2 = get_cell_value_vec(newpoint2d, cellidb, WSE_2D)  # untested
         if Track2D:
-            particles.vert_mean_depth(TotTime, elev2, wse2)  # no longer part of class
+            particles.vert_mean_depth(elev2, wse2)  # untested
         else:
             particles.vert_random_walk(
                 elev2, wse2, tmp3dux, tmp3duy, 0.0, Dz, zrnum, dt
-            )
+            )  # untested
         p2z = np.copy(particles.z)
-        if (wse2 - elev2) < min_depth:  # won't work
+        # Need help on this part; how to do conditional statement blocks?
+        if (wse2 - elev2) < min_depth:
             particles.keep_postition(TotTime)
             NumPartInCell[cellid] += 1
             PartTimeInCell[cellid] += dt

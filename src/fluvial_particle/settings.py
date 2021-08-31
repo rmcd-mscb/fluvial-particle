@@ -68,7 +68,6 @@ StartLoc = (6.14, 9.09, 10.3)
 
 Track2D = 0
 Track3D = 1
-TrackwDrift = 0
 
 # Source Files
 # A2DFile = 'NoStrmLnCurv_185cms2d1.vtk'
