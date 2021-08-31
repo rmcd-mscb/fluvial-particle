@@ -53,12 +53,21 @@ class Particles:
             dt ([type]): [description]
         """
         # This method meant to handle all move cases
+        velmag = (vx ** 2 + vy ** 2) ** 0.5
         xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
         yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
         zranwalk = zrnum * (2.0 * z_diff * dt) ** 0.5
         # Move and update positions in-place on each array
-        self.x = self.x + vx * dt + xranwalk
-        self.y = self.y + vy * dt + yranwalk
+        self.x = self.x + np.where(
+            velmag > 0.0,
+            vx * dt + ((xranwalk * vx) / velmag) - ((yranwalk * vy) / velmag),
+            0.0,
+        )
+        self.y = self.y + np.where(
+            velmag > 0.0,
+            vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
+            0.0,
+        )
         # Update z with either random walk OR mean depth; at least one must be 0
         self.z = self.z + vz * dt + zranwalk + zmean
 

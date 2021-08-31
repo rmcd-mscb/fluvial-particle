@@ -315,6 +315,7 @@ gg = gen_filenames("nsPart_", ".csv")
 ggg = gen_filenames("Sim_Result_2D_", ".vtk")
 g4 = gen_filenames("Sim_Result_3D_", ".vtk")
 while TotTime <= EndTime:  # noqa C901
+    # Increment counters
     TotTime = TotTime + dt
     count_index += 1
     PartInNSCellPTime[:] = 0
@@ -322,10 +323,13 @@ while TotTime <= EndTime:  # noqa C901
     NumPartInCell[:] = 0
     print(TotTime, count_index)
 
-    # get random numbers
+    # Get random numbers
     xrnum = rng.standard_normal(npart)
     yrnum = rng.standard_normal(npart)
-    zrnum = rng.standard_normal(npart)
+    if Track2D:
+        zrnum = np.zeros_like(xrnum, dtype=float)
+    else:
+        zrnum = rng.standard_normal(npart)
 
     # Find 2D positions of particles in 2D cell
     # try: np.vectorize functions to work with array inputs
@@ -355,13 +359,17 @@ while TotTime <= EndTime:  # noqa C901
     tmpss = np.where(tmpss < 0.0, 0.0, tmpss)
     tmpustar = (tmpss / 1000.0) ** 0.5
 
-    # initialize starting depth of particles (move out of time loop?)
+    # Initialize starting depth of particles (move out of time loop?)
     if count_index <= 1:
         pz = np.where(pz > tmpwse, tmpelev + 0.5 * tmpdepth, pz)
     else:
         pz = np.where(pz > tmpwse - 0.025 * tmpdepth, tmpwse - 0.025 * tmpdepth, pz)
         pz = np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
     PartNormDepth = (pz - tmpelev) / tmpdepth
+    if Track2D:
+        zmean = 0.5 * (tmpwse - tmpelev)
+    else:
+        zmean = np.zeros_like(pz)
 
     # Get 3D Velocity Components
     # Pointer to output (idlist1) is included in the list of inputs; ...
@@ -369,43 +377,45 @@ while TotTime <= EndTime:  # noqa C901
     # could maybe use a wrapper function that is vectorized?
     # vtkCellLocatorInterpolatedVelocityField Class may be useful
     # for now, write explicitly as a for-loop
-    tmp3dux = np.zeros_like(px, dtype=float)
-    tmp3duy = np.zeros_like(px, dtype=float)
-    tmp3duz = np.zeros_like(px, dtype=float)
-    CellId3D = np.zeros_like(px, dtype=int)
-    for n in range(npart):  # not ideal but no better solution a.t.m.
-        Point3D = [px[n], py[n], pz[n]]
-        idlist1 = vtk.vtkIdList()
-        pp1 = [px[n], py[n], tmpwse[n] + 10]
-        pp2 = [px[n], py[n], tmpwse[n] + 10]
-        CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
-        maxdist = 1e6
-        for t in range(0, idlist1.GetNumberOfIds()):
-            result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_3d_vec_value(
-                Point3D, idlist1.GetId(t)
-            )
-            if result == 1:
-                tmp3dux[n] = t_tmp3dux
-                tmp3duy[n] = t_tmp3duy
-                tmp3duz[n] = t_tmp3duz
-                CellId3D[n] = idlist1.GetId(t)
-                break
-            elif t_dist < maxdist:
-                maxdist = t_dist
-                tmp3dux[n] = t_tmp3dux
-                tmp3duy[n] = t_tmp3duy
-                tmp3duz[n] = t_tmp3duz
-                CellId3D[n] = idlist1.GetId(t)
-        if CellId3D[n] == 0:  # couldn't ID=0 be the cell containing the point?
-            print("no 3dcell found")
-            CellId3D[n] = 0
-        if CellId3D[n] < 0:
-            print("part out of 3d grid")
-            tmp3dux[n] = 0.0
-            tmp3duy[n] = 0.0
-            tmp3duz[n] = 0.0
-        else:
-            NumPartIn3DCell[CellId3D[n]] += 1
+    if Track3D:
+        # Rename tmp3dux -> tmpvelx, etc.
+        tmpvelx = np.zeros_like(px, dtype=float)
+        tmpvely = np.zeros_like(px, dtype=float)
+        tmpvelz = np.zeros_like(px, dtype=float)
+        CellId3D = np.zeros_like(px, dtype=int)
+        for n in range(npart):  # not ideal but no better solution a.t.m.
+            Point3D = [px[n], py[n], pz[n]]
+            idlist1 = vtk.vtkIdList()
+            pp1 = [px[n], py[n], tmpwse[n] + 10]
+            pp2 = [px[n], py[n], tmpwse[n] + 10]
+            CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
+            maxdist = 1e6
+            for t in range(0, idlist1.GetNumberOfIds()):
+                result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_3d_vec_value(
+                    Point3D, idlist1.GetId(t)
+                )
+                if result == 1:
+                    tmpvelx[n] = t_tmp3dux
+                    tmpvely[n] = t_tmp3duy
+                    tmpvelz[n] = t_tmp3duz
+                    CellId3D[n] = idlist1.GetId(t)
+                    break
+                elif t_dist < maxdist:
+                    maxdist = t_dist
+                    tmpvelx[n] = t_tmp3dux
+                    tmpvely[n] = t_tmp3duy
+                    tmpvelz[n] = t_tmp3duz
+                    CellId3D[n] = idlist1.GetId(t)
+            if CellId3D[n] == 0:  # couldn't ID=0 be the cell containing the point?
+                print("no 3dcell found")
+                CellId3D[n] = 0
+            if CellId3D[n] < 0:
+                print("part out of 3d grid")
+                tmpvelx[n] = 0.0
+                tmpvely[n] = 0.0
+                tmpvelz[n] = 0.0
+            else:
+                NumPartIn3DCell[CellId3D[n]] += 1
     # End 3D Cell Section
 
     # Calculate dispersion terms
@@ -414,10 +424,13 @@ while TotTime <= EndTime:  # noqa C901
     Dz = settings.LEV + beta_z * (tmpwse - tmpelev) * tmpustar
 
     # Get new location of particle
-    if Track2D:
-        particles.move(tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
-    else:
-        particles.move(tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
+    particles.move_all(
+        tmpvelx, tmpvely, 0.0, Dx, Dy, Dz, xrnum, yrnum, zrnum, zmean, dt
+    )
+    # if Track2D:
+    #    particles.move(tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
+    # else:
+    #    particles.move(tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
     p2x = np.copy(particles.x)  # again, copy maybe unnecessary
     p2y = np.copy(particles.y)
     newpoint2d = np.vstack((p2x, p2y, 0.0))
@@ -448,7 +461,7 @@ while TotTime <= EndTime:  # noqa C901
             particles.vert_mean_depth(elev2, wse2)  # untested
         else:
             particles.vert_random_walk(
-                elev2, wse2, tmp3dux, tmp3duy, 0.0, Dz, zrnum, dt
+                elev2, wse2, tmpvelx, tmpvely, 0.0, Dz, zrnum, dt
             )  # untested
         p2z = np.copy(particles.z)
         # Need help on this part; how to do conditional statement blocks?
@@ -479,7 +492,7 @@ while TotTime <= EndTime:  # noqa C901
                 )  # no longer part of class
             else:
                 particles.vert_random_walk(
-                    elev2, wse2, tmp3dux, tmp3duy, 0.0, Dz, zrnum, dt
+                    elev2, wse2, tmpvelx, tmpvely, 0.0, Dz, zrnum, dt
                 )
             p2zb = np.copy(particles.z)  # like many of these, will delete eventually
 
