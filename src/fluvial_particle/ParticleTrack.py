@@ -365,11 +365,10 @@ while TotTime <= EndTime:  # noqa C901
     else:
         pz = np.where(pz > tmpwse - 0.025 * tmpdepth, tmpwse - 0.025 * tmpdepth, pz)
         pz = np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
-    PartNormDepth = (pz - tmpelev) / tmpdepth
     if Track2D:
-        zmean = 0.5 * (tmpwse - tmpelev)
+        PartNormDepth = 0.5
     else:
-        zmean = np.zeros_like(pz)
+        PartNormDepth = (pz - tmpelev) / tmpdepth
 
     # Get 3D Velocity Components
     # Pointer to output (idlist1) is included in the list of inputs; ...
@@ -423,42 +422,59 @@ while TotTime <= EndTime:  # noqa C901
     Dy = settings.LEV + beta_y * (tmpwse - tmpelev) * tmpustar
     Dz = settings.LEV + beta_z * (tmpwse - tmpelev) * tmpustar
 
-    # Get new location of particle
-    # use new class method, project_2D, that forward-projects x,y coordinates
+    # Update particle positions
+    # First, forward-project to new (x,y) coordinates
     p2x, p2y = particles.project_2d(tmpvelx, tmpvely, Dx, Dy, xrnum, yrnum, dt)
-    # if Track2D:
-    #    particles.move(tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
-    # else:
-    #    particles.move(tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
+    # Second, get boolean array from is_cell_wet_vec
     newpoint2d = np.vstack((p2x, p2y, 0.0))
-
     cellidb = CellLoc2DVec(newpoint2d)  # untested
-    if np.any(cellidb < 0):  # untested
-        print("cellidb error")
-
-    # untested below
+    wet1 = is_cell_wet_vec(newpoint2d, cellidb)  # untested
+    # Third, forward-project dry cells using just random motion
+    p2x[~wet1] = particles.x[~wet1] + xrnum[~wet1] * (2.0 * Dx[~wet1] * dt) ** 0.5
+    p2y[~wet1] = particles.y[~wet1] + yrnum[~wet1] * (2.0 * Dy[~wet1] * dt) ** 0.5
+    # Fourth, run is_cell_wet_vec again
+    newpoint2d = np.vstack((p2x, p2y, 0.0))
+    cellidb = CellLoc2DVec(newpoint2d)  # untested
+    wet2 = is_cell_wet_vec(newpoint2d, cellidb)  # untested
+    # Fifth, any still dry entries will have zero positional update this step
+    p2x[~wet2] = particles.x[~wet2]
+    p2y[~wet2] = particles.y[~wet2]
+    newpoint2d = np.vstack((p2x, p2y, 0.0))
+    cellidb = CellLoc2DVec(newpoint2d)  # untested
+    CI_IDB = cellidb % nsc  # should work
+    # Sixth, manually update (x,y) of particles that were not wet first time, yes wet second time
+    a = ~wet1 & wet2
+    particles.x[a] = particles.x[a] + xrnum[a] * (2.0 * Dx[a] * dt) ** 0.5
+    particles.y[a] = particles.y[a] + yrnum[a] * (2.0 * Dy[a] * dt) ** 0.5
+    tmpvelx[~wet1] = 0.0  # ensure that move_all() does nothing for these particles
+    tmpvely[~wet1] = 0.0
+    tmpvelz[~wet1] = 0.0
+    Dx[~wet1] = 0.0
+    Dy[~wet1] = 0.0
+    Dz[~wet1] = 0.0
+    # Seventh, run particles.move_all
     elev1 = get_cell_value_vec(newpoint2d, cellidb, Elevation_2D)
     wse1 = get_cell_value_vec(newpoint2d, cellidb, WSE_2D)
     tdepth1 = wse1 - elev1
     p2z = elev1 + (PartNormDepth * tdepth1)
-    particles.setz(p2z)  # Remove? what's the point of this?
-    if np.any(p2z <= elev1):  # untested
-        print("error pt <= elev")
-    if np.any(p2z >= wse1):  # untested
-        print("error pt >= wse")
-    CI_IDB = cellidb % nsc  # should work
+    particles.setz(p2z)  # Set to same fractional depth as last
+    particles.move_all(tmpvelx, tmpvely, tmpvelz, Dx, Dy, Dz, xrnum, yrnum, zrnum, dt)
+    # Eighth, final check that new coords are all within vertical domain
+    if Track2D:
+        particles.z = np.where(particles.z > wse1, elev1 + 0.5 * tdepth1, particles.z)
+        particles.z = np.where(particles.z < elev1, elev1 + 0.5 * tdepth1, particles.z)
+    else:
+        particles.z = np.where(particles.z > wse1, wse1 - 0.01 * tdepth1, particles.z)
+        particles.z = np.where(particles.z < elev1, elev1 + 0.01 * tdepth1, particles.z)
+    # ALSO NEED TO ADD check on wse1-elev1 < min_depth
+    # end position update
 
-    # As written with the classes, won't work
-    # Need a way to tell class "move these particles this way", ...
-    # and "move these other particles that way"
+    px, py, pz = particles.get_position(particles)
+    particles_last.update_position(px, py, pz)
 
-    # First, get boolean array from is_cell_wet_vec
-    # Second, deal with False entries; forward-project those based on just a random motion
-    # Third, run is_cell_wet_vec again
-    # Fourth, any False entries will have zero positional update this step
-    # Fifth, run particles.move_all
-    # Sixth, add final check that new coords are all within domain
+    # STILL need to update the particles per cell arrays
 
+    # OLD logic gates for reference
     if is_cell_wet_vec(newpoint2d, cellidb):  # untested
         elev2 = get_cell_value_vec(newpoint2d, cellidb, Elevation_2D)  # untested
         wse2 = get_cell_value_vec(newpoint2d, cellidb, WSE_2D)  # untested
@@ -523,8 +539,6 @@ while TotTime <= EndTime:  # noqa C901
             tmppt = [px, py, 0.0]
             cellidd = CellLocator2D.FindCell(tmppt)
             print("cell wet old pos")
-    px, py, pz = particles.get_position(particles)
-    particles_last.update_position(px, py, pz)
 
     carray4 = vtk.vtkFloatArray()
     carray4.SetNumberOfValues(num2dcells)

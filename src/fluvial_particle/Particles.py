@@ -34,9 +34,7 @@ class Particles:
         """
         self.z = tz
 
-    def move_all(
-        self, vx, vy, vz, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, zmean, dt
-    ):
+    def move_all(self, vx, vy, vz, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, dt):
         """Update position based on speed, angle.
 
         Args:
@@ -49,7 +47,6 @@ class Particles:
             xrnum ([type]): [description]
             yrnum ([type]): [description]
             zrnum ([type]): [description]
-            zmean ([type]): [description]
             dt ([type]): [description]
         """
         # This method meant to handle all move cases
@@ -68,8 +65,7 @@ class Particles:
             vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
             0.0,
         )
-        # Update z with either random walk OR mean depth; at least one must be 0
-        self.z = self.z + vz * dt + zranwalk + zmean
+        self.z = self.z + vz * dt + zranwalk
 
     def project_2d(self, vx, vy, x_diff, y_diff, xrnum, yrnum, dt):
         """Forward-project new 2D position based on speed, angle.
@@ -185,15 +181,18 @@ class Particles:
         """Update position based on random walk in x and y directions.
 
         Args:
-            x_diff (float): diffusion coefficient (>=0) along x-coordinate axis [m^2/s]
-            y_diff (float): diffusion coefficient (>=0) along y-coordinate axis [m^2/s]
-            xrnum (float): drawn from standard normal distribution, scales x random walk
-            yrnum (float): drawn from standard normal distribution, scales y random walk
-            dt (float): time step [s]
+            x_diff ([type]): [description]
+            y_diff ([type]): [description]
+            xrnum ([type]): [description]
+            yrnum ([type]): [description]
+            dt ([type]): [description]
+
+        Returns:
+            [type]: [description]
         """
-        self.x = self.x + xrnum * (2.0 * x_diff * dt) ** 0.5
-        self.y = self.y + yrnum * (2.0 * y_diff * dt) ** 0.5
-        self.z = self.z
+        px = self.x + xrnum * (2.0 * x_diff * dt) ** 0.5
+        py = self.y + yrnum * (2.0 * y_diff * dt) ** 0.5
+        return px, py
 
     def move_random_only_3d(self, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, dt):
         """Update position based on random walk in x, y, z directions.
