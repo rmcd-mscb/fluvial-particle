@@ -71,6 +71,36 @@ class Particles:
         # Update z with either random walk OR mean depth; at least one must be 0
         self.z = self.z + vz * dt + zranwalk + zmean
 
+    def project_2d(self, vx, vy, x_diff, y_diff, xrnum, yrnum, dt):
+        """Forward-project new 2D position based on speed, angle.
+
+        Args:
+            vx ([type]): [description]
+            vy ([type]): [description]
+            x_diff ([type]): [description]
+            y_diff ([type]): [description]
+            xrnum ([type]): [description]
+            yrnum ([type]): [description]
+            dt ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        velmag = (vx ** 2 + vy ** 2) ** 0.5
+        xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
+        yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
+        px = self.x + np.where(
+            velmag > 0.0,
+            vx * dt + ((xranwalk * vx) / velmag) - ((yranwalk * vy) / velmag),
+            0.0,
+        )
+        py = self.y + np.where(
+            velmag > 0.0,
+            vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
+            0.0,
+        )
+        return px, py
+
     def move(self, vx, vy, vz, x_diff, y_diff, xrnum, yrnum, dt):
         """Update position based on speed, angle.
 

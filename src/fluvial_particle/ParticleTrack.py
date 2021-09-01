@@ -424,15 +424,12 @@ while TotTime <= EndTime:  # noqa C901
     Dz = settings.LEV + beta_z * (tmpwse - tmpelev) * tmpustar
 
     # Get new location of particle
-    particles.move_all(
-        tmpvelx, tmpvely, 0.0, Dx, Dy, Dz, xrnum, yrnum, zrnum, zmean, dt
-    )
+    # use new class method, project_2D, that forward-projects x,y coordinates
+    p2x, p2y = particles.project_2d(tmpvelx, tmpvely, Dx, Dy, xrnum, yrnum, dt)
     # if Track2D:
     #    particles.move(tmpvelx, tmpvely, 0.0, Dx, Dy, xrnum, yrnum, dt)
     # else:
     #    particles.move(tmp3dux, tmp3duy, 0.0, Dx, Dy, xrnum, yrnum, dt)
-    p2x = np.copy(particles.x)  # again, copy maybe unnecessary
-    p2y = np.copy(particles.y)
     newpoint2d = np.vstack((p2x, p2y, 0.0))
 
     cellidb = CellLoc2DVec(newpoint2d)  # untested
@@ -454,6 +451,14 @@ while TotTime <= EndTime:  # noqa C901
     # As written with the classes, won't work
     # Need a way to tell class "move these particles this way", ...
     # and "move these other particles that way"
+
+    # First, get boolean array from is_cell_wet_vec
+    # Second, deal with False entries; forward-project those based on just a random motion
+    # Third, run is_cell_wet_vec again
+    # Fourth, any False entries will have zero positional update this step
+    # Fifth, run particles.move_all
+    # Sixth, add final check that new coords are all within domain
+
     if is_cell_wet_vec(newpoint2d, cellidb):  # untested
         elev2 = get_cell_value_vec(newpoint2d, cellidb, Elevation_2D)  # untested
         wse2 = get_cell_value_vec(newpoint2d, cellidb, WSE_2D)  # untested
