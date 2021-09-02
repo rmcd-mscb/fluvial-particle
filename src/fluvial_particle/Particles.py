@@ -56,14 +56,14 @@ class Particles:
         zranwalk = zrnum * (2.0 * z_diff * dt) ** 0.5
         # Move and update positions in-place on each array
         self.x = self.x + np.where(
-            velmag > 0.0,
-            vx * dt + ((xranwalk * vx) / velmag) - ((yranwalk * vy) / velmag),
+            velmag <= 0.0,
             0.0,
+            vx * dt + ((xranwalk * vx) / velmag) - ((yranwalk * vy) / velmag),
         )
         self.y = self.y + np.where(
-            velmag > 0.0,
-            vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
+            velmag <= 0.0,
             0.0,
+            vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
         )
         self.z = self.z + vz * dt + zranwalk
 

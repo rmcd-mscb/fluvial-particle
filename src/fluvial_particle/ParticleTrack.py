@@ -196,6 +196,7 @@ z = np.zeros(npart, dtype=float) + zstart
 particles = Particles(npart, x, y, z)
 particles_last = Particles(npart, x, y, z)
 rng = np.random.default_rng()  # Numpy recommended method for new code
+anpart = np.arange(npart).tolist()
 
 # Sinusoid properties; these aren't used, REMOVE?
 # Will be used for larval drift subclass eventually
@@ -227,8 +228,8 @@ file_name_3da = settings.file_name_3da
 #         if tcount > 1:
 #             rmData.append(row)
 
-print(file_name_3da)
-print(file_name_2da)
+# print(file_name_3da)
+# print(file_name_2da)
 
 # Read the 3Dsource file.
 vtksgrid3d = vtk.vtkStructuredGrid()
@@ -239,7 +240,7 @@ reader3d.Update()  # Needed because of GetScalarRange
 output3d = reader3d.GetOutput()
 scalar_range = output3d.GetScalarRange()
 
-print(vtksgrid3d)
+# print(vtksgrid3d)
 
 # Read the 2Dsource file.
 vtksgrid2d = vtk.vtkStructuredGrid()
@@ -328,24 +329,20 @@ while TotTime <= EndTime:  # noqa C901
 
     # Get information from vtk 2D grids for each particle
     tmpelev = np.array(
-        [get_cell_value(Point2D[i], cellid[i], Elevation_2D) for i in range(npart)]
+        [get_cell_value(Point2D[i], cellid[i], Elevation_2D) for i in anpart]
     )
-    tmpwse = np.array(
-        [get_cell_value(Point2D[i], cellid[i], WSE_2D) for i in range(npart)]
-    )
+    tmpwse = np.array([get_cell_value(Point2D[i], cellid[i], WSE_2D) for i in anpart])
     tmpdepth = np.array(
-        [get_cell_value(Point2D[i], cellid[i], Depth_2D) for i in range(npart)]
+        [get_cell_value(Point2D[i], cellid[i], Depth_2D) for i in anpart]
     )
-    tmpibc = np.array(
-        [get_cell_value(Point2D[i], cellid[i], IBC_2D) for i in range(npart)]
-    )
+    tmpibc = np.array([get_cell_value(Point2D[i], cellid[i], IBC_2D) for i in anpart])
     tmpvel = np.array(
-        [get_cell_value(Point2D[i], cellid[i], Velocity_2D) for i in range(npart)]
+        [get_cell_value(Point2D[i], cellid[i], Velocity_2D) for i in anpart]
     )
     tmpss = np.array(
-        [get_cell_value(Point2D[i], cellid[i], ShearStress2D) for i in range(npart)]
+        [get_cell_value(Point2D[i], cellid[i], ShearStress2D) for i in anpart]
     )
-    tmpvelx = np.array([get_2d_vec_value(Point2D[i], cellid[i]) for i in range(npart)])
+    tmpvelx = np.array([get_2d_vec_value(Point2D[i], cellid[i]) for i in anpart])
     tmpvely = tmpvelx[:, 1]
     tmpvelx = tmpvelx[:, 0]
     # check shear stress (without error print statements)
@@ -356,6 +353,8 @@ while TotTime <= EndTime:  # noqa C901
     if count_index <= 1:
         pz = np.where(pz > tmpwse, tmpelev + 0.5 * tmpdepth, pz)
         pz = np.where(pz < tmpelev, tmpelev + 0.5 * tmpdepth, pz)
+        # interesting side-note on np.where(), it evaluates both function evaluations first, then ...
+        # evaluates the condition; e.g. it will evaluate 1/0 before checking x > 0
     else:
         pz = np.where(pz > tmpwse - 0.025 * tmpdepth, tmpwse - 0.025 * tmpdepth, pz)
         pz = np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
@@ -369,14 +368,14 @@ while TotTime <= EndTime:  # noqa C901
     # CellLocator3D.FindCellsAlongLine();
     # could maybe use a wrapper function that is vectorized?
     # vtkCellLocatorInterpolatedVelocityField Class may be useful
-    # for now, write explicitly as a for-loop
+    # for now, write explicitly as a for-loop; not ideal but no better solution a.t.m.
     if Track3D:
         # Rename tmp3dux -> tmpvelx, etc.
         tmpvelx = np.zeros_like(px, dtype=float)
         tmpvely = np.zeros_like(px, dtype=float)
         tmpvelz = np.zeros_like(px, dtype=float)
         CellId3D = np.zeros_like(px, dtype=int)
-        for n in range(npart):  # not ideal but no better solution a.t.m.
+        for n in anpart:
             Point3D = [px[n], py[n], pz[n]]
             idlist1 = vtk.vtkIdList()
             pp1 = [px[n], py[n], tmpwse[n] + 10]
@@ -419,29 +418,29 @@ while TotTime <= EndTime:  # noqa C901
     # Update particle positions
     # First, forward-project to new (x,y) coordinates
     p2x, p2y = particles.project_2d(tmpvelx, tmpvely, Dx, Dy, xrnum, yrnum, dt)
-    # Second, get boolean array from is_cell_wet_vec
+    # Second, get boolean array from is_cell_wet
     newpoint2d = np.empty((npart, 3), object)
     newpoint2d[:] = np.vstack((p2x, p2y, np.zeros(npart))).T
     cellidb = np.array([CellLocator2D.FindCell(i) for i in newpoint2d], dtype=int)
     wet1 = np.array(
-        [is_cell_wet(newpoint2d[i], cellidb[i]) for i in range(npart)], dtype=bool
+        [is_cell_wet(newpoint2d[i], cellidb[i]) for i in anpart], dtype=bool
     )
     if np.any(~wet1):
+        print("dry cell encountered")
         # Third, forward-project dry cells using just random motion
         p2x[~wet1] = particles.x[~wet1] + xrnum[~wet1] * (2.0 * Dx[~wet1] * dt) ** 0.5
         p2y[~wet1] = particles.y[~wet1] + yrnum[~wet1] * (2.0 * Dy[~wet1] * dt) ** 0.5
-        # Fourth, run is_cell_wet_vec again
+        # Fourth, run is_cell_wet again
         newpoint2d[:] = np.vstack((p2x, p2y, np.zeros(npart))).T
         cellidb = np.array([CellLocator2D.FindCell(i) for i in newpoint2d], dtype=int)
         wet2 = np.array(
-            [is_cell_wet(newpoint2d[i], cellidb[i]) for i in range(npart)], dtype=bool
+            [is_cell_wet(newpoint2d[i], cellidb[i]) for i in anpart], dtype=bool
         )
         # Fifth, any still dry entries will have zero positional update this step
         p2x[~wet2] = particles.x[~wet2]
         p2y[~wet2] = particles.y[~wet2]
         newpoint2d[:] = np.vstack((p2x, p2y, np.zeros(npart))).T
         cellidb = np.array([CellLocator2D.FindCell(i) for i in newpoint2d], dtype=int)
-        CI_IDB = cellidb % nsc
         # Sixth, manually update (x,y) of particles that were not wet first time, yes wet second time
         a = ~wet1 & wet2
         particles.x[a] = particles.x[a] + xrnum[a] * (2.0 * Dx[a] * dt) ** 0.5
@@ -452,33 +451,57 @@ while TotTime <= EndTime:  # noqa C901
         Dx[~wet1] = 0.0
         Dy[~wet1] = 0.0
         Dz[~wet1] = 0.0
-    # Seventh, update vertical position
+    # Seventh, prevent particles from entering cells where tdepth1 < min_depth
     elev1 = np.array(
-        [get_cell_value(newpoint2d[i], cellidb[i], Elevation_2D) for i in range(npart)]
+        [get_cell_value(newpoint2d[i], cellidb[i], Elevation_2D) for i in anpart]
     )
-    wse1 = np.array(
-        [get_cell_value(newpoint2d[i], cellidb[i], WSE_2D) for i in range(npart)]
+    wse1 = np.array([get_cell_value(newpoint2d[i], cellidb[i], WSE_2D) for i in anpart])
+    tdepth1 = wse1 - elev1
+    b = tdepth1 < min_depth
+    if np.any(b):
+        print("particle entered min_depth")
+    p2x[b] = particles.x[b]
+    p2y[b] = particles.y[b]
+    tmpvelx[b] = 0.0
+    tmpvely[b] = 0.0
+    tmpvelz[b] = 0.0
+    Dx[b] = 0.0
+    Dy[b] = 0.0
+    Dz[b] = 0.0
+    newpoint2d[:] = np.vstack((p2x, p2y, np.zeros(npart))).T
+    # Eighth, update vertical position
+    cellidb = np.array([CellLocator2D.FindCell(i) for i in newpoint2d], dtype=int)
+    CI_IDB = cellidb % nsc
+    elev1 = np.array(
+        [get_cell_value(newpoint2d[i], cellidb[i], Elevation_2D) for i in anpart]
     )
+    wse1 = np.array([get_cell_value(newpoint2d[i], cellidb[i], WSE_2D) for i in anpart])
     tdepth1 = wse1 - elev1
     p2z = elev1 + (PartNormDepth * tdepth1)
     particles.setz(p2z)  # Set to same fractional depth as last
-    # Eighth, run particles.move_all
+    # Ninth, run particles.move_all
     particles.move_all(tmpvelx, tmpvely, tmpvelz, Dx, Dy, Dz, xrnum, yrnum, zrnum, dt)
-    # Ninth, final check that new coords are all within vertical domain
+    # Tenth, final check that new coords are all within vertical domain
     if Track2D:
         particles.z = np.where(particles.z > wse1, elev1 + 0.5 * tdepth1, particles.z)
         particles.z = np.where(particles.z < elev1, elev1 + 0.5 * tdepth1, particles.z)
     else:
         particles.z = np.where(particles.z > wse1, wse1 - 0.01 * tdepth1, particles.z)
         particles.z = np.where(particles.z < elev1, elev1 + 0.01 * tdepth1, particles.z)
-    # ALSO NEED TO ADD check on wse1-elev1 < min_depth
-    # end position update
+    # px, py, pz = particles.get_position(particles)
+    # particles_last.update_position(px, py, pz)
+
+    # Update the particle counts per cell
+    np.add.at(NumPartInCell, cellidb, 1)
+    if np.sum(NumPartInCell) != npart:
+        print("bad sum in NumPartInCell")
+    np.add.at(PartInNSCellPTime, CI_IDB, 1)
+    if np.sum(PartInNSCellPTime) != npart:
+        print("bad sum in PartInNSCellPTime")
+    np.add.at(PartTimeInCell, cellidb, dt)
+
     # %%
-
-    px, py, pz = particles.get_position(particles)
-    particles_last.update_position(px, py, pz)
-
-    # STILL need to update the arrays of particle counts per cell
+    # Not updated below here
 
     carray4 = vtk.vtkFloatArray()
     carray4.SetNumberOfValues(num2dcells)
@@ -518,7 +541,7 @@ while TotTime <= EndTime:  # noqa C901
                 thtabvbed,
                 twse,
             ) = particles.get_total_position()
-            for p in range(npart):  # need research on how to write full arrays
+            for p in anpart:  # need research on how to write full arrays
                 writer.writerow(
                     (
                         tt[p],

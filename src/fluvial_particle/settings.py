@@ -9,7 +9,7 @@ __author__ = "rmcd"
 #    3600.0 ==  1 Hour
 
 # Prod
-SimTime = 0.0
+SimTime = 30.0
 dt = 0.25
 avg_depth = 0.5
 avg_bed_shearstress = 6
@@ -81,8 +81,8 @@ out_3d_dir = "Sim3D"
 # out_part = 'NoStrmLnCurv_185cms2d1_part.vtk'
 out_part = "Result_2D_Part.vtk"
 
-file_name_3da = "/home/aprescott/fluvparticle/Result_FM_MEander_1_long_3D1.vtk"
-file_name_2da = "/home/aprescott/fluvparticle/Result_FM_MEander_1_long_2D1.vtk"
+file_name_3da = "/home/aprescott/fluvparticle/data/Result_FM_MEander_1_long_3D1.vtk"
+file_name_2da = "/home/aprescott/fluvparticle/data/Result_FM_MEander_1_long_2D1.vtk"
 out_dir = r"/home/aprescott/fluvparticle/output"
 
 
