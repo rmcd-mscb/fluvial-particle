@@ -435,8 +435,7 @@ while TotTime <= EndTime:  # noqa C901
         p2y[~wet2] = particles.y[~wet2]
         # Sixth, manually update (x,y) of particles that were not wet first time, yes wet second time
         a = ~wet1 & wet2
-        particles.x[a] = particles.x[a] + xrnum[a] * (2.0 * Dx[a] * dt) ** 0.5
-        particles.y[a] = particles.y[a] + yrnum[a] * (2.0 * Dy[a] * dt) ** 0.5
+        particles.move_random_only_2d(Dx, Dy, xrnum, yrnum, a, dt)
         tmpvelx[~wet1] = 0.0  # ensure that move_all() does nothing for these particles
         tmpvely[~wet1] = 0.0
         tmpvelz[~wet1] = 0.0
@@ -465,7 +464,7 @@ while TotTime <= EndTime:  # noqa C901
     Dx[b] = 0.0
     Dy[b] = 0.0
     Dz[b] = 0.0
-    # Eighth, update vertical position
+    # Eighth, update vertical position to same fractional depth as last
     newpoint2d = np.vstack((p2x, p2y, np.zeros(npart))).T
     for i in anpart:
         cellidb[i] = CellLocator2D.FindCell(newpoint2d[i, :])
@@ -475,18 +474,15 @@ while TotTime <= EndTime:  # noqa C901
     CI_IDB = cellidb % nsc
     tdepth1 = wse1 - elev1
     p2z = elev1 + (PartNormDepth * tdepth1)
-    particles.setz(p2z)  # Set to same fractional depth as last
+    particles.setz(p2z)
     # Ninth, run particles.move_all
     particles.move_all(tmpvelx, tmpvely, tmpvelz, Dx, Dy, Dz, xrnum, yrnum, zrnum, dt)
     # Tenth, final check that new coords are all within vertical domain
     if Track2D:
-        particles.z = np.where(particles.z > wse1, elev1 + 0.5 * tdepth1, particles.z)
-        particles.z = np.where(particles.z < elev1, elev1 + 0.5 * tdepth1, particles.z)
+        alpha = 0.5
     else:
-        particles.z = np.where(particles.z > wse1, wse1 - 0.01 * tdepth1, particles.z)
-        particles.z = np.where(particles.z < elev1, elev1 + 0.01 * tdepth1, particles.z)
-    # px, py, pz = particles.get_position(particles)
-    # particles_last.update_position(px, py, pz)
+        alpha = 0.01
+    particles.check_z(alpha, elev1, wse1)
 
     # Update the particle counts per cell
     np.add.at(NumPartInCell, cellidb, 1)

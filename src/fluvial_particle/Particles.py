@@ -27,10 +27,8 @@ class Particles:
     def setz(self, tz):
         """Set z-value.
 
-        TO BE REMOVED ?
-
         Args:
-            tz (float): z-value of particle
+            tz (float): new z-value of particle
         """
         self.z = tz
 
@@ -38,34 +36,48 @@ class Particles:
         """Update position based on speed, angle.
 
         Args:
-            vx ([type]): [description]
-            vy ([type]): [description]
-            vz ([type]): [description]
-            x_diff ([type]): [description]
-            y_diff ([type]): [description]
-            z_diff ([type]): [description]
-            xrnum ([type]): [description]
-            yrnum ([type]): [description]
-            zrnum ([type]): [description]
-            dt ([type]): [description]
+            vx (float): flow velocity along the x axis
+            vy (float): flow velocity along the y axis
+            vz (float): flow velocity along the z axis
+            x_diff (float): diffusion coefficient along x
+            y_diff (float): diffusion coefficient along y
+            z_diff (float): diffusion coefficient along z
+            xrnum (float): random number from N(0,1), scales x diffusion
+            yrnum (float): random number from N(0,1), scales y diffusion
+            zrnum (float): random number from N(0,1), scales z diffusion
+            dt (float): time step
         """
-        # This method meant to handle all move cases
         velmag = (vx ** 2 + vy ** 2) ** 0.5
         xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
         yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
         zranwalk = zrnum * (2.0 * z_diff * dt) ** 0.5
         # Move and update positions in-place on each array
-        self.x = self.x + np.where(
-            velmag <= 0.0,
-            0.0,
-            vx * dt + ((xranwalk * vx) / velmag) - ((yranwalk * vy) / velmag),
+        a = velmag > 0
+        self.x[a] += (
+            vx[a] * dt
+            + ((xranwalk[a] * vx[a]) / velmag[a])
+            - ((yranwalk[a] * vy[a]) / velmag[a])
         )
-        self.y = self.y + np.where(
-            velmag <= 0.0,
-            0.0,
-            vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
+        self.y[a] += (
+            vy[a] * dt
+            + ((xranwalk[a] * vy[a]) / velmag[a])
+            + ((yranwalk[a] * vx[a]) / velmag[a])
         )
         self.z = self.z + vz * dt + zranwalk
+
+    def move_random_only_2d(self, x_diff, y_diff, xrnum, yrnum, boolarray, dt):
+        """Update position based on random walk in x and y directions.
+
+        Args:
+            x_diff ([type]): [description]
+            y_diff ([type]): [description]
+            xrnum ([type]): [description]
+            yrnum ([type]): [description]
+            boolarray ([type]): [description]
+            dt ([type]): [description]
+        """
+        self.x[boolarray] += xrnum[boolarray] * (2.0 * x_diff[boolarray] * dt) ** 0.5
+        self.y[boolarray] += yrnum[boolarray] * (2.0 * y_diff[boolarray] * dt) ** 0.5
 
     def project_2d(self, vx, vy, x_diff, y_diff, xrnum, yrnum, dt):
         """Forward-project new 2D position based on speed, angle.
@@ -97,118 +109,20 @@ class Particles:
         )
         return px, py
 
-    def move(self, vx, vy, vz, x_diff, y_diff, xrnum, yrnum, dt):
-        """Update position based on speed, angle.
+    def check_z(self, alpha, bedelev, wse):
+        """[summary].
 
         Args:
-            vx (float): velocity along x-coordinate axis [m/s]
-            vy (float): velocity along y-coordinate axis [m/s]
-            vz (float): velocity along z-coordinate axis [m/s]
-            x_diff (float): diffusion coefficient (>=0) along x-coordinate axis [m^2/s]
-            y_diff (float): diffusion coefficient (>=0) along y-coordinate axis [m^2/s]
-            xrnum (float): drawn from standard normal distribution, scales x random walk
-            yrnum (float): drawn from standard normal distribution, scales y random walk
-            dt (float): time step [s]
+            alpha ([type]): [description]
+            bedelev ([type]): [description]
+            wse ([type]): [description]
         """
-        velmag = (vx ** 2 + vy ** 2) ** 0.5
-        xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
-        yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
-
-        # numpy conditional evaluations
-        # Move and update positions in-place on each array
-        self.x = self.x + np.where(
-            velmag > 0.0,
-            vx * dt + ((xranwalk * vx) / velmag) - ((yranwalk * vy) / velmag),
-            0.0,
-        )
-        self.y = self.y + np.where(
-            velmag > 0.0,
-            vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
-            0.0,
-        )
-        self.z = self.z + (vz * dt)
-
-        # if velmag == 0:
-        #    tmpx = self.x + (vx * dt)
-        #    tmpy = self.y + (vy * dt)
-        # else:
-        #    tmpx = (
-        #        self.x
-        #        + (vx * dt)
-        #        + ((xranwalk * vx) / velmag)
-        #        - ((yranwalk * vy) / velmag)
-        #    )
-        #    tmpy = (
-        #        self.y
-        #        + (vy * dt)
-        #        + ((xranwalk * vy) / velmag)
-        #        + ((yranwalk * vx) / velmag)
-        #    )
-
-    def vert_mean_depth(self, bedelev, wse):
-        """Set verticle postion of particle at the mean depth of the water column.
-
-        Args:
-            bedelev (float): elevation of the channel bed
-            wse (float): elevation of the water surface
-        """
-        fishelev = bedelev + 0.5 * (wse - bedelev)
-        self.z = fishelev
-
-    def vert_random_walk(self, bedelev, wse, vx, vy, vz, z_diff, zrnum, dt):
-        """Set particle postion as a random walk above the bed.
-
-        Args:
-            bedelev (float): elevation of the channel bed [m]
-            wse (float): elevation of the water surface [m]
-            vx (float): velocity along x-coordinate axis [m/s]
-            vy (float): velocity along y-coordinate axis [m/s]
-            vz (float): velocity along z-coordinate axis [m/s]
-            z_diff (float): diffusion coefficient (>=0) along z-coordinate axis [m^2/s]
-            zrnum (float): drawn from standard normal distribution, scales z random walk
-            dt (float): time step [s]
-        """
-        velmag = (vx ** 2 + vy ** 2) ** 0.5
-        dv = zrnum * (2.0 * z_diff * dt) ** 0.5
-        tdepth = wse - bedelev
-        tmpz = np.where(velmag > 0.0, self.z + (vz * dt) + dv, self.z + (vz * dt))
-        # Array checks on elevation; keep these here?
-        tmpz = np.where(tmpz < wse, tmpz, wse - 0.01 * tdepth)
-        tmpz = np.where(tmpz > bedelev, tmpz, bedelev + 0.01 * tdepth)
-        self.z = tmpz
-
-    def move_random_only_2d(self, x_diff, y_diff, xrnum, yrnum, dt):
-        """Update position based on random walk in x and y directions.
-
-        Args:
-            x_diff ([type]): [description]
-            y_diff ([type]): [description]
-            xrnum ([type]): [description]
-            yrnum ([type]): [description]
-            dt ([type]): [description]
-
-        Returns:
-            [type]: [description]
-        """
-        px = self.x + xrnum * (2.0 * x_diff * dt) ** 0.5
-        py = self.y + yrnum * (2.0 * y_diff * dt) ** 0.5
-        return px, py
-
-    def move_random_only_3d(self, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, dt):
-        """Update position based on random walk in x, y, z directions.
-
-        Args:
-            x_diff (float): diffusion coefficient (>=0) along x-coordinate axis [m^2/s]
-            y_diff (float): diffusion coefficient (>=0) along y-coordinate axis [m^2/s]
-            z_diff (float): diffusion coefficient (>=0) along z-coordinate axis [m^2/s]
-            xrnum (float): drawn from standard normal distribution, scales x random walk
-            yrnum (float): drawn from standard normal distribution, scales y random walk
-            zrnum (float): drawn from standard normal distribution, scales z random walk
-            dt (float): time step [s]
-        """
-        self.x = self.x + xrnum * (2.0 * x_diff * dt) ** 0.5
-        self.y = self.y + yrnum * (2.0 * y_diff * dt) ** 0.5
-        self.z = self.z + zrnum * (2.0 * z_diff * dt) ** 0.5
+        # check on alpha? only makes sense for alpha<=0.5
+        a = self.z > wse
+        b = self.z < bedelev
+        depth = wse - bedelev
+        self.z[a] = wse[a] - alpha * depth[a]
+        self.z[b] = bedelev[b] + alpha * depth[b]
 
     def update_position(self, cellind, xt, yt, zt, time, bedelev, wse):
         """Update position of particle."""
