@@ -9,7 +9,7 @@ __author__ = "rmcd"
 #    3600.0 ==  1 Hour
 
 # Prod
-SimTime = 30.0
+SimTime = 10.0
 dt = 0.25
 avg_depth = 0.5
 avg_bed_shearstress = 6
