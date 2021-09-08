@@ -124,18 +124,13 @@ class Particles:
         self.z[a] = wse[a] - alpha * depth[a]
         self.z[b] = bedelev[b] + alpha * depth[b]
 
-    def update_position(self, cellind, xt, yt, zt, time, bedelev, wse):
-        """Update position of particle."""
-        self.x = xt
-        self.y = yt
-        self.z = zt
+    def update_info(self, cellind, time, bedelev, wse):
+        """Update particle information."""
         self.bedElev = bedelev
         self.wse = wse
         self.htabvbed = self.z - self.bedElev
         self.time = time
         self.cellindex = cellind
-        if self.wse <= self.bedElev:
-            print(f"error: z: {zt} bed: {bedelev} wse: {wse}")
 
     def keep_postition(self, time):
         """Keep position of particle.

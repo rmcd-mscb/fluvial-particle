@@ -484,6 +484,9 @@ while TotTime <= EndTime:  # noqa C901
         alpha = 0.01
     particles.check_z(alpha, elev1, wse1)
 
+    # Update location information
+    particles.update_info(cellidb, np.full(npart, TotTime), elev1, wse1)
+
     # Update the particle counts per cell
     np.add.at(NumPartInCell, cellidb, 1)
     if np.sum(NumPartInCell) != npart:
@@ -512,7 +515,6 @@ while TotTime <= EndTime:  # noqa C901
             writer = csv.writer(tfile)
             writer.writerow(
                 (
-                    "index",
                     "time",
                     "cellIndex",
                     "x",
@@ -525,7 +527,6 @@ while TotTime <= EndTime:  # noqa C901
             )
             # this may be wrong, but try it out
             (
-                tind,
                 tt,
                 cind,
                 tx,
@@ -538,6 +539,7 @@ while TotTime <= EndTime:  # noqa C901
             for p in anpart:  # need research on how to write full arrays
                 writer.writerow(
                     (
+                        p,
                         tt[p],
                         cind[p],
                         tx[p],
