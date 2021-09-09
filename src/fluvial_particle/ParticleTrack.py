@@ -23,7 +23,7 @@ def gen_filenames(prefix, suffix, places=3):
         yield pattern.format(i)
 
 
-def get_3d_vec_value(newpoint3d, cellid):
+def get_vel3d_value(newpoint3d, cellid):
     """[summary].
 
     Args:
@@ -187,6 +187,13 @@ particles_last = Particles(npart, x, y, z)
 rng = np.random.default_rng()  # Numpy recommended method for new code
 anpart = np.arange(npart).tolist()
 
+# Sets the min distance fraction that particles can get to water column boundaries
+if Track2D:
+    alpha = 0.5
+    PartNormDepth = 0.5
+else:
+    alpha = 0.01
+
 # Sinusoid properties; these aren't used, REMOVE?
 # Will be used for larval drift subclass eventually
 amplitude = 1.0
@@ -298,18 +305,16 @@ while TotTime <= EndTime:  # noqa C901
     xrnum = rng.standard_normal(npart)
     yrnum = rng.standard_normal(npart)
     if Track2D:
-        zrnum = np.zeros_like(xrnum)
+        zrnum = np.zeros(npart)
     else:
         zrnum = rng.standard_normal(npart)
 
     # Find 2D positions of particles in 2D cell
     # per documentation, vtkCellLocator is not thread safe; use vtkStaticCellLocator instead
-    px = np.copy(particles.x)  # maybe unnecesary to copy
-    py = np.copy(particles.y)
-    pz = np.copy(particles.z)
-    # Stack coordinates into an object array
-    # Point2D = np.empty((npart, 3), object)
-    Point2D = np.vstack((px, py, np.zeros_like(pz))).T
+    px = particles.x  # not copied
+    py = particles.y  # not copied
+    pz = np.copy(particles.z)  # copied because it gets updated
+    Point2D = np.vstack((px, py, np.zeros(npart))).T
     cellid = np.zeros(npart, dtype=np.int64)
     for i in anpart:
         cellid[i] = CellLocator2D.FindCell(Point2D[i, :])
@@ -334,23 +339,16 @@ while TotTime <= EndTime:  # noqa C901
         tmpibc[i] = get_cell_value(weights, idlist1, numpts, IBC_2D)
         tmpvel[i] = get_cell_value(weights, idlist1, numpts, Velocity_2D)
         tmpss[i] = get_cell_value(weights, idlist1, numpts, ShearStress2D)
-        tmpvelx[i], tmpvely[i] = get_vel2d_value(weights, idlist1, numpts)
+        if Track2D:
+            tmpvelx[i], tmpvely[i] = get_vel2d_value(weights, idlist1, numpts)
     # check shear stress (without error print statements)
     tmpss = np.where(tmpss < 0.0, 0.0, tmpss)
     tmpustar = (tmpss / 1000.0) ** 0.5
 
-    # Check particle depths
+    # Check particle depths and calc PartNormDepth
     if count_index <= 1:
-        pz = np.where(pz > tmpwse, tmpelev + 0.5 * tmpdepth, pz)
-        pz = np.where(pz < tmpelev, tmpelev + 0.5 * tmpdepth, pz)
-        # interesting side-note on np.where(), it evaluates both function evaluations first, then ...
-        # evaluates the condition; e.g. it will evaluate 1/0 before checking x > 0
-    else:
-        pz = np.where(pz > tmpwse - 0.025 * tmpdepth, tmpwse - 0.025 * tmpdepth, pz)
-        pz = np.where(pz < tmpelev + 0.025 * tmpdepth, tmpelev + 0.025 * tmpdepth, pz)
-    if Track2D:
-        PartNormDepth = 0.5
-    else:
+        particles.check_z(0.5, tmpelev, tmpwse)
+    if Track3D:
         PartNormDepth = (pz - tmpelev) / tmpdepth
 
     # Get 3D Velocity Components
@@ -361,10 +359,10 @@ while TotTime <= EndTime:  # noqa C901
     # for now, write explicitly as a for-loop; not ideal but no better solution a.t.m.
     if Track3D:
         # Rename tmp3dux -> tmpvelx, etc.
-        tmpvelx = np.zeros_like(px)
-        tmpvely = np.zeros_like(px)
-        tmpvelz = np.zeros_like(px)
-        CellId3D = np.zeros_like(px, dtype=np.int64)
+        tmpvelx = np.zeros(npart)
+        tmpvely = np.zeros(npart)
+        tmpvelz = np.zeros(npart)
+        CellId3D = np.zeros(npart, dtype=np.int64)
         idlist1 = vtk.vtkIdList()
         for n in anpart:
             Point3D = [px[n], py[n], pz[n]]
@@ -374,7 +372,7 @@ while TotTime <= EndTime:  # noqa C901
             # compare to modern vtk methods, can it find the right cell now?
             maxdist = 1e6
             for t in range(0, idlist1.GetNumberOfIds()):
-                result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_3d_vec_value(
+                result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_vel3d_value(
                     Point3D, idlist1.GetId(t)
                 )
                 if result == 1:
@@ -478,10 +476,6 @@ while TotTime <= EndTime:  # noqa C901
     # Ninth, run particles.move_all
     particles.move_all(tmpvelx, tmpvely, tmpvelz, Dx, Dy, Dz, xrnum, yrnum, zrnum, dt)
     # Tenth, final check that new coords are all within vertical domain
-    if Track2D:
-        alpha = 0.5
-    else:
-        alpha = 0.01
     particles.check_z(alpha, elev1, wse1)
 
     # Update location information
@@ -496,9 +490,6 @@ while TotTime <= EndTime:  # noqa C901
         print("bad sum in PartInNSCellPTime")
     np.add.at(PartTimeInCell, cellidb, dt)
     np.add.at(TotPartInCell, cellidb, 1)
-
-    # %%
-    # Not updated below here
 
     carray4 = vtk.vtkFloatArray()
     carray4.SetNumberOfValues(num2dcells)
@@ -515,6 +506,7 @@ while TotTime <= EndTime:  # noqa C901
             writer = csv.writer(tfile)
             writer.writerow(
                 (
+                    "index",
                     "time",
                     "cellIndex",
                     "x",

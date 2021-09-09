@@ -132,20 +132,6 @@ class Particles:
         self.time = time
         self.cellindex = cellind
 
-    def keep_postition(self, time):
-        """Keep position of particle.
-
-        Args:
-            time ([type]): [description]
-        """
-        self.time = time
-        if self.z <= self.bedElev:
-            self.z = self.bedElev + 0.5 * (self.wse - self.bedElev)
-
-    def get_position(self):
-        """Return position of particle."""
-        return self.x, self.y, self.z
-
     def get_total_position(self):
         """Return complete position of particle."""
         return (
