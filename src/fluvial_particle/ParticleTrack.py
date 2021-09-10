@@ -38,7 +38,6 @@ def get_vel3d_value(newpoint3d, cellid):
     clspoint = [0.0, 0.0, 0.0]
     tmpid = vtk.mutable(0)
     vtkid2 = vtk.mutable(0)
-    vtkcell3d = vtk.vtkHexahedron()
     vtkcell3d = vtksgrid3d.GetCell(cellid)
     result = vtkcell3d.EvaluatePosition(
         newpoint3d, clspoint, tmpid, pcoords, vtkid2, weights
@@ -47,11 +46,11 @@ def get_vel3d_value(newpoint3d, cellid):
     idlist1 = vtk.vtkIdList()
     numpts = vtkcell3d.GetNumberOfPoints()
     idlist1 = vtkcell3d.GetPointIds()
-    tmpxval = 0.0
-    tmpyval = 0.0
-    for x in range(0, numpts):
-        tmpxval = tmpxval + weights[x] * VelocityVec3D.GetTuple(idlist1.GetId(x))[0]
-        tmpyval = tmpyval + weights[x] * VelocityVec3D.GetTuple(idlist1.GetId(x))[1]
+    tmpxval = np.float64(0.0)
+    tmpyval = np.float64(0.0)
+    for i in range(0, numpts):
+        tmpxval += weights[i] * VelocityVec3D.GetTuple(idlist1.GetId(i))[0]
+        tmpyval += weights[i] * VelocityVec3D.GetTuple(idlist1.GetId(i))[1]
     return result, vtkid2, tmpxval, tmpyval, 0.0
 
 
@@ -262,15 +261,16 @@ PartTimeInCell = np.zeros(num2dcells)
 TotPartInCell = np.zeros(num2dcells, dtype=np.int64)
 PartInNSCellPTime = np.zeros(nsc, dtype=np.int64)
 
-CellLocator3D = vtk.vtkCellLocator()
+# Build Static Cell Locators (thread-safe)
+CellLocator3D = vtk.vtkStaticCellLocator()
 CellLocator3D.SetDataSet(vtksgrid3d)
 # CellLocator3D.SetNumberOfCellsPerBucket(5);
 CellLocator3D.SetTolerance(0.000000001)
 CellLocator3D.BuildLocator()
 
-CellLocator2D = vtk.vtkCellLocator()
+CellLocator2D = vtk.vtkStaticCellLocator()
 CellLocator2D.SetDataSet(vtksgrid2d)
-CellLocator2D.SetNumberOfCellsPerBucket(5)
+# CellLocator2D.SetNumberOfCellsPerBucket(5)
 CellLocator2D.BuildLocator()
 
 # Get Elevation and WSE from 2D Grid
@@ -454,21 +454,21 @@ while TotTime <= EndTime:  # noqa C901
     b = tdepth1 < min_depth
     if np.any(b):
         print("particle entered min_depth")
-    p2x[b] = particles.x[b]
-    p2y[b] = particles.y[b]
-    tmpvelx[b] = 0.0
-    tmpvely[b] = 0.0
-    tmpvelz[b] = 0.0
-    Dx[b] = 0.0
-    Dy[b] = 0.0
-    Dz[b] = 0.0
-    # Eighth, update vertical position to same fractional depth as last
-    newpoint2d = np.vstack((p2x, p2y, np.zeros(npart))).T
-    for i in anpart:
-        cellidb[i] = CellLocator2D.FindCell(newpoint2d[i, :])
-        weights, idlist1, numpts = get_cell_pos(newpoint2d[i, :], cellidb[i])
-        elev1[i] = get_cell_value(weights, idlist1, numpts, Elevation_2D)
-        wse1[i] = get_cell_value(weights, idlist1, numpts, WSE_2D)
+        p2x[b] = particles.x[b]
+        p2y[b] = particles.y[b]
+        tmpvelx[b] = 0.0
+        tmpvely[b] = 0.0
+        tmpvelz[b] = 0.0
+        Dx[b] = 0.0
+        Dy[b] = 0.0
+        Dz[b] = 0.0
+        # Eighth, update vertical position to same fractional depth as last
+        newpoint2d = np.vstack((p2x, p2y, np.zeros(npart))).T
+        for i in anpart:
+            cellidb[i] = CellLocator2D.FindCell(newpoint2d[i, :])
+            weights, idlist1, numpts = get_cell_pos(newpoint2d[i, :], cellidb[i])
+            elev1[i] = get_cell_value(weights, idlist1, numpts, Elevation_2D)
+            wse1[i] = get_cell_value(weights, idlist1, numpts, WSE_2D)
     CI_IDB = cellidb % nsc
     tdepth1 = wse1 - elev1
     p2z = elev1 + (PartNormDepth * tdepth1)
