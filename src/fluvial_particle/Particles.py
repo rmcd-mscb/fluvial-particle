@@ -52,7 +52,7 @@ class Particles:
         yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
         zranwalk = zrnum * (2.0 * z_diff * dt) ** 0.5
         # Move and update positions in-place on each array
-        a = velmag > 0
+        a = velmag > 0.0
         self.x[a] += (
             vx[a] * dt
             + ((xranwalk[a] * vx[a]) / velmag[a])
@@ -97,15 +97,19 @@ class Particles:
         velmag = (vx ** 2 + vy ** 2) ** 0.5
         xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
         yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
-        px = self.x + np.where(
-            velmag > 0.0,
-            vx * dt + ((xranwalk * vx) / velmag) - ((yranwalk * vy) / velmag),
-            0.0,
+        px = np.copy(self.x)
+        py = np.copy(self.y)
+
+        a = velmag > 0.0
+        px[a] += (
+            vx[a] * dt
+            + ((xranwalk[a] * vx[a]) / velmag[a])
+            - ((yranwalk[a] * vy[a]) / velmag[a])
         )
-        py = self.y + np.where(
-            velmag > 0.0,
-            vy * dt + ((xranwalk * vy) / velmag) + ((yranwalk * vx) / velmag),
-            0.0,
+        py[a] += (
+            vy[a] * dt
+            + ((xranwalk[a] * vy[a]) / velmag[a])
+            + ((yranwalk[a] * vx[a]) / velmag[a])
         )
         return px, py
 
@@ -118,9 +122,9 @@ class Particles:
             wse ([type]): [description]
         """
         # check on alpha? only makes sense for alpha<=0.5
-        a = self.z > wse
-        b = self.z < bedelev
         depth = wse - bedelev
+        a = self.z > wse - alpha * depth
+        b = self.z < bedelev + alpha * depth
         self.z[a] = wse[a] - alpha * depth[a]
         self.z[b] = bedelev[b] + alpha * depth[b]
 

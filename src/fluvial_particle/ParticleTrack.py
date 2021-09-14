@@ -183,7 +183,7 @@ y = np.zeros(npart) + ystart
 z = np.zeros(npart) + zstart
 particles = Particles(npart, x, y, z)
 particles_last = Particles(npart, x, y, z)
-rng = np.random.default_rng()  # Numpy recommended method for new code
+rng = np.random.default_rng(0)  # Numpy recommended method for new code
 anpart = np.arange(npart).tolist()
 
 # Sets the min distance fraction that particles can get to water column boundaries
@@ -331,6 +331,7 @@ while TotTime <= EndTime:  # noqa C901
     tmpss = np.zeros(npart)
     tmpvelx = np.zeros(npart)
     tmpvely = np.zeros(npart)
+    tmpvelz = np.zeros(npart)
     for i in anpart:
         weights, idlist1, numpts = get_cell_pos(Point2D[i, :], cellid[i])
         tmpelev[i] = get_cell_value(weights, idlist1, numpts, Elevation_2D)
@@ -352,52 +353,68 @@ while TotTime <= EndTime:  # noqa C901
         PartNormDepth = (pz - tmpelev) / tmpdepth
 
     # Get 3D Velocity Components
-    # Pointer to output (idlist1) is included in the list of inputs of ...
-    # CellLocator3D.FindCellsAlongLine();
-    # could maybe use a wrapper function that is vectorized?
-    # vtkCellLocatorInterpolatedVelocityField Class may be useful
-    # for now, write explicitly as a for-loop; not ideal but no better solution a.t.m.
     if Track3D:
-        # Rename tmp3dux -> tmpvelx, etc.
-        tmpvelx = np.zeros(npart)
-        tmpvely = np.zeros(npart)
-        tmpvelz = np.zeros(npart)
+        # Locate particle in 3D grid and interpolate velocity
         CellId3D = np.zeros(npart, dtype=np.int64)
         idlist1 = vtk.vtkIdList()
-        for n in anpart:
-            Point3D = [px[n], py[n], pz[n]]
-            pp1 = [px[n], py[n], tmpwse[n] + 10]
-            pp2 = [px[n], py[n], tmpelev[n] - 10]
-            CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
-            # compare to modern vtk methods, can it find the right cell now?
-            maxdist = 1e6
-            for t in range(0, idlist1.GetNumberOfIds()):
+        Point3D = np.vstack((px, py, pz)).T
+        for i in anpart:
+            CellId3D[i] = CellLocator3D.FindCell(Point3D[i, :])
+            if CellId3D[i] >= 0:
                 result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_vel3d_value(
-                    Point3D, idlist1.GetId(t)
+                    Point3D[i, :], CellId3D[i]
                 )
-                if result == 1:
-                    tmpvelx[n] = t_tmp3dux
-                    tmpvely[n] = t_tmp3duy
-                    tmpvelz[n] = t_tmp3duz
-                    CellId3D[n] = idlist1.GetId(t)
-                    break
-                elif t_dist < maxdist:
-                    maxdist = t_dist
-                    tmpvelx[n] = t_tmp3dux
-                    tmpvely[n] = t_tmp3duy
-                    tmpvelz[n] = t_tmp3duz
-                    CellId3D[n] = idlist1.GetId(t)
-            if CellId3D[n] == 0:  # couldn't ID=0 be the cell containing the point?
-                print("no 3dcell found")
-                CellId3D[n] = 0
-            if CellId3D[n] < 0:
-                print("part out of 3d grid")
-                tmpvelx[n] = 0.0
-                tmpvely[n] = 0.0
-                tmpvelz[n] = 0.0
+                tmpvelx[i] = t_tmp3dux
+                tmpvely[i] = t_tmp3duy
+                tmpvelz[i] = t_tmp3duz
+                NumPartIn3DCell[CellId3D[i]] += 1
             else:
-                NumPartIn3DCell[CellId3D[n]] += 1
-    # End 3D Cell Section
+                print("3d findcell failed, particle number: ", i)
+                print("switching to FindCellsAlongLine() method")
+                pp1 = [Point3D[i, 0], Point3D[i, 1], tmpwse[i] + 10]
+                pp2 = [Point3D[i, 0], Point3D[i, 1], tmpelev[i] - 10]
+                CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
+                maxdist = 1e6
+                for t in range(idlist1.GetNumberOfIds()):
+                    result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_vel3d_value(
+                        Point3D[i, :], idlist1.GetId(t)
+                    )
+                    if result == 1:
+                        tmpvelx[i] = t_tmp3dux
+                        tmpvely[i] = t_tmp3duy
+                        tmpvelz[i] = t_tmp3duz
+                        CellId3D[i] = idlist1.GetId(t)
+                        break
+                    elif t_dist < maxdist:
+                        maxdist = t_dist
+                        tmpvelx[i] = t_tmp3dux
+                        tmpvely[i] = t_tmp3duy
+                        tmpvelz[i] = t_tmp3duz
+                        CellId3D[i] = idlist1.GetId(t)
+                if CellId3D[i] < 0:
+                    print("part still out of 3d grid")
+                    tmpvelx[i] = 0.0
+                    tmpvely[i] = 0.0
+                    tmpvelz[i] = 0.0
+                else:
+                    NumPartIn3DCell[CellId3D[i]] += 1
+                """print("3d findcell failed, particle number: ", i)
+                print("Particle location: ", Point3D_2[i, :])
+                print("Particle fractional depth: ", PartNormDepth[i])
+                print("closest 3D cell, 2Dcell: ", CellId3D[i], cellid[i])
+                vtkcell = vtksgrid2d.GetCell(cellid[i])
+                vtkptlist = vtkcell.GetPointIds()
+                vtkpts = vtkcell.GetPoints()
+                print("2D grid points:")
+                for j in range(vtkcell.GetNumberOfPoints()):
+                print(vtkpts.GetPoint(j))
+                print(Elevation_2D.GetTuple(vtkptlist.GetId(j)))
+                vtkcell = vtksgrid3d.GetCell(CellId3D[i])
+                vtkpts = vtkcell.GetPoints()
+                print("3D grid points:")
+                for j in range(vtkpts.GetNumberOfPoints()):
+                print(vtkpts.GetPoint(j)) """
+    # End 3D grid velocity section
 
     # Calculate dispersion terms
     ustarh = (tmpwse - tmpelev) * tmpustar
@@ -417,7 +434,7 @@ while TotTime <= EndTime:  # noqa C901
         weights, idlist1, numpts = get_cell_pos(newpoint2d[i, :], cellidb[i])
         wet1[i] = is_cell_wet(weights, idlist1, numpts)
     if np.any(~wet1):
-        print("dry cell encountered")
+        # print("dry cell encountered")
         # Third, forward-project dry cells using just random motion
         p2x[~wet1] = particles.x[~wet1] + xrnum[~wet1] * (2.0 * Dx[~wet1] * dt) ** 0.5
         p2y[~wet1] = particles.y[~wet1] + yrnum[~wet1] * (2.0 * Dy[~wet1] * dt) ** 0.5
