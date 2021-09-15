@@ -9,6 +9,7 @@ import vtk
 
 import fluvial_particle.settings as settings
 from fluvial_particle.Particles import Particles
+from fluvial_particle.RiverGrid import RiverGrid
 
 
 def gen_filenames(prefix, suffix, places=3):
@@ -38,7 +39,7 @@ def get_vel3d_value(newpoint3d, cellid):
     clspoint = [0.0, 0.0, 0.0]
     tmpid = vtk.mutable(0)
     vtkid2 = vtk.mutable(0)
-    vtkcell3d = vtksgrid3d.GetCell(cellid)
+    vtkcell3d = River.vtksgrid3d.GetCell(cellid)
     result = vtkcell3d.EvaluatePosition(
         newpoint3d, clspoint, tmpid, pcoords, vtkid2, weights
     )
@@ -127,7 +128,7 @@ def get_cell_pos(newpoint2d, cellid):
     clspoint = [0.0, 0.0, 0.0]
     tmpid = vtk.mutable(0)
     vtkid2 = vtk.mutable(0)
-    vtkcell2d = vtksgrid2d.GetCell(cellid)
+    vtkcell2d = River.vtksgrid2d.GetCell(cellid)
     tmpres = vtkcell2d.EvaluatePosition(  # noqa F841
         newpoint2d, clspoint, tmpid, pcoords, vtkid2, weights
     )
@@ -169,44 +170,18 @@ Track2D = 1
 Track3D = 1
 Track2D = settings.Track2D
 Track3D = settings.Track3D
-
 print_inc = settings.PrintAtTick
 
-# add Particles
-npart = 300  # number of particles
-npart = settings.NumPart
-xstart, ystart, zstart = settings.StartLoc
-
-# Initialize particles class with initial location
-x = np.zeros(npart) + xstart
-y = np.zeros(npart) + ystart
-z = np.zeros(npart) + zstart
-particles = Particles(npart, x, y, z)
-particles_last = Particles(npart, x, y, z)
-rng = np.random.default_rng(0)  # Numpy recommended method for new code
-anpart = np.arange(npart).tolist()
-
-# Sets the min distance fraction that particles can get to water column boundaries
+# Fractional depth that bounds particle positions from bed and WSE
 if Track2D:
     alpha = 0.5
     PartNormDepth = 0.5
 else:
     alpha = 0.01
 
-# Sinusoid properties; these aren't used, REMOVE?
-# Will be used for larval drift subclass eventually
-amplitude = 1.0
-period = 60.0
-min_elev = 0.5
-amplitude = settings.amplitude
-period = settings.period
-min_elev = settings.min_elev
-ttime = rng.uniform(0.0, period, npart)
-
 # The source file
 file_name_3da = r"C:\GitRepos\Python\ParticleTracking\Sum3_Result_3D_1.vtk"
 file_name_2da = r"C:\GitRepos\Python\ParticleTracking\Sum3_Result_2D_1.vtk"
-
 file_name_2da = settings.file_name_2da
 file_name_3da = settings.file_name_3da
 
@@ -226,67 +201,74 @@ file_name_3da = settings.file_name_3da
 # print(file_name_3da)
 # print(file_name_2da)
 
-# Read the 3Dsource file.
-vtksgrid3d = vtk.vtkStructuredGrid()
-reader3d = vtk.vtkStructuredGridReader()
-reader3d.SetFileName(file_name_3da)
-reader3d.SetOutput(vtksgrid3d)
-reader3d.Update()  # Needed because of GetScalarRange
-output3d = reader3d.GetOutput()
-scalar_range = output3d.GetScalarRange()
+# Initialize RiverGrid object
+River = RiverGrid(Track3D)
+River.read_2d_data(file_name_2da)
+River.read_3d_data(file_name_3da)
+River.load_arrays()
+River.build_locators()
 
-# print(vtksgrid3d)
-
-# Read the 2Dsource file.
-vtksgrid2d = vtk.vtkStructuredGrid()
-reader2d = vtk.vtkStructuredGridReader()
-reader2d.SetFileName(file_name_2da)
-reader2d.SetOutput(vtksgrid2d)
-reader2d.Update()  # Needed because of GetScalarRange
-output2d = reader2d.GetOutput()
-scalar_range = output2d.GetScalarRange()
-
-num3dcells = vtksgrid3d.GetNumberOfCells()
-num2dcells = vtksgrid2d.GetNumberOfCells()
+CellLocator3D = River.CellLocator3D
+CellLocator2D = River.CellLocator2D
+WSE_2D = River.WSE_2D
+Depth_2D = River.Depth_2D
+Elevation_2D = River.Elevation_2D
+# Velocity_2D = vtksgrid2d.GetPointData().GetScalars("Velocity (magnitude)")
+IBC_2D = River.IBC_2D
+VelocityVec2D = River.VelocityVec2D
+ShearStress2D = River.ShearStress2D
+VelocityVec3D = River.VelocityVec3D
+num3dcells = River.vtksgrid3d.GetNumberOfCells()
+num2dcells = River.vtksgrid2d.GetNumberOfCells()
 print(num3dcells, num2dcells)
 
-ns, nn, nz = vtksgrid2d.GetDimensions()
-nsc = ns - 1
-nnc = nn - 1
+ns = River.ns
+nn = River.nn
+nz = River.nz
+nsc = River.nsc
+nnc = River.nnc
 
+# add Particles
+npart = 300  # number of particles
+npart = settings.NumPart
+xstart, ystart, zstart = settings.StartLoc
+
+# Initialize particles class with initial location and attach RiverGrid
+x = np.zeros(npart) + xstart
+y = np.zeros(npart) + ystart
+z = np.zeros(npart) + zstart
+particles = Particles(npart, x, y, z, River, Track2D, Track3D)
+# particles_last = Particles(npart, x, y, z, River)
+rng = np.random.default_rng(0)  # Numpy recommended method for new code
+anpart = np.arange(npart).tolist()
+
+# Sinusoid properties; these aren't used, REMOVE?
+# Will be used for larval drift subclass eventually
+amplitude = 1.0
+period = 60.0
+min_elev = 0.5
+amplitude = settings.amplitude
+period = settings.period
+min_elev = settings.min_elev
+ttime = rng.uniform(0.0, period, npart)
+
+TotTime = 0.0
+count_index = 0
 NumPartInCell = np.zeros(num2dcells, dtype=np.int64)
 NumPartIn3DCell = np.zeros(num3dcells, dtype=np.int64)
 # partInCell = np.zeros((num2dcells,npart), dtype = int)
 PartTimeInCell = np.zeros(num2dcells)
 TotPartInCell = np.zeros(num2dcells, dtype=np.int64)
 PartInNSCellPTime = np.zeros(nsc, dtype=np.int64)
-
-# Build Static Cell Locators (thread-safe)
-CellLocator3D = vtk.vtkStaticCellLocator()
-CellLocator3D.SetDataSet(vtksgrid3d)
-# CellLocator3D.SetNumberOfCellsPerBucket(5);
-CellLocator3D.SetTolerance(0.000000001)
-CellLocator3D.BuildLocator()
-
-CellLocator2D = vtk.vtkStaticCellLocator()
-CellLocator2D.SetDataSet(vtksgrid2d)
-# CellLocator2D.SetNumberOfCellsPerBucket(5)
-CellLocator2D.BuildLocator()
-
-# Get Elevation and WSE from 2D Grid
-WSE_2D = vtksgrid2d.GetPointData().GetScalars("WaterSurfaceElevation")
-Depth_2D = vtksgrid2d.GetPointData().GetScalars("Depth")
-Elevation_2D = vtksgrid2d.GetPointData().GetScalars("Elevation")
-Velocity_2D = vtksgrid2d.GetPointData().GetScalars("Velocity (magnitude)")
-IBC_2D = vtksgrid2d.GetPointData().GetScalars("IBC")
-VelocityVec2D = vtksgrid2d.GetPointData().GetVectors("Velocity")
-ShearStress2D = vtksgrid2d.GetPointData().GetScalars("ShearStress (magnitude)")
-# Get Velocity from 3D
-VelocityVec3D = vtksgrid3d.GetPointData().GetScalars("Velocity")
-
-TotTime = 0.0
-count_index = 0
-
+tmpelev = np.zeros(npart)
+tmpwse = np.zeros(npart)
+tmpdepth = np.zeros(npart)
+tmpibc = np.zeros(npart)
+# tmpvel = np.zeros(npart)
+tmpss = np.zeros(npart)
+tmpvelx = np.zeros(npart)
+tmpvely = np.zeros(npart)
+tmpvelz = np.zeros(npart)
 os.chdir(settings.out_dir)
 g = gen_filenames("fish1_", ".csv")
 gg = gen_filenames("nsPart_", ".csv")
@@ -309,112 +291,23 @@ while TotTime <= EndTime:  # noqa C901
     else:
         zrnum = rng.standard_normal(npart)
 
-    # Find 2D positions of particles in 2D cell
-    # per documentation, vtkCellLocator is not thread safe; use vtkStaticCellLocator instead
-    px = particles.x  # not copied
-    py = particles.y  # not copied
-    pz = np.copy(particles.z)  # copied because it gets updated
-    Point2D = np.vstack((px, py, np.zeros(npart))).T
-    cellid = np.zeros(npart, dtype=np.int64)
+    # Interpolate RiverGrid field data to particles
+    particles.interpolate_fields(count_index)
+
+    tmpelev = particles.tmpelev
+    tmpwse = particles.tmpwse
+    tmpdepth = particles.tmpdepth
+    tmpibc = particles.tmpibc
+    # tmpvel = np.zeros(npart)
+    tmpss = particles.tmpss
+    tmpvelx = particles.tmpvelx
+    tmpvely = particles.tmpvely
+    tmpvelz = particles.tmpvelz
+    tmpustar = particles.tmpustar
+    PartNormDepth = particles.PartNormDepth
     for i in anpart:
-        cellid[i] = CellLocator2D.FindCell(Point2D[i, :])
-    if np.any(cellid < 0):
-        print("initial cell -1")  # untested
-    CI_ID = cellid % nsc  # should still work on np array
-
-    # Get information from vtk 2D grids for each particle
-    tmpelev = np.zeros(npart)
-    tmpwse = np.zeros(npart)
-    tmpdepth = np.zeros(npart)
-    tmpibc = np.zeros(npart)
-    tmpvel = np.zeros(npart)
-    tmpss = np.zeros(npart)
-    tmpvelx = np.zeros(npart)
-    tmpvely = np.zeros(npart)
-    tmpvelz = np.zeros(npart)
-    for i in anpart:
-        weights, idlist1, numpts = get_cell_pos(Point2D[i, :], cellid[i])
-        tmpelev[i] = get_cell_value(weights, idlist1, numpts, Elevation_2D)
-        tmpwse[i] = get_cell_value(weights, idlist1, numpts, WSE_2D)
-        tmpdepth[i] = get_cell_value(weights, idlist1, numpts, Depth_2D)
-        tmpibc[i] = get_cell_value(weights, idlist1, numpts, IBC_2D)
-        tmpvel[i] = get_cell_value(weights, idlist1, numpts, Velocity_2D)
-        tmpss[i] = get_cell_value(weights, idlist1, numpts, ShearStress2D)
-        if Track2D:
-            tmpvelx[i], tmpvely[i] = get_vel2d_value(weights, idlist1, numpts)
-    # check shear stress (without error print statements)
-    tmpss = np.where(tmpss < 0.0, 0.0, tmpss)
-    tmpustar = (tmpss / 1000.0) ** 0.5
-
-    # Check particle depths and calc PartNormDepth
-    if count_index <= 1:
-        particles.check_z(0.5, tmpelev, tmpwse)
-    if Track3D:
-        PartNormDepth = (pz - tmpelev) / tmpdepth
-
-    # Get 3D Velocity Components
-    if Track3D:
-        # Locate particle in 3D grid and interpolate velocity
-        CellId3D = np.zeros(npart, dtype=np.int64)
-        idlist1 = vtk.vtkIdList()
-        Point3D = np.vstack((px, py, pz)).T
-        for i in anpart:
-            CellId3D[i] = CellLocator3D.FindCell(Point3D[i, :])
-            if CellId3D[i] >= 0:
-                result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_vel3d_value(
-                    Point3D[i, :], CellId3D[i]
-                )
-                tmpvelx[i] = t_tmp3dux
-                tmpvely[i] = t_tmp3duy
-                tmpvelz[i] = t_tmp3duz
-                NumPartIn3DCell[CellId3D[i]] += 1
-            else:
-                print("3d findcell failed, particle number: ", i)
-                print("switching to FindCellsAlongLine() method")
-                pp1 = [Point3D[i, 0], Point3D[i, 1], tmpwse[i] + 10]
-                pp2 = [Point3D[i, 0], Point3D[i, 1], tmpelev[i] - 10]
-                CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
-                maxdist = 1e6
-                for t in range(idlist1.GetNumberOfIds()):
-                    result, t_dist, t_tmp3dux, t_tmp3duy, t_tmp3duz = get_vel3d_value(
-                        Point3D[i, :], idlist1.GetId(t)
-                    )
-                    if result == 1:
-                        tmpvelx[i] = t_tmp3dux
-                        tmpvely[i] = t_tmp3duy
-                        tmpvelz[i] = t_tmp3duz
-                        CellId3D[i] = idlist1.GetId(t)
-                        break
-                    elif t_dist < maxdist:
-                        maxdist = t_dist
-                        tmpvelx[i] = t_tmp3dux
-                        tmpvely[i] = t_tmp3duy
-                        tmpvelz[i] = t_tmp3duz
-                        CellId3D[i] = idlist1.GetId(t)
-                if CellId3D[i] < 0:
-                    print("part still out of 3d grid")
-                    tmpvelx[i] = 0.0
-                    tmpvely[i] = 0.0
-                    tmpvelz[i] = 0.0
-                else:
-                    NumPartIn3DCell[CellId3D[i]] += 1
-                """print("3d findcell failed, particle number: ", i)
-                print("Particle location: ", Point3D_2[i, :])
-                print("Particle fractional depth: ", PartNormDepth[i])
-                print("closest 3D cell, 2Dcell: ", CellId3D[i], cellid[i])
-                vtkcell = vtksgrid2d.GetCell(cellid[i])
-                vtkptlist = vtkcell.GetPointIds()
-                vtkpts = vtkcell.GetPoints()
-                print("2D grid points:")
-                for j in range(vtkcell.GetNumberOfPoints()):
-                print(vtkpts.GetPoint(j))
-                print(Elevation_2D.GetTuple(vtkptlist.GetId(j)))
-                vtkcell = vtksgrid3d.GetCell(CellId3D[i])
-                vtkpts = vtkcell.GetPoints()
-                print("3D grid points:")
-                for j in range(vtkpts.GetNumberOfPoints()):
-                print(vtkpts.GetPoint(j)) """
-    # End 3D grid velocity section
+        if particles.cellindex3d[i] >= 0:
+            NumPartIn3DCell[particles.cellindex3d[i]] += 1
 
     # Calculate dispersion terms
     ustarh = (tmpwse - tmpelev) * tmpustar
@@ -572,28 +465,28 @@ while TotTime <= EndTime:  # noqa C901
         #     # if tmp > 0:
         #     #     print tmp
         #     carray6.SetValue(n, tmp)
-        vtksgrid2d.GetCellData().AddArray(carray4)
+        River.vtksgrid2d.GetCellData().AddArray(carray4)
         carray4.SetName("Fractional Particle Count")
         # vtksgrid2d.GetCellData().AddArray(carray6)
         # carray6.SetName('Fract_Num_Particle')
 
         wsg = vtk.vtkStructuredGridWriter()
-        wsg.SetInputData(vtksgrid2d)
+        wsg.SetInputData(River.vtksgrid2d)
         wsg.SetFileTypeToBinary()
         wsg.SetFileName(next(ggg))
         wsg.Write()
-        vtksgrid2d.GetCellData().RemoveArray("Fractional Particle Count")
+        River.vtksgrid2d.GetCellData().RemoveArray("Fractional Particle Count")
         # if Track3D:
         for n in range(num3dcells):
             carray5.SetValue(n, NumPartIn3DCell[n] / npart)
-        vtksgrid3d.GetCellData().AddArray(carray5)
+        River.vtksgrid3d.GetCellData().AddArray(carray5)
         carray5.SetName("Fractional Particle Count")
         wsg = vtk.vtkStructuredGridWriter()
-        wsg.SetInputData(vtksgrid3d)
+        wsg.SetInputData(River.vtksgrid3d)
         wsg.SetFileTypeToBinary()
         wsg.SetFileName(next(g4))
         wsg.Write()
-        vtksgrid3d.GetCellData().RemoveArray("Fractional Particle Count")
+        River.vtksgrid3d.GetCellData().RemoveArray("Fractional Particle Count")
 
 
 carray = vtk.vtkFloatArray()
@@ -617,15 +510,15 @@ for n in range(num2dcells):
     carray2.SetValue(n, tmpval)
     carray3.SetValue(n, float(PartTimeInCell[n] / EndTime))
 
-vtksgrid2d.GetCellData().AddArray(carray)
+River.vtksgrid2d.GetCellData().AddArray(carray)
 carray.SetName("Particle Count in Cell")
-vtksgrid2d.GetCellData().AddArray(carray2)
+River.vtksgrid2d.GetCellData().AddArray(carray2)
 carray2.SetName("Avg Particle Time in Cell")
-vtksgrid2d.GetCellData().AddArray(carray3)
+River.vtksgrid2d.GetCellData().AddArray(carray3)
 carray3.SetName("Norm Particle Time in Cell")
 
 wsg = vtk.vtkStructuredGridWriter()
-wsg.SetInputData(vtksgrid2d)
+wsg.SetInputData(River.vtksgrid2d)
 wsg.SetFileTypeToBinary()
 wsg.SetFileName("NoStrmLnCurv_185cms2d1_part.vtk")
 wsg.Write()
