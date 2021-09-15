@@ -15,9 +15,9 @@ class Particles:
             z (float): z-coordinate of each particle, numpy array of length nparts
         """
         self.nparts = nparts
-        self.x = x
-        self.y = y
-        self.z = z
+        self.x = np.copy(x)
+        self.y = np.copy(y)
+        self.z = np.copy(z)
         self.time = np.zeros(nparts, dtype=float)
         self.bedElev = np.zeros(nparts, dtype=float)
         self.htabvbed = np.zeros(nparts, dtype=float)
