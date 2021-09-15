@@ -376,3 +376,41 @@ class Particles:
                 print("3D grid points:")
                 for j in range(vtkpts.GetNumberOfPoints()):
                 print(vtkpts.GetPoint(j)) """
+
+    def is_cell_wet_helper(self, weights, idlist1, numpts):
+        """[summary].
+
+        Args:
+            weights ([type]): [description]
+            idlist1 ([type]): [description]
+            numpts ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        tmpibc = 0.0
+        for i in range(numpts):
+            tmpibc += weights[i] * self.River.IBC_2D.GetTuple(idlist1.GetId(i))[0]
+        if tmpibc >= 0.9999999:
+            return True
+        else:
+            return False
+
+    def is_cell_wet(self, px, py):
+        """[summary].
+
+        Args:
+            px ([type]): [description]
+            py ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
+        cellidb = np.zeros(self.nparts, dtype=np.int64)
+        wet = np.empty(self.nparts, dtype=bool)
+        for i in range(self.nparts):
+            cellidb[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
+            weights, idlist1, numpts = self.get_cell_pos(newpoint2d[i, :], cellidb[i])
+            wet[i] = self.is_cell_wet_helper(weights, idlist1, numpts)
+        return cellidb, wet

@@ -319,13 +319,14 @@ while TotTime <= EndTime:  # noqa C901
     # First, forward-project to new (x,y) coordinates
     p2x, p2y = particles.project_2d(tmpvelx, tmpvely, Dx, Dy, xrnum, yrnum, dt)
     # Second, get boolean array from is_cell_wet
+    cellidb, wet1 = particles.is_cell_wet(p2x, p2y)
     newpoint2d = np.vstack((p2x, p2y, np.zeros(npart))).T
-    cellidb = np.zeros(npart, dtype=np.int64)
+    """ cellidb = np.zeros(npart, dtype=np.int64)
     wet1 = np.empty(npart, dtype=bool)
     for i in anpart:
         cellidb[i] = CellLocator2D.FindCell(newpoint2d[i, :])
         weights, idlist1, numpts = get_cell_pos(newpoint2d[i, :], cellidb[i])
-        wet1[i] = is_cell_wet(weights, idlist1, numpts)
+        wet1[i] = is_cell_wet(weights, idlist1, numpts) """
     if np.any(~wet1):
         # print("dry cell encountered")
         # Third, forward-project dry cells using just random motion
