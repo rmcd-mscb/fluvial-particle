@@ -6,7 +6,7 @@ import vtk
 class Particles:
     """A class of particles, each with a velocity, size, and mass."""
 
-    def __init__(self, nparts, x, y, z, fielddata, track2d=0, track3d=1):
+    def __init__(self, nparts, x, y, z, rng, fielddata, track2d=0, track3d=1):
         """Initialize instance of class Particles.
 
         Args:
@@ -14,6 +14,7 @@ class Particles:
             x (float): x-coordinate of each particle, numpy array of length nparts
             y (float): y-coordinate of each particle, numpy array of length nparts
             z (float): z-coordinate of each particle, numpy array of length nparts
+            rng (Numpy object): random number generator
             fielddata (RiverGrid): class instance of the river hydrodynamic data
             track2d (bool): 1 if 2D model run, 0 else
             track3d (bool): 1 if 3D model run, 0 else
@@ -22,9 +23,11 @@ class Particles:
         self.x = np.copy(x)
         self.y = np.copy(y)
         self.z = np.copy(z)
+        self.rng = rng
         self.River = fielddata
         self.track2d = track2d
         self.track3d = track3d
+        # Add an XOR on track2d & track3d ?
 
         self.time = np.zeros(nparts)
         self.bedElev = np.zeros(nparts)
@@ -42,6 +45,12 @@ class Particles:
         self.tmpvely = np.zeros(nparts)
         self.tmpvelz = np.zeros(nparts)
         self.tmpustar = np.zeros(nparts)
+        self.Dx = np.zeros(nparts)
+        self.Dy = np.zeros(nparts)
+        self.Dz = np.zeros(nparts)
+        self.xrnum = np.zeros(nparts)
+        self.yrnum = np.zeros(nparts)
+        self.zrnum = np.zeros(nparts)
 
     def setz(self, tz):
         """Set z-value.
@@ -50,87 +59,6 @@ class Particles:
             tz (float): new z-value of particle
         """
         self.z = tz
-
-    def move_all(self, vx, vy, vz, x_diff, y_diff, z_diff, xrnum, yrnum, zrnum, dt):
-        """Update position based on speed, angle.
-
-        Args:
-            vx (float): flow velocity along the x axis
-            vy (float): flow velocity along the y axis
-            vz (float): flow velocity along the z axis
-            x_diff (float): diffusion coefficient along x
-            y_diff (float): diffusion coefficient along y
-            z_diff (float): diffusion coefficient along z
-            xrnum (float): random number from N(0,1), scales x diffusion
-            yrnum (float): random number from N(0,1), scales y diffusion
-            zrnum (float): random number from N(0,1), scales z diffusion
-            dt (float): time step
-        """
-        velmag = (vx ** 2 + vy ** 2) ** 0.5
-        xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
-        yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
-        zranwalk = zrnum * (2.0 * z_diff * dt) ** 0.5
-        # Move and update positions in-place on each array
-        a = velmag > 0.0
-        self.x[a] += (
-            vx[a] * dt
-            + ((xranwalk[a] * vx[a]) / velmag[a])
-            - ((yranwalk[a] * vy[a]) / velmag[a])
-        )
-        self.y[a] += (
-            vy[a] * dt
-            + ((xranwalk[a] * vy[a]) / velmag[a])
-            + ((yranwalk[a] * vx[a]) / velmag[a])
-        )
-        self.z = self.z + vz * dt + zranwalk
-
-    def move_random_only_2d(self, x_diff, y_diff, xrnum, yrnum, boolarray, dt):
-        """Update position based on random walk in x and y directions.
-
-        Args:
-            x_diff ([type]): [description]
-            y_diff ([type]): [description]
-            xrnum ([type]): [description]
-            yrnum ([type]): [description]
-            boolarray ([type]): [description]
-            dt ([type]): [description]
-        """
-        self.x[boolarray] += xrnum[boolarray] * (2.0 * x_diff[boolarray] * dt) ** 0.5
-        self.y[boolarray] += yrnum[boolarray] * (2.0 * y_diff[boolarray] * dt) ** 0.5
-
-    def project_2d(self, vx, vy, x_diff, y_diff, xrnum, yrnum, dt):
-        """Forward-project new 2D position based on speed, angle.
-
-        Args:
-            vx ([type]): [description]
-            vy ([type]): [description]
-            x_diff ([type]): [description]
-            y_diff ([type]): [description]
-            xrnum ([type]): [description]
-            yrnum ([type]): [description]
-            dt ([type]): [description]
-
-        Returns:
-            [type]: [description]
-        """
-        velmag = (vx ** 2 + vy ** 2) ** 0.5
-        xranwalk = xrnum * (2.0 * x_diff * dt) ** 0.5
-        yranwalk = yrnum * (2.0 * y_diff * dt) ** 0.5
-        px = np.copy(self.x)
-        py = np.copy(self.y)
-
-        a = velmag > 0.0
-        px[a] += (
-            vx[a] * dt
-            + ((xranwalk[a] * vx[a]) / velmag[a])
-            - ((yranwalk[a] * vy[a]) / velmag[a])
-        )
-        py[a] += (
-            vy[a] * dt
-            + ((xranwalk[a] * vy[a]) / velmag[a])
-            + ((yranwalk[a] * vx[a]) / velmag[a])
-        )
-        return px, py
 
     def check_z(self, alpha, bedelev, wse):
         """[summary].
@@ -146,6 +74,77 @@ class Particles:
         b = self.z < bedelev + alpha * depth
         self.z[a] = wse[a] - alpha * depth[a]
         self.z[b] = bedelev[b] + alpha * depth[b]
+
+    def move_all(self, dt):
+        """Update position based on speed, angle.
+
+        Args:
+            dt (float): time step
+        """
+        vx = self.tmpvelx
+        vy = self.tmpvely
+        vz = self.tmpvelz
+        velmag = (vx ** 2 + vy ** 2) ** 0.5
+        xranwalk = self.xrnum * (2.0 * self.Dx * dt) ** 0.5
+        yranwalk = self.yrnum * (2.0 * self.Dy * dt) ** 0.5
+        zranwalk = self.zrnum * (2.0 * self.Dz * dt) ** 0.5
+        # Move and update positions in-place on each array
+        a = velmag > 0.0
+        self.x[a] += (
+            vx[a] * dt
+            + ((xranwalk[a] * vx[a]) / velmag[a])
+            - ((yranwalk[a] * vy[a]) / velmag[a])
+        )
+        self.y[a] += (
+            vy[a] * dt
+            + ((xranwalk[a] * vy[a]) / velmag[a])
+            + ((yranwalk[a] * vx[a]) / velmag[a])
+        )
+        self.z = self.z + vz * dt + zranwalk
+
+    def move_random_only_2d(self, boolarray, dt):
+        """Update position based on random walk in x and y directions.
+
+        Args:
+            boolarray ([type]): [description]
+            dt ([type]): [description]
+        """
+        self.x[boolarray] += (
+            self.xrnum[boolarray] * (2.0 * self.Dx[boolarray] * dt) ** 0.5
+        )
+        self.y[boolarray] += (
+            self.yrnum[boolarray] * (2.0 * self.Dy[boolarray] * dt) ** 0.5
+        )
+
+    def project_2d(self, dt):
+        """Forward-project new 2D position based on speed, angle.
+
+        Args:
+            dt ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        vx = self.tmpvelx
+        vy = self.tmpvely
+        velmag = (vx ** 2 + vy ** 2) ** 0.5
+        xranwalk = self.xrnum * (2.0 * self.Dx * dt) ** 0.5
+        yranwalk = self.yrnum * (2.0 * self.Dy * dt) ** 0.5
+        px = np.copy(self.x)
+        py = np.copy(self.y)
+
+        a = velmag > 0.0
+        px[a] += (
+            vx[a] * dt
+            + ((xranwalk[a] * vx[a]) / velmag[a])
+            - ((yranwalk[a] * vy[a]) / velmag[a])
+        )
+        py[a] += (
+            vy[a] * dt
+            + ((xranwalk[a] * vy[a]) / velmag[a])
+            + ((yranwalk[a] * vx[a]) / velmag[a])
+        )
+        return px, py
 
     def update_info(self, cellind, time, bedelev, wse):
         """Update particle information."""
@@ -209,6 +208,28 @@ class Particles:
         idlist1 = vtkcell2d.GetPointIds()
         return weights, idlist1, numpts
 
+    def get_vel2d_value(self, weights, idlist1, numpts):
+        """Get 2D velocity vector value from nodes in idlist1 given weights.
+
+        Args:
+            weights ([type]): [description]
+            idlist1 ([type]): [description]
+            numpts ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        tmpxval = np.float64(0.0)
+        tmpyval = np.float64(0.0)
+        for i in range(numpts):
+            tmpxval += (
+                weights[i] * self.River.VelocityVec2D.GetTuple(idlist1.GetId(i))[0]
+            )
+            tmpyval += (
+                weights[i] * self.River.VelocityVec2D.GetTuple(idlist1.GetId(i))[1]
+            )
+        return tmpxval, tmpyval
+
     def get_vel3d_value(self, newpoint3d, cellid):
         """[summary].
 
@@ -241,36 +262,15 @@ class Particles:
             )
         return result, vtkid2, tmpxval, tmpyval, 0.0
 
-    def get_vel2d_value(self, weights, idlist1, numpts):
-        """Get 2D velocity vector value from nodes in idlist1 given weights.
-
-        Args:
-            weights ([type]): [description]
-            idlist1 ([type]): [description]
-            numpts ([type]): [description]
-
-        Returns:
-            [type]: [description]
-        """
-        tmpxval = np.float64(0.0)
-        tmpyval = np.float64(0.0)
-        for i in range(numpts):
-            tmpxval += (
-                weights[i] * self.River.VelocityVec2D.GetTuple(idlist1.GetId(i))[0]
-            )
-            tmpyval += (
-                weights[i] * self.River.VelocityVec2D.GetTuple(idlist1.GetId(i))[1]
-            )
-        return tmpxval, tmpyval
-
     def interpolate_fields(self, count_index):
         """[Summary]."""
+        # Find current location in 2D grid
         point2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
         for i in range(self.nparts):
             self.cellindex2d[i] = self.River.CellLocator2D.FindCell(point2d[i, :])
         # if np.any(self.cellindex2d < 0):
         #    print("initial cell -1")  # untested
-        # Get information from vtk 2D grids for each particle
+        # Interpolate 2D fields
         for i in range(self.nparts):
             weights, idlist1, numpts = self.get_cell_pos(
                 point2d[i, :], self.cellindex2d[i]
@@ -291,7 +291,7 @@ class Particles:
             self.tmpss[i] = self.get_cell_value(
                 weights, idlist1, numpts, self.River.ShearStress2D
             )
-            if ~self.track3d:
+            if self.track2d:
                 self.tmpvelx[i], self.tmpvely[i] = self.get_vel2d_value(
                     weights, idlist1, numpts
                 )
@@ -302,17 +302,15 @@ class Particles:
         # MOVE ELSEWHERE; Check particle depths and calc PartNormDepth
         if count_index <= 1:
             self.check_z(0.5, self.tmpelev, self.tmpwse)
-
         if self.track3d:
             self.PartNormDepth = (self.z - self.tmpelev) / self.tmpdepth
 
         # Get 3D Velocity Components
         if self.track3d:
-            self.calc_3dfields_at_nodes()
+            self.interpolate_field_3d()
 
-    def calc_3dfields_at_nodes(self):
-        """[Summary]."""
-        # Locate particle in 3D grid and interpolate velocity
+    def interpolate_field_3d(self):
+        """Locate particle in 3D grid and interpolate velocity."""
         idlist1 = vtk.vtkIdList()
         for i in range(self.nparts):
             point3d = [self.x[i], self.y[i], self.z[i]]
@@ -377,7 +375,21 @@ class Particles:
                 for j in range(vtkpts.GetNumberOfPoints()):
                 print(vtkpts.GetPoint(j)) """
 
-    def is_cell_wet_helper(self, weights, idlist1, numpts):
+    def calc_dispersion_coefs(self, lev, bx, by, bz):
+        """[summary].
+
+        Args:
+            lev ([type]): [description]
+            bx ([type]): [description]
+            by ([type]): [description]
+            bz ([type]): [description]
+        """
+        ustarh = (self.tmpwse - self.tmpelev) * self.tmpustar
+        self.Dx = lev + bx * ustarh
+        self.Dy = lev + by * ustarh
+        self.Dz = lev + bz * ustarh
+
+    def is_cell_wet_kernel(self, weights, idlist1, numpts):
         """[summary].
 
         Args:
@@ -411,6 +423,89 @@ class Particles:
         wet = np.empty(self.nparts, dtype=bool)
         for i in range(self.nparts):
             cellidb[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
+            # Create check here on cellidb -- particles that cross the downstream river boundary
+            #     will trigger cellidb[i] < 0 here first; remove particle from list???
             weights, idlist1, numpts = self.get_cell_pos(newpoint2d[i, :], cellidb[i])
-            wet[i] = self.is_cell_wet_helper(weights, idlist1, numpts)
+            wet[i] = self.is_cell_wet_kernel(weights, idlist1, numpts)
         return cellidb, wet
+
+    def handle_dry_parts(self, cellidb, wet1, px, py, dt):
+        """[summary]."""
+        # print("dry cell encountered")
+        # Third, forward-project dry cells using just random motion
+        px[~wet1] = (
+            self.x[~wet1] + self.xrnum[~wet1] * (2.0 * self.Dx[~wet1] * dt) ** 0.5
+        )
+        py[~wet1] = (
+            self.y[~wet1] + self.yrnum[~wet1] * (2.0 * self.Dy[~wet1] * dt) ** 0.5
+        )
+        # Fourth, run is_cell_wet again
+        newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
+        wet2 = np.empty(self.nparts, dtype=bool)
+        for i in range(self.nparts):  # Expensive
+            cellidb[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
+            weights, idlist1, numpts = self.get_cell_pos(newpoint2d[i, :], cellidb[i])
+            wet2[i] = self.is_cell_wet_kernel(weights, idlist1, numpts)
+        # Fifth, any still dry entries will have zero positional update this step
+        px[~wet2] = self.x[~wet2]
+        py[~wet2] = self.y[~wet2]
+        # Sixth, manually update (x,y) of particles that were not wet first time, yes wet second time
+        a = ~wet1 & wet2
+        self.move_random_only_2d(a, dt)
+        self.tmpvelx[
+            ~wet1
+        ] = 0.0  # ensure that move_all() does nothing for these particles
+        self.tmpvely[~wet1] = 0.0
+        self.tmpvelz[~wet1] = 0.0
+        self.Dx[~wet1] = 0.0
+        self.Dy[~wet1] = 0.0
+        self.Dz[~wet1] = 0.0
+        newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
+        for i in range(self.nparts):
+            cellidb[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
+        return newpoint2d
+
+    def prevent_mindepth(self, cellidb, px, py, min_depth):
+        """[summary]."""
+        newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
+        elev1 = np.zeros(self.nparts)
+        wse1 = np.zeros(self.nparts)
+        for i in range(self.nparts):
+            weights, idlist1, numpts = self.get_cell_pos(newpoint2d[i, :], cellidb[i])
+            elev1[i] = self.get_cell_value(
+                weights, idlist1, numpts, self.River.Elevation_2D
+            )
+            wse1[i] = self.get_cell_value(weights, idlist1, numpts, self.River.WSE_2D)
+        tdepth1 = wse1 - elev1
+        a = tdepth1 < min_depth
+        if np.any(a):
+            print("particle entered min_depth")
+            px[a] = self.x[a]
+            py[a] = self.y[a]
+            self.tmpvelx[a] = 0.0
+            self.tmpvely[a] = 0.0
+            self.tmpvelz[a] = 0.0
+            self.Dx[a] = 0.0
+            self.Dy[a] = 0.0
+            self.Dz[a] = 0.0
+            # Eighth, update vertical position to same fractional depth as last
+            newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
+            for i in range(self.nparts):
+                cellidb[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
+                weights, idlist1, numpts = self.get_cell_pos(
+                    newpoint2d[i, :], cellidb[i]
+                )
+                elev1[i] = self.get_cell_value(
+                    weights, idlist1, numpts, self.River.Elevation_2D
+                )
+                wse1[i] = self.get_cell_value(
+                    weights, idlist1, numpts, self.River.WSE_2D
+                )
+        return elev1, wse1
+
+    def gen_rands(self):
+        """[summary]."""
+        self.xrnum = self.rng.standard_normal(self.nparts)
+        self.yrnum = self.rng.standard_normal(self.nparts)
+        if self.track3d:
+            self.zrnum = self.rng.standard_normal(self.nparts)
