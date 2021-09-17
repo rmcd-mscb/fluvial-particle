@@ -155,28 +155,11 @@ while TotTime <= EndTime:  # noqa C901
     # Interpolate RiverGrid field data to particles
     particles.interpolate_fields(count_index)
 
-    # (temporary) Assign local arrays to particles arrays
-    PartNormDepth = particles.PartNormDepth
-
     # Calculate dispersion terms
     particles.calc_dispersion_coefs(settings.LEV, beta_x, beta_y, beta_z)
 
-    # Forward-project to new (x,y) coordinates
-    p2x, p2y = particles.project_2d(dt)
-
-    # Get boolean array from is_cell_wet and correct dry particles
-    cellidb, wet1 = particles.is_cell_wet(p2x, p2y)
-    newpoint2d = np.vstack((p2x, p2y, np.zeros(npart))).T
-    if np.any(~wet1):
-        newpoint2d = particles.handle_dry_parts(cellidb, wet1, p2x, p2y, dt)
-
-    # Prevent particles from entering cells where tdepth1 < min_depth
-    elev1, wse1 = particles.prevent_mindepth(cellidb, p2x, p2y, min_depth)
-
-    # Update particle elevation in new water column to same fractional depth as last
-    tdepth1 = wse1 - elev1
-    p2z = elev1 + (PartNormDepth * tdepth1)
-    particles.setz(p2z)
+    # Forward-project to find new (x,y) coordinates
+    elev1, wse1 = particles.project_2d(min_depth, dt)
 
     # Move particles
     particles.move_all(dt)
@@ -185,29 +168,28 @@ while TotTime <= EndTime:  # noqa C901
     particles.check_z(alpha, elev1, wse1)
 
     # Update location information
-    particles.update_info(cellidb, np.full(npart, TotTime), elev1, wse1)
+    particles.update_info(np.full(npart, TotTime), elev1, wse1)
 
     # Update the particle counts per cell
     np.add.at(NumPartIn3DCell, particles.cellindex3d, 1)
-    np.add.at(NumPartInCell, cellidb, 1)
+    np.add.at(NumPartInCell, particles.cellindex2d, 1)
     if np.sum(NumPartInCell) != npart:
         print("bad sum in NumPartInCell")
-    CI_IDB = cellidb % nsc
+    CI_IDB = particles.cellindex2d % nsc
     np.add.at(PartInNSCellPTime, CI_IDB, 1)
     if np.sum(PartInNSCellPTime) != npart:
         print("bad sum in PartInNSCellPTime")
-    np.add.at(PartTimeInCell, cellidb, dt)
-    np.add.at(TotPartInCell, cellidb, 1)
+    np.add.at(PartTimeInCell, particles.cellindex2d, dt)
+    np.add.at(TotPartInCell, particles.cellindex2d, 1)
 
-    carray4 = vtk.vtkFloatArray()
-    carray4.SetNumberOfValues(num2dcells)
-    carray5 = vtk.vtkFloatArray()
-    carray5.SetNumberOfValues(num3dcells)
-    carray6 = vtk.vtkFloatArray()
-    carray6.SetNumberOfValues(num2dcells)
-
-    # for t in range(count_index):
+    # Print occasionally
     if count_index % print_inc == 0:
+        carray4 = vtk.vtkFloatArray()
+        carray4.SetNumberOfValues(num2dcells)
+        carray5 = vtk.vtkFloatArray()
+        carray5.SetNumberOfValues(num3dcells)
+        carray6 = vtk.vtkFloatArray()
+        carray6.SetNumberOfValues(num2dcells)
         print(TotTime)
         t = count_index
         with open(next(g), "w") as tfile:
