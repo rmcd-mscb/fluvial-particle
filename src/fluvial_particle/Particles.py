@@ -35,22 +35,20 @@ class Particles:
         self.wse = np.zeros(nparts)
         self.cellindex2d = np.zeros(nparts, dtype=np.int64)
         self.cellindex3d = np.zeros(nparts, dtype=np.int64)
-        self.tmpelev = np.zeros(nparts)
-        self.tmpwse = np.zeros(nparts)
-        self.tmpdepth = np.zeros(nparts)
-        self.tmpibc = np.zeros(nparts)
-        # tmpvel = np.zeros(npart)
-        self.tmpss = np.zeros(nparts)
-        self.tmpvelx = np.zeros(nparts)
-        self.tmpvely = np.zeros(nparts)
-        self.tmpvelz = np.zeros(nparts)
-        self.tmpustar = np.zeros(nparts)
+        self.depth = np.zeros(nparts)
+        self.shearstress = np.zeros(nparts)
+        self.velx = np.zeros(nparts)
+        self.vely = np.zeros(nparts)
+        self.velz = np.zeros(nparts)
+        self.ustar = np.zeros(nparts)
         self.Dx = np.zeros(nparts)
         self.Dy = np.zeros(nparts)
         self.Dz = np.zeros(nparts)
         self.xrnum = np.zeros(nparts)
         self.yrnum = np.zeros(nparts)
         self.zrnum = np.zeros(nparts)
+        # tmpibc = np.zeros(nparts)
+        # tmpvel = np.zeros(npart)
 
     def setz(self, tz):
         """Set z-value.
@@ -81,9 +79,9 @@ class Particles:
         Args:
             dt (float): time step
         """
-        vx = self.tmpvelx
-        vy = self.tmpvely
-        vz = self.tmpvelz
+        vx = self.velx
+        vy = self.vely
+        vz = self.velz
         velmag = (vx ** 2 + vy ** 2) ** 0.5
         xranwalk = self.xrnum * (2.0 * self.Dx * dt) ** 0.5
         yranwalk = self.yrnum * (2.0 * self.Dy * dt) ** 0.5
@@ -125,8 +123,8 @@ class Particles:
         Returns:
             [type]: [description]
         """
-        vx = self.tmpvelx
-        vy = self.tmpvely
+        vx = self.velx
+        vy = self.vely
         velmag = (vx ** 2 + vy ** 2) ** 0.5
         xranwalk = self.xrnum * (2.0 * self.Dx * dt) ** 0.5
         yranwalk = self.yrnum * (2.0 * self.Dy * dt) ** 0.5
@@ -275,35 +273,35 @@ class Particles:
             weights, idlist1, numpts = self.get_cell_pos(
                 point2d[i, :], self.cellindex2d[i]
             )
-            self.tmpelev[i] = self.get_cell_value(
+            self.bedElev[i] = self.get_cell_value(
                 weights, idlist1, numpts, self.River.Elevation_2D
             )
-            self.tmpwse[i] = self.get_cell_value(
+            self.wse[i] = self.get_cell_value(
                 weights, idlist1, numpts, self.River.WSE_2D
             )
-            self.tmpdepth[i] = self.get_cell_value(
+            self.depth[i] = self.get_cell_value(
                 weights, idlist1, numpts, self.River.Depth_2D
             )
-            self.tmpibc[i] = self.get_cell_value(
-                weights, idlist1, numpts, self.River.IBC_2D
-            )
+            # self.tmpibc[i] = self.get_cell_value(
+            #     weights, idlist1, numpts, self.River.IBC_2D
+            # )
             # tmpvel[i] = get_cell_value(weights, idlist1, numpts, Velocity_2D)
-            self.tmpss[i] = self.get_cell_value(
+            self.shearstress[i] = self.get_cell_value(
                 weights, idlist1, numpts, self.River.ShearStress2D
             )
             if self.track2d:
-                self.tmpvelx[i], self.tmpvely[i] = self.get_vel2d_value(
+                self.velx[i], self.vely[i] = self.get_vel2d_value(
                     weights, idlist1, numpts
                 )
         # check shear stress (without error print statements)
-        self.tmpss = np.where(self.tmpss < 0.0, 0.0, self.tmpss)
-        self.tmpustar = (self.tmpss / 1000.0) ** 0.5
+        self.shearstress = np.where(self.shearstress < 0.0, 0.0, self.shearstress)
+        self.ustar = (self.shearstress / 1000.0) ** 0.5
 
         # MOVE ELSEWHERE; Check particle depths and calc PartNormDepth
         if count_index <= 1:
-            self.check_z(0.5, self.tmpelev, self.tmpwse)
+            self.check_z(0.5, self.bedElev, self.wse)
         if self.track3d:
-            self.PartNormDepth = (self.z - self.tmpelev) / self.tmpdepth
+            self.PartNormDepth = (self.z - self.bedElev) / self.depth
 
         # Get 3D Velocity Components
         if self.track3d:
@@ -312,52 +310,52 @@ class Particles:
     def interpolate_field_3d(self):
         """Locate particle in 3D grid and interpolate velocity."""
         idlist1 = vtk.vtkIdList()
+        point3d = np.vstack((self.x, self.y, self.z)).T
         for i in range(self.nparts):
-            point3d = [self.x[i], self.y[i], self.z[i]]
-            self.cellindex3d[i] = self.River.CellLocator3D.FindCell(point3d)
+            self.cellindex3d[i] = self.River.CellLocator3D.FindCell(point3d[i, :])
             if self.cellindex3d[i] >= 0:
                 (
                     result,
-                    t_dist,
-                    t_tmp3dux,
-                    t_tmp3duy,
-                    t_tmp3duz,
-                ) = self.get_vel3d_value(point3d, self.cellindex3d[i])
-                self.tmpvelx[i] = t_tmp3dux
-                self.tmpvely[i] = t_tmp3duy
-                self.tmpvelz[i] = t_tmp3duz
+                    dist,
+                    tmp3dux,
+                    tmp3duy,
+                    tmp3duz,
+                ) = self.get_vel3d_value(point3d[i, :], self.cellindex3d[i])
+                self.velx[i] = tmp3dux
+                self.vely[i] = tmp3duy
+                self.velz[i] = tmp3duz
             else:
                 print("3d findcell failed, particle number: ", i)
                 print("switching to FindCellsAlongLine() method")
-                pp1 = [point3d[0], point3d[1], self.tmpwse[i] + 10]
-                pp2 = [point3d[0], point3d[1], self.tmpelev[i] - 10]
+                pp1 = [point3d[i, 0], point3d[i, 1], self.wse[i] + 10]
+                pp2 = [point3d[i, 0], point3d[i, 1], self.bedElev[i] - 10]
                 self.River.CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
                 maxdist = 1e6
                 for t in range(idlist1.GetNumberOfIds()):
                     (
                         result,
-                        t_dist,
-                        t_tmp3dux,
-                        t_tmp3duy,
-                        t_tmp3duz,
-                    ) = self.get_vel3d_value(point3d, idlist1.GetId(t))
+                        dist,
+                        tmp3dux,
+                        tmp3duy,
+                        tmp3duz,
+                    ) = self.get_vel3d_value(point3d[i, :], idlist1.GetId(t))
                     if result == 1:
-                        self.tmpvelx[i] = t_tmp3dux
-                        self.tmpvely[i] = t_tmp3duy
-                        self.tmpvelz[i] = t_tmp3duz
+                        self.velx[i] = tmp3dux
+                        self.vely[i] = tmp3duy
+                        self.velz[i] = tmp3duz
                         self.cellindex3d[i] = idlist1.GetId(t)
                         break
-                    elif t_dist < maxdist:
-                        maxdist = t_dist
-                        self.tmpvelx[i] = t_tmp3dux
-                        self.tmpvely[i] = t_tmp3duy
-                        self.tmpvelz[i] = t_tmp3duz
+                    elif dist < maxdist:
+                        maxdist = dist
+                        self.velx[i] = tmp3dux
+                        self.vely[i] = tmp3duy
+                        self.velz[i] = tmp3duz
                         self.cellindex3d[i] = idlist1.GetId(t)
                 if self.cellindex3d[i] < 0:
                     print("part still out of 3d grid")
-                    self.tmpvelx[i] = 0.0
-                    self.tmpvely[i] = 0.0
-                    self.tmpvelz[i] = 0.0
+                    self.velx[i] = 0.0
+                    self.vely[i] = 0.0
+                    self.velz[i] = 0.0
                 """print("3d findcell failed, particle number: ", i)
                 print("Particle location: ", point3d_2[i, :])
                 print("Particle fractional depth: ", PartNormDepth[i])
@@ -384,7 +382,7 @@ class Particles:
             by ([type]): [description]
             bz ([type]): [description]
         """
-        ustarh = (self.tmpwse - self.tmpelev) * self.tmpustar
+        ustarh = (self.wse - self.bedElev) * self.ustar
         self.Dx = lev + bx * ustarh
         self.Dy = lev + by * ustarh
         self.Dz = lev + bz * ustarh
@@ -432,31 +430,30 @@ class Particles:
     def handle_dry_parts(self, cellidb, wet1, px, py, dt):
         """[summary]."""
         # print("dry cell encountered")
-        # Third, forward-project dry cells using just random motion
+        # Forward-project dry cells using just random motion
         px[~wet1] = (
             self.x[~wet1] + self.xrnum[~wet1] * (2.0 * self.Dx[~wet1] * dt) ** 0.5
         )
         py[~wet1] = (
             self.y[~wet1] + self.yrnum[~wet1] * (2.0 * self.Dy[~wet1] * dt) ** 0.5
         )
-        # Fourth, run is_cell_wet again
+        # Run is_cell_wet again
         newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
         wet2 = np.empty(self.nparts, dtype=bool)
         for i in range(self.nparts):  # Expensive
             cellidb[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
             weights, idlist1, numpts = self.get_cell_pos(newpoint2d[i, :], cellidb[i])
             wet2[i] = self.is_cell_wet_kernel(weights, idlist1, numpts)
-        # Fifth, any still dry entries will have zero positional update this step
+        # Any still dry entries will have zero positional update this step
         px[~wet2] = self.x[~wet2]
         py[~wet2] = self.y[~wet2]
-        # Sixth, manually update (x,y) of particles that were not wet first time, yes wet second time
+        # Move 2D random only for particles that were not wet first time, yes wet second time
         a = ~wet1 & wet2
         self.move_random_only_2d(a, dt)
-        self.tmpvelx[
-            ~wet1
-        ] = 0.0  # ensure that move_all() does nothing for these particles
-        self.tmpvely[~wet1] = 0.0
-        self.tmpvelz[~wet1] = 0.0
+        # Ensure that move_all() does nothing for these particles
+        self.velx[~wet1] = 0.0
+        self.vely[~wet1] = 0.0
+        self.velz[~wet1] = 0.0
         self.Dx[~wet1] = 0.0
         self.Dy[~wet1] = 0.0
         self.Dz[~wet1] = 0.0
@@ -482,9 +479,9 @@ class Particles:
             print("particle entered min_depth")
             px[a] = self.x[a]
             py[a] = self.y[a]
-            self.tmpvelx[a] = 0.0
-            self.tmpvely[a] = 0.0
-            self.tmpvelz[a] = 0.0
+            self.velx[a] = 0.0
+            self.vely[a] = 0.0
+            self.velz[a] = 0.0
             self.Dx[a] = 0.0
             self.Dy[a] = 0.0
             self.Dz[a] = 0.0
