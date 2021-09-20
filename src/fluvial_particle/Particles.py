@@ -50,6 +50,14 @@ class Particles:
         # tmpibc = np.zeros(nparts)
         # tmpvel = np.zeros(npart)
 
+    def attach_last(self, last):
+        """[summary].
+
+        Args:
+            last ([type]): [description]
+        """
+        self.last = last
+
     def setz(self, tz):
         """Set z-value.
 
@@ -73,13 +81,38 @@ class Particles:
         self.z[a] = wse[a] - alpha * depth[a]
         self.z[b] = bedelev[b] + alpha * depth[b]
 
-    def move_all(self, dt):
+    def move_all(self, min_depth, dt):
         """Update position based on speed, angle.
 
         Args:
             dt (float): time step
+            min_depth (float): minimum depth particles can enter
+
+        Returns:
+            [type]: [description]
         """
-        vx = self.velx
+        # first move 2d only
+        self.move_2d(dt)
+
+        # check if new positions are wet
+        px = self.x
+        py = self.y
+        wet1 = self.is_cell_wet(px, py)
+        if np.any(~wet1):
+            self.handle_dry_parts(wet1, px, py, dt)
+
+        # Prevent particles from entering cells where tdepth1 < min_depth
+        elev1, wse1 = self.prevent_mindepth(px, py, min_depth)
+        # Update particle elevation in new water column to same fractional depth as last
+        tdepth1 = wse1 - elev1
+        p2z = elev1 + (self.PartNormDepth * tdepth1)
+        self.setz(p2z)
+
+        # Move vertical random
+        zranwalk = self.zrnum * (2.0 * self.Dz * dt) ** 0.5
+        self.z += self.velz * dt + zranwalk
+        return elev1, wse1
+        """ vx = self.velx
         vy = self.vely
         vz = self.velz
         velmag = (vx ** 2 + vy ** 2) ** 0.5
@@ -98,7 +131,31 @@ class Particles:
             + ((xranwalk[a] * vy[a]) / velmag[a])
             + ((yranwalk[a] * vx[a]) / velmag[a])
         )
-        self.z = self.z + vz * dt + zranwalk
+        self.z = self.z + vz * dt + zranwalk """
+
+    def move_2d(self, dt):
+        """[summary].
+
+        Args:
+            dt ([type]): [description]
+        """
+        vx = self.velx
+        vy = self.vely
+        velmag = (vx ** 2 + vy ** 2) ** 0.5
+        xranwalk = self.xrnum * (2.0 * self.Dx * dt) ** 0.5
+        yranwalk = self.yrnum * (2.0 * self.Dy * dt) ** 0.5
+        # Move and update positions in-place on each array
+        a = velmag > 0.0
+        self.x[a] += (
+            vx[a] * dt
+            + ((xranwalk[a] * vx[a]) / velmag[a])
+            - ((yranwalk[a] * vy[a]) / velmag[a])
+        )
+        self.y[a] += (
+            vy[a] * dt
+            + ((xranwalk[a] * vy[a]) / velmag[a])
+            + ((yranwalk[a] * vx[a]) / velmag[a])
+        )
 
     def move_random_only_2d(self, boolarray, dt):
         """Update position based on random walk in x and y directions.
@@ -445,10 +502,10 @@ class Particles:
         # print("dry cell encountered")
         # Forward-project dry cells using just random motion
         px[~wet1] = (
-            self.x[~wet1] + self.xrnum[~wet1] * (2.0 * self.Dx[~wet1] * dt) ** 0.5
+            self.last.x[~wet1] + self.xrnum[~wet1] * (2.0 * self.Dx[~wet1] * dt) ** 0.5
         )
         py[~wet1] = (
-            self.y[~wet1] + self.yrnum[~wet1] * (2.0 * self.Dy[~wet1] * dt) ** 0.5
+            self.last.y[~wet1] + self.yrnum[~wet1] * (2.0 * self.Dy[~wet1] * dt) ** 0.5
         )
         # Run is_cell_wet again
         newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
@@ -460,8 +517,8 @@ class Particles:
             )
             wet2[i] = self.is_cell_wet_kernel(weights, idlist1, numpts)
         # Any still dry entries will have zero positional update this step
-        px[~wet2] = self.x[~wet2]
-        py[~wet2] = self.y[~wet2]
+        px[~wet2] = self.last.x[~wet2]
+        py[~wet2] = self.last.y[~wet2]
         # Move 2D random only for particles that were not wet first time, yes wet second time
         a = ~wet1 & wet2
         self.move_random_only_2d(a, dt)
@@ -493,8 +550,8 @@ class Particles:
         a = tdepth1 < min_depth
         if np.any(a):
             print("particle entered min_depth")
-            px[a] = self.x[a]
-            py[a] = self.y[a]
+            px[a] = self.last.x[a]
+            py[a] = self.last.y[a]
             self.velx[a] = 0.0
             self.vely[a] = 0.0
             self.velz[a] = 0.0

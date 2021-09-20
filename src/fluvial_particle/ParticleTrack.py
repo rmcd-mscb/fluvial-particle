@@ -113,7 +113,8 @@ y = np.zeros(npart) + ystart
 z = np.zeros(npart) + zstart
 rng = np.random.default_rng(0)  # Numpy recommended method for new code
 particles = Particles(npart, x, y, z, rng, River, Track2D, Track3D)
-# particles_last = Particles(npart, x, y, z, River)
+particles_last = Particles(npart, x, y, z, rng, River)
+particles.attach_last(particles_last)
 anpart = np.arange(npart).tolist()
 
 # Sinusoid properties; these aren't used, REMOVE?
@@ -159,16 +160,19 @@ while TotTime <= EndTime:  # noqa C901
     particles.calc_dispersion_coefs(settings.LEV, beta_x, beta_y, beta_z)
 
     # Forward-project to find new (x,y) coordinates
-    elev1, wse1 = particles.project_2d(min_depth, dt)
+    # elev1, wse1 = particles.project_2d(min_depth, dt)
 
     # Move particles
-    particles.move_all(dt)
+    elev1, wse1 = particles.move_all(min_depth, dt)
 
     # Final check that new coords are all within vertical domain
     particles.check_z(alpha, elev1, wse1)
 
     # Update location information
     particles.update_info(np.full(npart, TotTime), elev1, wse1)
+    particles_last.x = np.copy(particles.x)
+    particles_last.y = np.copy(particles.y)
+    particles_last.z = np.copy(particles.z)
 
     # Update the particle counts per cell
     np.add.at(NumPartIn3DCell, particles.cellindex3d, 1)
