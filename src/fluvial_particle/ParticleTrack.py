@@ -141,6 +141,11 @@ g = gen_filenames("fish1_", ".csv")
 gg = gen_filenames("nsPart_", ".csv")
 ggg = gen_filenames("Sim_Result_2D_", ".vtk")
 g4 = gen_filenames("Sim_Result_3D_", ".vtk")
+
+# Particles start at midpoint of water column
+particles.interpolate_fields()
+particles.check_z(0.5)
+
 while TotTime <= EndTime:  # noqa C901
     # Increment counters, reset arrays
     TotTime = TotTime + dt
@@ -152,24 +157,15 @@ while TotTime <= EndTime:  # noqa C901
 
     # Generate random numbers
     particles.gen_rands()
-
     # Interpolate RiverGrid field data to particles
-    particles.interpolate_fields(count_index)
-
+    particles.interpolate_fields()
     # Calculate dispersion terms
     particles.calc_dispersion_coefs(settings.LEV, beta_x, beta_y, beta_z)
-
-    # Forward-project to find new (x,y) coordinates
-    # elev1, wse1 = particles.project_2d(min_depth, dt)
-
     # Move particles
-    elev1, wse1 = particles.move_all(min_depth, dt)
-
-    # Final check that new coords are all within vertical domain
-    particles.check_z(alpha, elev1, wse1)
-
-    # Update location information
-    particles.update_info(np.full(npart, TotTime), elev1, wse1)
+    particles.move_all(min_depth, dt)
+    # Final check that new coords are within vertical domain
+    particles.check_z(alpha)
+    # Update last location information
     particles_last.x = np.copy(particles.x)
     particles_last.y = np.copy(particles.y)
     particles_last.z = np.copy(particles.z)
@@ -282,14 +278,14 @@ carray3.SetNumberOfValues(num2dcells)
 
 
 for n in range(num2dcells):
-    carray.SetValue(n, NumPartInCell[n])
+    carray.SetValue(n, TotPartInCell[n])
 
     # Total time of particles in cell divided by
     # the number of particles in that cell
-    if NumPartInCell[n] == 0:
+    if TotPartInCell[n] == 0:
         tmpval = 0
     else:
-        tmpval = float(PartTimeInCell[n] / NumPartInCell[n])
+        tmpval = float(PartTimeInCell[n] / TotPartInCell[n])
 
     carray2.SetValue(n, tmpval)
     carray3.SetValue(n, float(PartTimeInCell[n] / EndTime))

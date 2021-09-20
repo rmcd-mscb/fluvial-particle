@@ -33,6 +33,7 @@ class Particles:
         self.bedElev = np.zeros(nparts)
         self.htabvbed = np.zeros(nparts)
         self.wse = np.zeros(nparts)
+        self.PartNormDepth = np.full(nparts, 0.5)
         self.cellindex2d = np.zeros(nparts, dtype=np.int64)
         self.cellindex3d = np.zeros(nparts, dtype=np.int64)
         self.depth = np.zeros(nparts)
@@ -66,20 +67,17 @@ class Particles:
         """
         self.z = tz
 
-    def check_z(self, alpha, bedelev, wse):
+    def check_z(self, alpha):
         """[summary].
 
         Args:
             alpha ([type]): [description]
-            bedelev ([type]): [description]
-            wse ([type]): [description]
         """
         # check on alpha? only makes sense for alpha<=0.5
-        depth = wse - bedelev
-        a = self.z > wse - alpha * depth
-        b = self.z < bedelev + alpha * depth
-        self.z[a] = wse[a] - alpha * depth[a]
-        self.z[b] = bedelev[b] + alpha * depth[b]
+        a = self.z > self.wse - alpha * self.depth
+        b = self.z < self.bedElev + alpha * self.depth
+        self.z[a] = self.wse[a] - alpha * self.depth[a]
+        self.z[b] = self.bedElev[b] + alpha * self.depth[b]
 
     def move_all(self, min_depth, dt):
         """Update position based on speed, angle.
@@ -87,51 +85,39 @@ class Particles:
         Args:
             dt (float): time step
             min_depth (float): minimum depth particles can enter
-
-        Returns:
-            [type]: [description]
         """
         # first move 2d only
         self.move_2d(dt)
 
         # check if new positions are wet
-        px = self.x
-        py = self.y
-        wet1 = self.is_cell_wet(px, py)
-        if np.any(~wet1):
-            self.handle_dry_parts(wet1, px, py, dt)
+        wet = self.is_cell_wet()
+        if np.any(~wet):
+            self.handle_dry_parts(~wet, dt)
+
+        # update bed elevation, wse, depth
+        newpoint2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
+        for i in range(self.nparts):
+            weights, idlist1, numpts = self.get_2dcell_pos(
+                newpoint2d[i, :], self.cellindex2d[i]
+            )
+            self.bedElev[i] = self.get_cell_value(
+                weights, idlist1, numpts, self.River.Elevation_2D
+            )
+            self.wse[i] = self.get_cell_value(
+                weights, idlist1, numpts, self.River.WSE_2D
+            )
+        self.depth = self.wse - self.bedElev
 
         # Prevent particles from entering cells where tdepth1 < min_depth
-        elev1, wse1 = self.prevent_mindepth(px, py, min_depth)
-        # Update particle elevation in new water column to same fractional depth as last
-        tdepth1 = wse1 - elev1
-        p2z = elev1 + (self.PartNormDepth * tdepth1)
-        self.setz(p2z)
+        if np.any(self.depth < min_depth):
+            self.prevent_mindepth(min_depth)
 
-        # Move vertical random
+        # Update particle elevation in new water column to same fractional depth as last
         zranwalk = self.zrnum * (2.0 * self.Dz * dt) ** 0.5
-        self.z += self.velz * dt + zranwalk
-        return elev1, wse1
-        """ vx = self.velx
-        vy = self.vely
-        vz = self.velz
-        velmag = (vx ** 2 + vy ** 2) ** 0.5
-        xranwalk = self.xrnum * (2.0 * self.Dx * dt) ** 0.5
-        yranwalk = self.yrnum * (2.0 * self.Dy * dt) ** 0.5
-        zranwalk = self.zrnum * (2.0 * self.Dz * dt) ** 0.5
-        # Move and update positions in-place on each array
-        a = velmag > 0.0
-        self.x[a] += (
-            vx[a] * dt
-            + ((xranwalk[a] * vx[a]) / velmag[a])
-            - ((yranwalk[a] * vy[a]) / velmag[a])
+        pz = (
+            self.bedElev + (self.PartNormDepth * self.depth) + self.velz * dt + zranwalk
         )
-        self.y[a] += (
-            vy[a] * dt
-            + ((xranwalk[a] * vy[a]) / velmag[a])
-            + ((yranwalk[a] * vx[a]) / velmag[a])
-        )
-        self.z = self.z + vz * dt + zranwalk """
+        self.setz(pz)
 
     def move_2d(self, dt):
         """[summary].
@@ -164,54 +150,14 @@ class Particles:
             boolarray ([type]): [description]
             dt ([type]): [description]
         """
-        self.x[boolarray] += (
-            self.xrnum[boolarray] * (2.0 * self.Dx[boolarray] * dt) ** 0.5
+        self.x[boolarray] = (
+            self.last.x[boolarray]
+            + self.xrnum[boolarray] * (2.0 * self.Dx[boolarray] * dt) ** 0.5
         )
-        self.y[boolarray] += (
-            self.yrnum[boolarray] * (2.0 * self.Dy[boolarray] * dt) ** 0.5
+        self.y[boolarray] = (
+            self.last.y[boolarray]
+            + self.yrnum[boolarray] * (2.0 * self.Dy[boolarray] * dt) ** 0.5
         )
-
-    def project_2d(self, min_depth, dt):
-        """Forward-project new 2D position based on speed, angle.
-
-        Args:
-            min_depth ([type]): [description]
-            dt ([type]): [description]
-
-        Returns:
-            [type]: [description]
-        """
-        vx = self.velx
-        vy = self.vely
-        velmag = (vx ** 2 + vy ** 2) ** 0.5
-        xranwalk = self.xrnum * (2.0 * self.Dx * dt) ** 0.5
-        yranwalk = self.yrnum * (2.0 * self.Dy * dt) ** 0.5
-        px = np.copy(self.x)
-        py = np.copy(self.y)
-
-        a = velmag > 0.0
-        px[a] += (
-            vx[a] * dt
-            + ((xranwalk[a] * vx[a]) / velmag[a])
-            - ((yranwalk[a] * vy[a]) / velmag[a])
-        )
-        py[a] += (
-            vy[a] * dt
-            + ((xranwalk[a] * vy[a]) / velmag[a])
-            + ((yranwalk[a] * vx[a]) / velmag[a])
-        )
-
-        wet1 = self.is_cell_wet(px, py)
-        if np.any(~wet1):
-            self.handle_dry_parts(wet1, px, py, dt)
-
-        # Prevent particles from entering cells where tdepth1 < min_depth
-        elev1, wse1 = self.prevent_mindepth(px, py, min_depth)
-        # Update particle elevation in new water column to same fractional depth as last
-        tdepth1 = wse1 - elev1
-        p2z = elev1 + (self.PartNormDepth * tdepth1)
-        self.setz(p2z)
-        return elev1, wse1
 
     def update_info(self, time, bedelev, wse):
         """Update particle information."""
@@ -251,7 +197,7 @@ class Particles:
 
         return tmpval
 
-    def get_cell_pos(self, newpoint2d, cellid):
+    def get_2dcell_pos(self, newpoint2d, cellid):
         """[summary].
 
         Args:
@@ -328,7 +274,7 @@ class Particles:
             )
         return result, vtkid2, tmpxval, tmpyval, 0.0
 
-    def interpolate_fields(self, count_index):
+    def interpolate_fields(self):
         """[Summary]."""
         # Find current location in 2D grid
         point2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
@@ -338,7 +284,7 @@ class Particles:
         #    print("initial cell -1")  # untested
         # Interpolate 2D fields
         for i in range(self.nparts):
-            weights, idlist1, numpts = self.get_cell_pos(
+            weights, idlist1, numpts = self.get_2dcell_pos(
                 point2d[i, :], self.cellindex2d[i]
             )
             self.bedElev[i] = self.get_cell_value(
@@ -347,9 +293,9 @@ class Particles:
             self.wse[i] = self.get_cell_value(
                 weights, idlist1, numpts, self.River.WSE_2D
             )
-            self.depth[i] = self.get_cell_value(
-                weights, idlist1, numpts, self.River.Depth_2D
-            )
+            # self.depth[i] = self.get_cell_value(
+            #     weights, idlist1, numpts, self.River.Depth_2D
+            # )
             # self.tmpibc[i] = self.get_cell_value(
             #     weights, idlist1, numpts, self.River.IBC_2D
             # )
@@ -361,18 +307,14 @@ class Particles:
                 self.velx[i], self.vely[i] = self.get_vel2d_value(
                     weights, idlist1, numpts
                 )
+        self.depth = self.wse - self.bedElev
         # check shear stress (without error print statements)
         self.shearstress = np.where(self.shearstress < 0.0, 0.0, self.shearstress)
         self.ustar = (self.shearstress / 1000.0) ** 0.5
 
-        # MOVE ELSEWHERE; Check particle depths and calc PartNormDepth
-        if count_index <= 1:
-            self.check_z(0.5, self.bedElev, self.wse)
         if self.track3d:
             self.PartNormDepth = (self.z - self.bedElev) / self.depth
-
-        # Get 3D Velocity Components
-        if self.track3d:
+            # Get 3D Velocity Components
             self.interpolate_field_3d()
 
     def interpolate_field_3d(self):
@@ -450,7 +392,7 @@ class Particles:
             by ([type]): [description]
             bz ([type]): [description]
         """
-        ustarh = (self.wse - self.bedElev) * self.ustar
+        ustarh = self.depth * self.ustar
         self.Dx = lev + bx * ustarh
         self.Dy = lev + by * ustarh
         self.Dz = lev + bz * ustarh
@@ -474,106 +416,76 @@ class Particles:
         else:
             return False
 
-    def is_cell_wet(self, px, py):
+    def is_cell_wet(self):
         """[summary].
-
-        Args:
-            px ([type]): [description]
-            py ([type]): [description]
 
         Returns:
             [type]: [description]
         """
-        newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
-        # cellidb = np.zeros(self.nparts, dtype=np.int64)
+        newpoint2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
         wet = np.empty(self.nparts, dtype=bool)
         for i in range(self.nparts):
             self.cellindex2d[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
-            # Create check here on cellindex2d -- particles that cross the downstream river boundary
-            #     will trigger cellindex2d[i] < 0 here first; remove particle from list???
-            weights, idlist1, numpts = self.get_cell_pos(
+            weights, idlist1, numpts = self.get_2dcell_pos(
                 newpoint2d[i, :], self.cellindex2d[i]
             )
             wet[i] = self.is_cell_wet_kernel(weights, idlist1, numpts)
         return wet
 
-    def handle_dry_parts(self, wet1, px, py, dt):
+    def handle_dry_parts(self, dry, dt):
         """[summary]."""
-        # print("dry cell encountered")
-        # Forward-project dry cells using just random motion
-        px[~wet1] = (
-            self.last.x[~wet1] + self.xrnum[~wet1] * (2.0 * self.Dx[~wet1] * dt) ** 0.5
-        )
-        py[~wet1] = (
-            self.last.y[~wet1] + self.yrnum[~wet1] * (2.0 * self.Dy[~wet1] * dt) ** 0.5
-        )
+        # Move dry particles with only 2d random motion
+        self.move_random_only_2d(dry, dt)
         # Run is_cell_wet again
-        newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
+        newpoint2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
         wet2 = np.empty(self.nparts, dtype=bool)
         for i in range(self.nparts):  # Expensive
             self.cellindex2d[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
-            weights, idlist1, numpts = self.get_cell_pos(
+            weights, idlist1, numpts = self.get_2dcell_pos(
                 newpoint2d[i, :], self.cellindex2d[i]
             )
             wet2[i] = self.is_cell_wet_kernel(weights, idlist1, numpts)
-        # Any still dry entries will have zero positional update this step
-        px[~wet2] = self.last.x[~wet2]
-        py[~wet2] = self.last.y[~wet2]
-        # Move 2D random only for particles that were not wet first time, yes wet second time
-        a = ~wet1 & wet2
-        self.move_random_only_2d(a, dt)
-        # Ensure that move_all() does nothing for these particles
-        self.velx[~wet1] = 0.0
-        self.vely[~wet1] = 0.0
-        self.velz[~wet1] = 0.0
-        self.Dx[~wet1] = 0.0
-        self.Dy[~wet1] = 0.0
-        self.Dz[~wet1] = 0.0
-        newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
+        # Any still dry particles will have no positional update this step
+        self.x[~wet2] = self.last.x[~wet2]
+        self.y[~wet2] = self.last.y[~wet2]
+        # Ensure that move_all() does nothing for any of these particles
+        self.velx[dry] = 0.0
+        self.vely[dry] = 0.0
+        self.velz[dry] = 0.0
+        self.Dx[dry] = 0.0
+        self.Dy[dry] = 0.0
+        self.Dz[dry] = 0.0
+        # update cell indices
+        newpoint2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
         for i in range(self.nparts):
             self.cellindex2d[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
 
-    def prevent_mindepth(self, px, py, min_depth):
+    def prevent_mindepth(self, min_depth):
         """[summary]."""
-        newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
-        elev1 = np.zeros(self.nparts)
-        wse1 = np.zeros(self.nparts)
+        print("particle entered min_depth")
+        a = self.depth < min_depth
+        self.x[a] = self.last.x[a]
+        self.y[a] = self.last.y[a]
+        self.velx[a] = 0.0
+        self.vely[a] = 0.0
+        self.velz[a] = 0.0
+        self.Dx[a] = 0.0
+        self.Dy[a] = 0.0
+        self.Dz[a] = 0.0
+        # update cell indices and interpolations
+        newpoint2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
         for i in range(self.nparts):
-            weights, idlist1, numpts = self.get_cell_pos(
+            self.cellindex2d[i] = self.River.CellLocator2D.FindCell(newpoint2d[i, :])
+            weights, idlist1, numpts = self.get_2dcell_pos(
                 newpoint2d[i, :], self.cellindex2d[i]
             )
-            elev1[i] = self.get_cell_value(
+            self.bedElev[i] = self.get_cell_value(
                 weights, idlist1, numpts, self.River.Elevation_2D
             )
-            wse1[i] = self.get_cell_value(weights, idlist1, numpts, self.River.WSE_2D)
-        tdepth1 = wse1 - elev1
-        a = tdepth1 < min_depth
-        if np.any(a):
-            print("particle entered min_depth")
-            px[a] = self.last.x[a]
-            py[a] = self.last.y[a]
-            self.velx[a] = 0.0
-            self.vely[a] = 0.0
-            self.velz[a] = 0.0
-            self.Dx[a] = 0.0
-            self.Dy[a] = 0.0
-            self.Dz[a] = 0.0
-            # Eighth, update vertical position to same fractional depth as last
-            newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
-            for i in range(self.nparts):
-                self.cellindex2d[i] = self.River.CellLocator2D.FindCell(
-                    newpoint2d[i, :]
-                )
-                weights, idlist1, numpts = self.get_cell_pos(
-                    newpoint2d[i, :], self.cellindex2d[i]
-                )
-                elev1[i] = self.get_cell_value(
-                    weights, idlist1, numpts, self.River.Elevation_2D
-                )
-                wse1[i] = self.get_cell_value(
-                    weights, idlist1, numpts, self.River.WSE_2D
-                )
-        return elev1, wse1
+            self.wse[i] = self.get_cell_value(
+                weights, idlist1, numpts, self.River.WSE_2D
+            )
+        self.depth = self.wse - self.bedElev
 
     def gen_rands(self):
         """[summary]."""
