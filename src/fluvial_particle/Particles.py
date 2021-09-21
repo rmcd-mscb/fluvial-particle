@@ -65,7 +65,7 @@ class Particles:
         pz[b] = self.bedElev[b] + alpha * self.depth[b]
 
     def calc_dispersion_coefs(self, lev, bx, by, bz):
-        """[summary].
+        """Calculate dispersion coefficients.
 
         Args:
             lev ([type]): [description]
@@ -79,14 +79,14 @@ class Particles:
         self.Dz = lev + bz * ustarh
 
     def gen_rands(self):
-        """[summary]."""
+        """Generate standard normal random numbers."""
         self.xrnum = self.rng.standard_normal(self.nparts)
         self.yrnum = self.rng.standard_normal(self.nparts)
         if self.track3d:
             self.zrnum = self.rng.standard_normal(self.nparts)
 
     def interp_cell_value(self, weights, idlist1, numpts, valarray):
-        """Interpolate value from given array from nodes in idlist1 given weights.
+        """Interpolate valarray at a point.
 
         Args:
             weights ([type]): [description]
@@ -104,7 +104,7 @@ class Particles:
         return tmpval
 
     def get_pos_in_2dcell(self, newpoint2d, cellid):
-        """[summary].
+        """Find position in 2D cell, return info for interpolation.
 
         Args:
             newpoint2d ([type]): [description]
@@ -140,7 +140,14 @@ class Particles:
         )
 
     def handle_dry_parts(self, px, py, dry, dt):
-        """[summary]."""
+        """Adjust trajectories of dry particles.
+
+        Args:
+            px ([type]): [description]
+            py ([type]): [description]
+            dry ([type]): [description]
+            dt ([type]): [description]
+        """
         # Move dry particles with only 2d random motion
         a = np.arange(self.nparts)
         a = a[dry]
@@ -175,7 +182,7 @@ class Particles:
                 self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
 
     def initialize_location(self, frac):
-        """[summary].
+        """Initialize position in water column and interpolate mesh arrays.
 
         Args:
             frac ([type]): [description]
@@ -187,7 +194,7 @@ class Particles:
 
     @property
     def interp_field_3d(self):
-        """Locate particle in 3D grid and interpolate velocity."""
+        """Interpolate 3D velocity field at current particles' positions."""
         idlist1 = vtk.vtkIdList()
         # point3d = np.vstack((self.x, self.y, self.z)).T
         for i in range(self.nparts):
@@ -255,7 +262,7 @@ class Particles:
 
     @property
     def interp_fields(self):
-        """[Summary]."""
+        """Interpolate mesh fields at current particles' positions."""
         # Find current location in 2D grid
         # point2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
         for i in range(self.nparts):
@@ -300,7 +307,7 @@ class Particles:
             self.interp_field_3d
 
     def interp_vel2d_value(self, weights, idlist1, numpts):
-        """Get 2D velocity vector value from nodes in idlist1 given weights.
+        """Interpolate 2D velocity vector at a point.
 
         Args:
             weights ([type]): [description]
@@ -322,7 +329,7 @@ class Particles:
         return tmpxval, tmpyval
 
     def interp_vel3d_value(self, newpoint3d, cellid):
-        """[summary].
+        """Interpolate 3D velocity vector at a point.
 
         Args:
             newpoint3d ([type]): [description]
@@ -354,7 +361,7 @@ class Particles:
         return result, vtkid2, tmpxval, tmpyval, 0.0
 
     def is_part_wet_kernel(self, weights, idlist1, numpts):
-        """[summary].
+        """Interpolate IBC mesh array to a point.
 
         Args:
             weights ([type]): [description]
@@ -373,7 +380,7 @@ class Particles:
             return False
 
     def is_part_wet(self, px, py):
-        """[summary].
+        """Determine if particles' new positions is wet.
 
         Args:
             px ([type]): [description]
@@ -440,7 +447,7 @@ class Particles:
         self.z = pz  # setz(pz)
 
     def perturb_2d(self, px, py, dt):
-        """[summary].
+        """Project particles' 2D trajectories.
 
         Args:
             px ([type]): [description]
@@ -465,26 +472,26 @@ class Particles:
             + ((yranwalk[a] * vx[a]) / velmag[a])
         )
 
-    def perturb_random_only_2d(self, px, py, boolarray, dt):
+    def perturb_random_only_2d(self, px, py, idx, dt):
         """Update position based on random walk in x and y directions.
 
         Args:
             px ([type]): [description]
             py ([type]): [description]
-            boolarray ([type]): [description]
+            idx ([type]): [description]
             dt ([type]): [description]
         """
-        px[boolarray] = (
-            self.x[boolarray]
-            + self.xrnum[boolarray] * (2.0 * self.Dx[boolarray] * dt) ** 0.5
-        )
-        py[boolarray] = (
-            self.y[boolarray]
-            + self.yrnum[boolarray] * (2.0 * self.Dy[boolarray] * dt) ** 0.5
-        )
+        px[idx] = self.x[idx] + self.xrnum[idx] * (2.0 * self.Dx[idx] * dt) ** 0.5
+        py[idx] = self.y[idx] + self.yrnum[idx] * (2.0 * self.Dy[idx] * dt) ** 0.5
 
     def prevent_mindepth(self, px, py, min_depth):
-        """[summary]."""
+        """Prevent particles from entering a position with depth < min_depth.
+
+        Args:
+            px ([type]): [description]
+            py ([type]): [description]
+            min_depth ([type]): [description]
+        """
         print("particle entered min_depth")
         a = self.depth < min_depth
         b = np.arange(self.nparts)
@@ -514,7 +521,13 @@ class Particles:
         self.depth[a] = self.wse[a] - self.bedElev[a]
 
     def update_info(self, time, bedelev, wse):
-        """Update particle information."""
+        """Update particle information.
+
+        Args:
+            time ([type]): [description]
+            bedelev ([type]): [description]
+            wse ([type]): [description]
+        """
         self.bedElev = bedelev
         self.wse = wse
         self.htabvbed = self.z - self.bedElev
@@ -522,7 +535,7 @@ class Particles:
 
     @property
     def x(self):
-        """[summary].
+        """Get x.
 
         Returns:
             [type]: [description]
@@ -531,7 +544,7 @@ class Particles:
 
     @x.setter
     def x(self, values):
-        """[summary].
+        """Set x.
 
         Args:
             values ([type]): [description]
@@ -543,7 +556,7 @@ class Particles:
 
     @property
     def y(self):
-        """[summary].
+        """Get y.
 
         Returns:
             [type]: [description]
@@ -552,7 +565,7 @@ class Particles:
 
     @y.setter
     def y(self, values):
-        """[summary].
+        """Set y.
 
         Args:
             values ([type]): [description]
@@ -564,7 +577,7 @@ class Particles:
 
     @property
     def z(self):
-        """[summary].
+        """Get z.
 
         Returns:
             [type]: [description]
@@ -573,7 +586,7 @@ class Particles:
 
     @z.setter
     def z(self, values):
-        """[summary].
+        """Set z.
 
         Args:
             values ([type]): [description]

@@ -6,7 +6,7 @@ class RiverGrid:
     """A class of hydrodynamic data on a structured VTK grid."""
 
     def __init__(self, track3d):
-        """[summary].
+        """Initialize instance of class RiverGrid.
 
         Args:
             track3d ([type]): [description]
@@ -19,7 +19,7 @@ class RiverGrid:
             self.track3d = 0
 
     def read_2d_data(self, filename):
-        """[summary].
+        """Read 2D structured grid data file.
 
         Args:
             filename ([type]): [description]
@@ -37,7 +37,7 @@ class RiverGrid:
         # scalar_range = output2d.GetScalarRange()
 
     def read_3d_data(self, filename):
-        """[summary].
+        """Read 3D structured grid data file.
 
         Args:
             filename ([type]): [description]
@@ -51,9 +51,9 @@ class RiverGrid:
             # output3d = reader3d.GetOutput()
             # scalar_range = output3d.GetScalarRange()
 
+    @property
     def load_arrays(self):
-        """[summary]."""
-        # Get Elevation and WSE from 2D Grid
+        """Load 2D and 3D structured grid arrays."""
         self.WSE_2D = self.vtksgrid2d.GetPointData().GetScalars("WaterSurfaceElevation")
         self.Depth_2D = self.vtksgrid2d.GetPointData().GetScalars("Depth")
         self.Elevation_2D = self.vtksgrid2d.GetPointData().GetScalars("Elevation")
@@ -66,6 +66,7 @@ class RiverGrid:
         if self.track3d:
             self.VelocityVec3D = self.vtksgrid3d.GetPointData().GetScalars("Velocity")
 
+    @property
     def build_locators(self):
         """Build Static Cell Locators (thread-safe)."""
         self.CellLocator2D = vtk.vtkStaticCellLocator()

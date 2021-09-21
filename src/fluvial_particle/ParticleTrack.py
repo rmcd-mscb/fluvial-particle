@@ -77,8 +77,8 @@ file_name_3da = settings.file_name_3da
 River = RiverGrid(Track3D)
 River.read_2d_data(file_name_2da)
 River.read_3d_data(file_name_3da)
-River.load_arrays()
-River.build_locators()
+River.load_arrays
+River.build_locators
 ns = River.ns  # not used
 nn = River.nn  # not used
 nz = River.nz  # not used
