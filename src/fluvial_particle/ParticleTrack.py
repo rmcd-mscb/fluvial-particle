@@ -30,15 +30,17 @@ EndTime = settings.SimTime
 dt = 0.05  # dt of simulation
 dt = settings.dt
 # avg_shear_dev = 0.14      # reach averaged value of dispersion
-avg_shear_dev = 0.01  # for simple meander Tut5
-avg_shear_dev = settings.avg_shear_dev
-avg_bed_shearstress = settings.avg_bed_shearstress
-avg_depth = settings.avg_depth
-avg_shear_dev = 0.067 * avg_depth * np.sqrt(avg_bed_shearstress / 1000)
+avg_shear_dev = 0.01  # not used
+avg_shear_dev = settings.avg_shear_dev  # not used
+avg_bed_shearstress = settings.avg_bed_shearstress  # not used
+avg_depth = settings.avg_depth  # not used
+avg_shear_dev = 0.067 * avg_depth * np.sqrt(avg_bed_shearstress / 1000)  # not used
 min_depth = 0.01  # Minimum depth particles can enter]
 min_depth = settings.min_depth
 
-vert_type = settings.vert_type
+vert_type = settings.vert_type  # not used
+
+lev = settings.LEV  # lateral eddy viscosity
 
 beta_x = 0.067
 beta_y = 0.067
@@ -48,9 +50,9 @@ beta_x = settings.beta_x
 beta_y = settings.beta_y
 beta_z = settings.beta_z
 
-avg_shear_devx = beta_x * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)
-avg_shear_devy = beta_y * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)
-avg_shear_devz = beta_z * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)
+avg_shear_devx = beta_x * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)  # not used
+avg_shear_devy = beta_y * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)  # not used
+avg_shear_devz = beta_z * avg_depth * np.sqrt(avg_bed_shearstress / 1000.0)  # not used
 
 # 2D or 3D particle tracking
 Track2D = 0
@@ -77,11 +79,11 @@ River.read_2d_data(file_name_2da)
 River.read_3d_data(file_name_3da)
 River.load_arrays()
 River.build_locators()
-ns = River.ns
-nn = River.nn
-nz = River.nz
+ns = River.ns  # not used
+nn = River.nn  # not used
+nz = River.nz  # not used
 nsc = River.nsc
-nnc = River.nnc
+nnc = River.nnc  # not used
 num3dcells = River.vtksgrid3d.GetNumberOfCells()
 num2dcells = River.vtksgrid2d.GetNumberOfCells()
 print(num3dcells, num2dcells)
@@ -135,9 +137,9 @@ while TotTime <= EndTime:  # noqa C901
     # Generate random numbers
     particles.gen_rands()
     # Interpolate RiverGrid field data to particles
-    particles.interpolate_fields()
+    particles.interp_fields
     # Calculate dispersion terms
-    particles.calc_dispersion_coefs(settings.LEV, beta_x, beta_y, beta_z)
+    particles.calc_dispersion_coefs(lev, beta_x, beta_y, beta_z)
     # Move particles (checks on new position done internally)
     particles.move_all(alpha, min_depth, dt)
 
