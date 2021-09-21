@@ -43,14 +43,13 @@ class RiverGrid:
             filename ([type]): [description]
         """
         # Assert filename???
-        # Assert track3d?
-
-        reader3d = vtk.vtkStructuredGridReader()
-        reader3d.SetFileName(filename)
-        reader3d.SetOutput(self.vtksgrid3d)
-        reader3d.Update()
-        # output3d = reader3d.GetOutput()
-        # scalar_range = output3d.GetScalarRange()
+        if self.track3d:
+            reader3d = vtk.vtkStructuredGridReader()
+            reader3d.SetFileName(filename)
+            reader3d.SetOutput(self.vtksgrid3d)
+            reader3d.Update()
+            # output3d = reader3d.GetOutput()
+            # scalar_range = output3d.GetScalarRange()
 
     def load_arrays(self):
         """[summary]."""

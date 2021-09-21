@@ -71,22 +71,6 @@ file_name_2da = r"C:\GitRepos\Python\ParticleTracking\Sum3_Result_2D_1.vtk"
 file_name_2da = settings.file_name_2da
 file_name_3da = settings.file_name_3da
 
-# vtkSolName = r'C:\GitRepos\Python\Results\Arcrom_Sum_River\Sim6\Result_2D_1.vtk'
-
-# River_Mile = "G:\IPC\Data\RiverMile\rivermile.csv"
-# rmData = []
-
-# with open(r"G:\IPC\Data\RiverMile\rivermile.csv", 'rt') as rmf:
-#     reader = csv.reader(rmf)
-#     tcount = 0
-#     for row in reader:
-#         tcount += 1
-#         if tcount > 1:
-#             rmData.append(row)
-
-# print(file_name_3da)
-# print(file_name_2da)
-
 # Initialize RiverGrid object
 River = RiverGrid(Track3D)
 River.read_2d_data(file_name_2da)
@@ -102,19 +86,17 @@ num3dcells = River.vtksgrid3d.GetNumberOfCells()
 num2dcells = River.vtksgrid2d.GetNumberOfCells()
 print(num3dcells, num2dcells)
 
-# add Particles
+# Initialize particles with initial location and attach RiverGrid
 npart = 300  # number of particles
 npart = settings.NumPart
 xstart, ystart, zstart = settings.StartLoc
-
-# Initialize particles class with initial location and attach RiverGrid
 x = np.zeros(npart) + xstart
 y = np.zeros(npart) + ystart
 z = np.zeros(npart) + zstart
 rng = np.random.default_rng(0)  # Numpy recommended method for new code
 particles = Particles(npart, x, y, z, rng, River, Track2D, Track3D)
-particles_last = Particles(npart, x, y, z, rng, River)
-particles.attach_last(particles_last)
+# Particles start at midpoint of water column
+particles.initialize_location(0.5)
 anpart = np.arange(npart).tolist()
 
 # Sinusoid properties; these aren't used, REMOVE?
@@ -141,13 +123,8 @@ g = gen_filenames("fish1_", ".csv")
 gg = gen_filenames("nsPart_", ".csv")
 ggg = gen_filenames("Sim_Result_2D_", ".vtk")
 g4 = gen_filenames("Sim_Result_3D_", ".vtk")
-
-# Particles start at midpoint of water column
-particles.interpolate_fields()
-particles.check_z(0.5)
-
 while TotTime <= EndTime:  # noqa C901
-    # Increment counters, reset arrays
+    # Increment counters, reset counter arrays
     TotTime = TotTime + dt
     count_index += 1
     PartInNSCellPTime[:] = 0
@@ -161,14 +138,8 @@ while TotTime <= EndTime:  # noqa C901
     particles.interpolate_fields()
     # Calculate dispersion terms
     particles.calc_dispersion_coefs(settings.LEV, beta_x, beta_y, beta_z)
-    # Move particles
-    particles.move_all(min_depth, dt)
-    # Final check that new coords are within vertical domain
-    particles.check_z(alpha)
-    # Update last location information
-    particles_last.x = np.copy(particles.x)
-    particles_last.y = np.copy(particles.y)
-    particles_last.z = np.copy(particles.z)
+    # Move particles (checks on new position done internally)
+    particles.move_all(alpha, min_depth, dt)
 
     # Update the particle counts per cell
     np.add.at(NumPartIn3DCell, particles.cellindex3d, 1)
