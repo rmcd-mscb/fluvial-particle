@@ -61,7 +61,7 @@ Track2D = settings.Track2D
 Track3D = settings.Track3D
 print_inc = settings.PrintAtTick
 
-# Fractional depth that bounds particle positions from bed and WSE
+# Fractional depth that bounds vertical particle positions from bed and WSE
 if Track2D:
     alpha = 0.5
 else:
@@ -134,14 +134,14 @@ while TotTime <= EndTime:  # noqa C901
     NumPartInCell[:] = 0
     print(TotTime, count_index)
 
-    # Generate random numbers
+    # Generate new random numbers
     particles.gen_rands()
     # Interpolate RiverGrid field data to particles
     particles.interp_fields
     # Calculate dispersion terms
-    particles.calc_dispersion_coefs(lev, beta_x, beta_y, beta_z)
+    particles.calc_diffusion_coefs(lev, beta_x, beta_y, beta_z)
     # Move particles (checks on new position done internally)
-    particles.move_all(alpha, min_depth, dt)
+    particles.move_all(alpha, min_depth, TotTime, dt)
 
     # Update the particle counts per cell
     np.add.at(NumPartIn3DCell, particles.cellindex3d, 1)

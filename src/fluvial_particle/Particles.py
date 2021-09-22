@@ -20,34 +20,36 @@ class Particles:
             track3d (bool): 1 if 3D model run, 0 else
         """
         self.nparts = nparts
-        self._x = np.copy(x)
-        self._y = np.copy(y)
-        self._z = np.copy(z)
+        self.x = np.copy(x)
+        self.y = np.copy(y)
+        self.z = np.copy(z)
         self.rng = rng
         self.mesh = mesh
         self.track2d = track2d
         self.track3d = track3d
         # Add an XOR on track2d & track3d ?
 
-        self.time = np.zeros(nparts)
-        self.bedElev = np.zeros(nparts)
-        self.htabvbed = np.zeros(nparts)
-        self.wse = np.zeros(nparts)
-        self.PartNormDepth = np.full(nparts, 0.5)
-        self.cellindex2d = np.zeros(nparts, dtype=np.int64)
-        self.cellindex3d = np.zeros(nparts, dtype=np.int64)
-        self.depth = np.zeros(nparts)
-        self.shearstress = np.zeros(nparts)
-        self.velx = np.zeros(nparts)
-        self.vely = np.zeros(nparts)
-        self.velz = np.zeros(nparts)
-        self.ustar = np.zeros(nparts)
-        self.Dx = np.zeros(nparts)
-        self.Dy = np.zeros(nparts)
-        self.Dz = np.zeros(nparts)
-        self.xrnum = np.zeros(nparts)
-        self.yrnum = np.zeros(nparts)
-        self.zrnum = np.zeros(nparts)
+        self._bedelev = np.zeros(nparts)
+        self._wse = np.zeros(nparts)
+        self._normdepth = np.full(nparts, 0.5)
+        self._cellindex2d = np.zeros(nparts, dtype=np.int64)
+        self._cellindex3d = np.zeros(nparts, dtype=np.int64)
+        self._depth = np.zeros(nparts)
+        self._velx = np.zeros(nparts)
+        self._vely = np.zeros(nparts)
+        self._velz = np.zeros(nparts)
+        self._shearstress = np.zeros(nparts)
+        self._ustar = np.zeros(nparts)
+        self._dx = np.zeros(nparts)
+        self._dy = np.zeros(nparts)
+        self._dz = np.zeros(nparts)
+        self.xrnum = np.zeros(nparts)  # make property?
+        self.yrnum = np.zeros(nparts)  # make property?
+        self.zrnum = np.zeros(nparts)  # make property?
+
+        # Not used:
+        self.time = np.zeros(nparts)  # make property?
+        self.htabvbed = np.zeros(nparts)  # make property?
         # tmpibc = np.zeros(nparts)
         # tmpvel = np.zeros(npart)
 
@@ -60,12 +62,12 @@ class Particles:
         """
         # check on alpha? only makes sense for alpha<=0.5
         a = pz > self.wse - alpha * self.depth
-        b = pz < self.bedElev + alpha * self.depth
+        b = pz < self.bedelev + alpha * self.depth
         pz[a] = self.wse[a] - alpha * self.depth[a]
-        pz[b] = self.bedElev[b] + alpha * self.depth[b]
+        pz[b] = self.bedelev[b] + alpha * self.depth[b]
 
-    def calc_dispersion_coefs(self, lev, bx, by, bz):
-        """Calculate dispersion coefficients.
+    def calc_diffusion_coefs(self, lev, bx, by, bz):
+        """Calculate diffusion coefficients.
 
         Args:
             lev ([type]): [description]
@@ -74,36 +76,11 @@ class Particles:
             bz ([type]): [description]
         """
         ustarh = self.depth * self.ustar
-        self.Dx = lev + bx * ustarh
-        self.Dy = lev + by * ustarh
-        self.Dz = lev + bz * ustarh
+        self.dx = lev + bx * ustarh
+        self.dy = lev + by * ustarh
+        self.dz = lev + bz * ustarh
 
-    def gen_rands(self):
-        """Generate standard normal random numbers."""
-        self.xrnum = self.rng.standard_normal(self.nparts)
-        self.yrnum = self.rng.standard_normal(self.nparts)
-        if self.track3d:
-            self.zrnum = self.rng.standard_normal(self.nparts)
-
-    def interp_cell_value(self, weights, idlist1, numpts, valarray):
-        """Interpolate valarray at a point.
-
-        Args:
-            weights ([type]): [description]
-            idlist1 ([type]): [description]
-            numpts ([type]): [description]
-            valarray ([type]): [description]
-
-        Returns:
-            [type]: [description]
-        """
-        tmpval = np.float64(0.0)
-        for i in range(numpts):
-            tmpval += weights[i] * valarray.GetTuple(idlist1.GetId(i))[0]
-
-        return tmpval
-
-    def get_pos_in_2dcell(self, newpoint2d, cellid):
+    def find_pos_in_2dcell(self, newpoint2d, cellid):
         """Find position in 2D cell, return info for interpolation.
 
         Args:
@@ -126,6 +103,13 @@ class Particles:
         idlist1 = vtkcell2d.GetPointIds()
         return weights, idlist1, numpts
 
+    def gen_rands(self):
+        """Generate standard normal random numbers."""
+        self.xrnum = self.rng.standard_normal(self.nparts)
+        self.yrnum = self.rng.standard_normal(self.nparts)
+        if self.track3d:
+            self.zrnum = self.rng.standard_normal(self.nparts)
+
     def get_total_position(self):
         """Return complete position of particle."""
         return (
@@ -134,7 +118,7 @@ class Particles:
             self.x,
             self.y,
             self.z,
-            self.bedElev,
+            self.bedelev,
             self.htabvbed,
             self.wse,
         )
@@ -156,10 +140,10 @@ class Particles:
         # wet2 = self.is_part_wet(px, py)
         wet2 = np.empty(np.size(a), dtype=bool)
         j = 0
-        for i in np.nditer(a):  # range(self.nparts):
+        for i in np.nditer(a):
             point = [px[i], py[i], 0.0]
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-            weights, idlist1, numpts = self.get_pos_in_2dcell(
+            weights, idlist1, numpts = self.find_pos_in_2dcell(
                 point, self.cellindex2d[i]
             )
             wet2[j] = self.is_part_wet_kernel(weights, idlist1, numpts)
@@ -173,11 +157,11 @@ class Particles:
             self.velx[a] = 0.0
             self.vely[a] = 0.0
             self.velz[a] = 0.0
-            self.Dx[a] = 0.0
-            self.Dy[a] = 0.0
-            self.Dz[a] = 0.0
+            self.dx[a] = 0.0
+            self.dy[a] = 0.0
+            self.dz[a] = 0.0
             # update cell indices
-            for i in np.nditer(b):  # range(self.nparts):
+            for i in np.nditer(b):
                 point = [px[i], py[i], 0.0]
                 self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
 
@@ -190,13 +174,30 @@ class Particles:
         # ASSERT check that x,y are within the mesh domain
         # ASSERT check that frac in (epsilon, 1-epsilon)
         self.interp_fields
-        self.z = self.bedElev + frac * self.depth
+        self.z = self.bedelev + frac * self.depth
+
+    def interp_cell_value(self, weights, idlist1, numpts, valarray):
+        """Interpolate valarray at a point.
+
+        Args:
+            weights ([type]): [description]
+            idlist1 ([type]): [description]
+            numpts ([type]): [description]
+            valarray ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        tmpval = np.float64(0.0)
+        for i in range(numpts):
+            tmpval += weights[i] * valarray.GetTuple(idlist1.GetId(i))[0]
+
+        return tmpval
 
     @property
     def interp_field_3d(self):
         """Interpolate 3D velocity field at current particles' positions."""
         idlist1 = vtk.vtkIdList()
-        # point3d = np.vstack((self.x, self.y, self.z)).T
         for i in range(self.nparts):
             point = [self.x[i], self.y[i], self.z[i]]
             self.cellindex3d[i] = self.mesh.CellLocator3D.FindCell(point)
@@ -215,7 +216,7 @@ class Particles:
                 print("3d findcell failed, particle number: ", i)
                 print("switching to FindCellsAlongLine() method")
                 pp1 = [point[0], point[1], self.wse[i] + 10]
-                pp2 = [point[0], point[1], self.bedElev[i] - 10]
+                pp2 = [point[0], point[1], self.bedelev[i] - 10]
                 self.mesh.CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist1)
                 maxdist = 1e6
                 for t in range(idlist1.GetNumberOfIds()):
@@ -245,7 +246,7 @@ class Particles:
                     self.velz[i] = 0.0
                 """print("3d findcell failed, particle number: ", i)
                 print("Particle location: ", point3d_2[i, :])
-                print("Particle fractional depth: ", PartNormDepth[i])
+                print("Particle fractional depth: ", normdepth[i])
                 print("closest 3D cell, 2Dcell: ", cellid3d[i], cellid[i])
                 vtkcell = vtksgrid2d.GetCell(cellid[i])
                 vtkptlist = vtkcell.GetPointIds()
@@ -264,19 +265,16 @@ class Particles:
     def interp_fields(self):
         """Interpolate mesh fields at current particles' positions."""
         # Find current location in 2D grid
-        # point2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
         for i in range(self.nparts):
             point = [self.x[i], self.y[i], 0.0]
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-        # if np.any(self.cellindex2d < 0):
-        #    print("initial cell -1")  # untested
         # Interpolate 2D fields
         for i in range(self.nparts):
             point = [self.x[i], self.y[i], 0.0]
-            weights, idlist1, numpts = self.get_pos_in_2dcell(
+            weights, idlist1, numpts = self.find_pos_in_2dcell(
                 point, self.cellindex2d[i]
             )
-            self.bedElev[i] = self.interp_cell_value(
+            self.bedelev[i] = self.interp_cell_value(
                 weights, idlist1, numpts, self.mesh.Elevation_2D
             )
             self.wse[i] = self.interp_cell_value(
@@ -296,13 +294,13 @@ class Particles:
                 self.velx[i], self.vely[i] = self.interp_vel2d_value(
                     weights, idlist1, numpts
                 )
-        self.depth = self.wse - self.bedElev
+        self.depth = self.wse - self.bedelev
         # check shear stress (without error print statements)
         self.shearstress = np.where(self.shearstress < 0.0, 0.0, self.shearstress)
         self.ustar = (self.shearstress / 1000.0) ** 0.5
 
         if self.track3d:
-            self.PartNormDepth = (self.z - self.bedElev) / self.depth
+            self.normdepth = (self.z - self.bedelev) / self.depth
             # Get 3D Velocity Components
             self.interp_field_3d
 
@@ -389,24 +387,24 @@ class Particles:
         Returns:
             [type]: [description]
         """
-        # newpoint2d = np.vstack((self.x, self.y, np.zeros(self.nparts))).T
         wet = np.empty(self.nparts, dtype=bool)
         for i in range(self.nparts):
             point = [px[i], py[i], 0.0]
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-            weights, idlist1, numpts = self.get_pos_in_2dcell(
+            weights, idlist1, numpts = self.find_pos_in_2dcell(
                 point, self.cellindex2d[i]
             )
             wet[i] = self.is_part_wet_kernel(weights, idlist1, numpts)
         return wet
 
-    def move_all(self, alpha, min_depth, dt):
+    def move_all(self, alpha, min_depth, time, dt):
         """Update position based on speed, angle.
 
         Args:
-            dt (float): time step
-            min_depth (float): minimum depth scalar that particles can enter
             alpha (float): bounding scalar for adjust_z
+            min_depth (float): minimum depth scalar that particles can enter
+            time (float): the new time at end of position update
+            dt (float): time step
         """
         # first move 2d only
         px = np.copy(self.x)
@@ -421,30 +419,31 @@ class Particles:
         # update bed elevation, wse, depth
         for i in range(self.nparts):
             point = [px[i], py[i], 0.0]
-            weights, idlist1, numpts = self.get_pos_in_2dcell(
+            weights, idlist1, numpts = self.find_pos_in_2dcell(
                 point, self.cellindex2d[i]
             )
-            self.bedElev[i] = self.interp_cell_value(
+            self.bedelev[i] = self.interp_cell_value(
                 weights, idlist1, numpts, self.mesh.Elevation_2D
             )
             self.wse[i] = self.interp_cell_value(
                 weights, idlist1, numpts, self.mesh.WSE_2D
             )
-        self.depth = self.wse - self.bedElev
+        self.depth = self.wse - self.bedelev
 
-        # Prevent particles from entering cells where tdepth1 < min_depth
+        # Prevent particles from entering cells where depth < min_depth
         if np.any(self.depth < min_depth):
             self.prevent_mindepth(px, py, min_depth)
 
         # Update particle elevation in new water column to same fractional depth as last
-        zranwalk = self.zrnum * (2.0 * self.Dz * dt) ** 0.5
-        pz = (
-            self.bedElev + (self.PartNormDepth * self.depth) + self.velz * dt + zranwalk
-        )
+        zranwalk = self.zrnum * (2.0 * self.dz * dt) ** 0.5
+        pz = self.bedelev + (self.normdepth * self.depth) + self.velz * dt + zranwalk
         self.adjust_z(pz, alpha)
         self.x = px
         self.y = py
-        self.z = pz  # setz(pz)
+        self.z = pz
+
+        self.htabvbed = self.z - self.bedelev
+        self.time = np.full(self.nparts, time)
 
     def perturb_2d(self, px, py, dt):
         """Project particles' 2D trajectories.
@@ -457,8 +456,8 @@ class Particles:
         vx = self.velx
         vy = self.vely
         velmag = (vx ** 2 + vy ** 2) ** 0.5
-        xranwalk = self.xrnum * (2.0 * self.Dx * dt) ** 0.5
-        yranwalk = self.yrnum * (2.0 * self.Dy * dt) ** 0.5
+        xranwalk = self.xrnum * (2.0 * self.dx * dt) ** 0.5
+        yranwalk = self.yrnum * (2.0 * self.dy * dt) ** 0.5
         # Move and update positions in-place on each array
         a = velmag > 0.0
         px[a] += (
@@ -473,7 +472,7 @@ class Particles:
         )
 
     def perturb_random_only_2d(self, px, py, idx, dt):
-        """Update position based on random walk in x and y directions.
+        """Future 2D position based on random walk only.
 
         Args:
             px ([type]): [description]
@@ -481,8 +480,8 @@ class Particles:
             idx ([type]): [description]
             dt ([type]): [description]
         """
-        px[idx] = self.x[idx] + self.xrnum[idx] * (2.0 * self.Dx[idx] * dt) ** 0.5
-        py[idx] = self.y[idx] + self.yrnum[idx] * (2.0 * self.Dy[idx] * dt) ** 0.5
+        px[idx] = self.x[idx] + self.xrnum[idx] * (2.0 * self.dx[idx] * dt) ** 0.5
+        py[idx] = self.y[idx] + self.yrnum[idx] * (2.0 * self.dy[idx] * dt) ** 0.5
 
     def prevent_mindepth(self, px, py, min_depth):
         """Prevent particles from entering a position with depth < min_depth.
@@ -498,40 +497,422 @@ class Particles:
         a = b[a]
         px[a] = self.x[a]
         py[a] = self.y[a]
-        self.velx[a] = 0.0
+        """ self.velx[a] = 0.0
         self.vely[a] = 0.0
         self.velz[a] = 0.0
-        self.Dx[a] = 0.0
-        self.Dy[a] = 0.0
-        self.Dz[a] = 0.0
+        self.dx[a] = 0.0
+        self.dy[a] = 0.0
+        self.dz[a] = 0.0 """
         # update cell indices and interpolations
-        # newpoint2d = np.vstack((px, py, np.zeros(self.nparts))).T
-        for i in np.nditer(a):  # range(self.nparts):
+        for i in np.nditer(a):
             point = [px[i], py[i], 0.0]
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-            weights, idlist1, numpts = self.get_pos_in_2dcell(
+            weights, idlist1, numpts = self.find_pos_in_2dcell(
                 point, self.cellindex2d[i]
             )
-            self.bedElev[i] = self.interp_cell_value(
+            self.bedelev[i] = self.interp_cell_value(
                 weights, idlist1, numpts, self.mesh.Elevation_2D
             )
             self.wse[i] = self.interp_cell_value(
                 weights, idlist1, numpts, self.mesh.WSE_2D
             )
-        self.depth[a] = self.wse[a] - self.bedElev[a]
+        self.depth[a] = self.wse[a] - self.bedelev[a]
 
-    def update_info(self, time, bedelev, wse):
-        """Update particle information.
+    # Properties
+
+    @property
+    def bedelev(self):
+        """Get bedelev.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._bedelev
+
+    @bedelev.setter
+    def bedelev(self, values):
+        """Set bedelev.
 
         Args:
-            time ([type]): [description]
-            bedelev ([type]): [description]
-            wse ([type]): [description]
+            values ([type]): [description]
         """
-        self.bedElev = bedelev
-        self.wse = wse
-        self.htabvbed = self.z - self.bedElev
-        self.time = time
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "bedelev.setter wrong size etc. etc."
+        )
+        self._bedelev = values
+
+    @property
+    def cellindex2d(self):
+        """Get cellindex2d.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._cellindex2d
+
+    @cellindex2d.setter
+    def cellindex2d(self, values):
+        """Set cellindex2d.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "cellindex2d.setter wrong size etc. etc."
+        )
+        self._cellindex2d = values
+
+    @property
+    def cellindex3d(self):
+        """Get cellindex3d.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._cellindex3d
+
+    @cellindex3d.setter
+    def cellindex3d(self, values):
+        """Set cellindex3d.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "cellindex3d.setter wrong size etc. etc."
+        )
+        self._cellindex3d = values
+
+    @property
+    def depth(self):
+        """Get depth.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._depth
+
+    @depth.setter
+    def depth(self, values):
+        """Set depth.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "depth.setter wrong size etc. etc."
+        )
+        self._depth = values
+
+    @property
+    def dx(self):
+        """Get dx.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._dx
+
+    @dx.setter
+    def dx(self, values):
+        """Set dx.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "dx.setter wrong size etc. etc."
+        )
+        self._dx = values
+
+    @property
+    def dy(self):
+        """Get dy.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._dy
+
+    @dy.setter
+    def dy(self, values):
+        """Set dy.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "dy.setter wrong size etc. etc."
+        )
+        self._dy = values
+
+    @property
+    def dz(self):
+        """Get dz.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._dz
+
+    @dz.setter
+    def dz(self, values):
+        """Set dz.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "dz.setter wrong size etc. etc."
+        )
+        self._dz = values
+
+    @property
+    def mesh(self):
+        """Get mesh.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._mesh
+
+    @mesh.setter
+    def mesh(self, values):
+        """Set mesh.
+
+        Args:
+            values ([type]): [description]
+        """
+        self._mesh = values
+
+    @property
+    def normdepth(self):
+        """Get normdepth.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._normdepth
+
+    @normdepth.setter
+    def normdepth(self, values):
+        """Set normdepth.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "normdepth.setter wrong size etc. etc."
+        )
+        self._normdepth = values
+
+    @property
+    def nparts(self):
+        """Get nparts.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._nparts
+
+    @nparts.setter
+    def nparts(self, value):
+        """Set nparts.
+
+        Args:
+            value ([type]): [description]
+        """
+        assert value > 0, ValueError("# particles < 1")  # noqa: S101
+        assert isinstance(value, int), TypeError("nparts must be int")  # noqa: S101
+        self._nparts = value
+
+    @property
+    def rng(self):
+        """Get rng.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._rng
+
+    @rng.setter
+    def rng(self, values):
+        """Set rng.
+
+        Args:
+            values ([type]): [description]
+        """
+        self._rng = values
+
+    @property
+    def shearstress(self):
+        """Get shearstress.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._shearstress
+
+    @shearstress.setter
+    def shearstress(self, values):
+        """Set shearstress.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "shearstress.setter wrong size etc. etc."
+        )
+        self._shearstress = values
+
+    @property
+    def track2d(self):
+        """Get track2d.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._track2d
+
+    @track2d.setter
+    def track2d(self, value):
+        """Set track2d.
+
+        Args:
+            value ([type]): [description]
+        """
+        assert isinstance(value, int), TypeError("track2d must be int")  # noqa: S101
+        assert value >= 0 and value < 2, ValueError(  # noqa: S101
+            "track2d must be 0 or 1"
+        )
+        self._track2d = value
+
+    @property
+    def track3d(self):
+        """Get track3d.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._track3d
+
+    @track3d.setter
+    def track3d(self, value):
+        """Set track3d.
+
+        Args:
+            value ([type]): [description]
+        """
+        assert isinstance(value, int), TypeError("track3d must be int")  # noqa: S101
+        assert value >= 0 and value < 2, ValueError(  # noqa: S101
+            "track3d must be 0 or 1"
+        )
+        self._track3d = value
+
+    @property
+    def ustar(self):
+        """Get ustar.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._ustar
+
+    @ustar.setter
+    def ustar(self, values):
+        """Set ustar.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "ustar.setter wrong size etc. etc."
+        )
+        self._ustar = values
+
+    @property
+    def velx(self):
+        """Get velx.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._velx
+
+    @velx.setter
+    def velx(self, values):
+        """Set velx.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "velx.setter wrong size etc. etc."
+        )
+        self._velx = values
+
+    @property
+    def vely(self):
+        """Get vely.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._vely
+
+    @vely.setter
+    def vely(self, values):
+        """Set vely.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "vely.setter wrong size etc. etc."
+        )
+        self._vely = values
+
+    @property
+    def velz(self):
+        """Get velz.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._velz
+
+    @velz.setter
+    def velz(self, values):
+        """Set velz.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "velz.setter wrong size etc. etc."
+        )
+        self._velz = values
+
+    @property
+    def wse(self):
+        """Get wse.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._wse
+
+    @wse.setter
+    def wse(self, values):
+        """Set wse.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "wse.setter wrong size etc. etc."
+        )
+        self._wse = values
 
     @property
     def x(self):
