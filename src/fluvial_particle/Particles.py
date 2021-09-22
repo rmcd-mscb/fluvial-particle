@@ -32,6 +32,7 @@ class Particles:
         self._bedelev = np.zeros(nparts)
         self._wse = np.zeros(nparts)
         self._normdepth = np.full(nparts, 0.5)
+        self.indices = np.arange(nparts)
         self._cellindex2d = np.zeros(nparts, dtype=np.int64)
         self._cellindex3d = np.zeros(nparts, dtype=np.int64)
         self._depth = np.zeros(nparts)
@@ -61,8 +62,8 @@ class Particles:
             alpha (float): bounds particle in fractional water column to [alpha, 1-alpha]
         """
         # check on alpha? only makes sense for alpha<=0.5
-        a = pz > self.wse - alpha * self.depth
-        b = pz < self.bedelev + alpha * self.depth
+        a = self.indices[pz > self.wse - alpha * self.depth]
+        b = self.indices[pz < self.bedelev + alpha * self.depth]
         pz[a] = self.wse[a] - alpha * self.depth[a]
         pz[b] = self.bedelev[b] + alpha * self.depth[b]
 
@@ -133,21 +134,10 @@ class Particles:
             dt ([type]): [description]
         """
         # Move dry particles with only 2d random motion
-        a = np.arange(self.nparts)
-        a = a[dry]
+        a = self.indices[dry]
         self.perturb_random_only_2d(px, py, a, dt)
         # Run is_part_wet again
-        # wet2 = self.is_part_wet(px, py)
-        wet2 = np.empty(np.size(a), dtype=bool)
-        j = 0
-        for i in np.nditer(a):
-            point = [px[i], py[i], 0.0]
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-            weights, idlist1, numpts = self.find_pos_in_2dcell(
-                point, self.cellindex2d[i]
-            )
-            wet2[j] = self.is_part_wet_kernel(weights, idlist1, numpts)
-            j += 1
+        wet2 = self.is_part_wet(px, py, a)
         if np.any(~wet2):
             b = a[~wet2]
             # Any still dry particles will have no positional update this step
@@ -264,13 +254,10 @@ class Particles:
     @property
     def interp_fields(self):
         """Interpolate mesh fields at current particles' positions."""
-        # Find current location in 2D grid
+        # Find current location in 2D grid and interpolate 2D fields
         for i in range(self.nparts):
             point = [self.x[i], self.y[i], 0.0]
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-        # Interpolate 2D fields
-        for i in range(self.nparts):
-            point = [self.x[i], self.y[i], 0.0]
             weights, idlist1, numpts = self.find_pos_in_2dcell(
                 point, self.cellindex2d[i]
             )
@@ -358,6 +345,29 @@ class Particles:
             )
         return result, vtkid2, tmpxval, tmpyval, 0.0
 
+    def is_part_wet(self, px, py, a):
+        """Determine if particles' new positions is wet.
+
+        Args:
+            px ([type]): [description]
+            py ([type]): [description]
+            a ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        wet = np.empty(np.size(a), dtype=bool)
+        j = 0
+        for i in np.nditer(a):
+            point = [px[i], py[i], 0.0]
+            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
+            weights, idlist1, numpts = self.find_pos_in_2dcell(
+                point, self.cellindex2d[i]
+            )
+            wet[j] = self.is_part_wet_kernel(weights, idlist1, numpts)
+            j += 1
+        return wet
+
     def is_part_wet_kernel(self, weights, idlist1, numpts):
         """Interpolate IBC mesh array to a point.
 
@@ -377,26 +387,6 @@ class Particles:
         else:
             return False
 
-    def is_part_wet(self, px, py):
-        """Determine if particles' new positions is wet.
-
-        Args:
-            px ([type]): [description]
-            py ([type]): [description]
-
-        Returns:
-            [type]: [description]
-        """
-        wet = np.empty(self.nparts, dtype=bool)
-        for i in range(self.nparts):
-            point = [px[i], py[i], 0.0]
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-            weights, idlist1, numpts = self.find_pos_in_2dcell(
-                point, self.cellindex2d[i]
-            )
-            wet[i] = self.is_part_wet_kernel(weights, idlist1, numpts)
-        return wet
-
     def move_all(self, alpha, min_depth, time, dt):
         """Update position based on speed, angle.
 
@@ -412,7 +402,7 @@ class Particles:
         self.perturb_2d(px, py, dt)
 
         # check if new positions are wet
-        wet = self.is_part_wet(px, py)
+        wet = self.is_part_wet(px, py, self.indices)
         if np.any(~wet):
             self.handle_dry_parts(px, py, ~wet, dt)
 
@@ -438,12 +428,15 @@ class Particles:
         zranwalk = self.zrnum * (2.0 * self.dz * dt) ** 0.5
         pz = self.bedelev + (self.normdepth * self.depth) + self.velz * dt + zranwalk
         self.adjust_z(pz, alpha)
+
+        # Move particles
         self.x = px
         self.y = py
         self.z = pz
 
+        # Update some info
         self.htabvbed = self.z - self.bedelev
-        self.time = np.full(self.nparts, time)
+        self.time.fill(time)
 
     def perturb_2d(self, px, py, dt):
         """Project particles' 2D trajectories.
@@ -459,7 +452,7 @@ class Particles:
         xranwalk = self.xrnum * (2.0 * self.dx * dt) ** 0.5
         yranwalk = self.yrnum * (2.0 * self.dy * dt) ** 0.5
         # Move and update positions in-place on each array
-        a = velmag > 0.0
+        a = self.indices[velmag > 0.0]
         px[a] += (
             vx[a] * dt
             + ((xranwalk[a] * vx[a]) / velmag[a])
@@ -492,17 +485,15 @@ class Particles:
             min_depth ([type]): [description]
         """
         print("particle entered min_depth")
-        a = self.depth < min_depth
-        b = np.arange(self.nparts)
-        a = b[a]
+        a = self.indices[self.depth < min_depth]
         px[a] = self.x[a]
         py[a] = self.y[a]
-        """ self.velx[a] = 0.0
+        self.velx[a] = 0.0
         self.vely[a] = 0.0
         self.velz[a] = 0.0
         self.dx[a] = 0.0
         self.dy[a] = 0.0
-        self.dz[a] = 0.0 """
+        self.dz[a] = 0.0
         # update cell indices and interpolations
         for i in np.nditer(a):
             point = [px[i], py[i], 0.0]
