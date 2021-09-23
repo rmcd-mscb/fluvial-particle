@@ -5,21 +5,30 @@ import vtk
 class RiverGrid:
     """A class of hydrodynamic data on a structured VTK grid."""
 
-    def __init__(self, track3d):
+    def __init__(self, track3d, filename2d, filename3d=None):
         """Initialize instance of class RiverGrid.
 
         Args:
             track3d ([type]): [description]
+            filename2d ([type]): [description]
+            filename3d ([type], optional): [description]. Defaults to None.
         """
         self.vtksgrid2d = vtk.vtkStructuredGrid()
+        self._read_2d_data(filename2d)
         if track3d:
             self.track3d = 1
             self.vtksgrid3d = vtk.vtkStructuredGrid()
+            if filename3d is not None:
+                self._read_3d_data(filename3d)
+            else:
+                print("no 3d filename provided")
         else:
             self.track3d = 0
+        self._load_arrays
+        self._build_locators
 
     @property
-    def build_locators(self):
+    def _build_locators(self):
         """Build Static Cell Locators (thread-safe)."""
         self.CellLocator2D = vtk.vtkStaticCellLocator()
         self.CellLocator2D.SetDataSet(self.vtksgrid2d)
@@ -33,7 +42,7 @@ class RiverGrid:
             self.CellLocator3D.BuildLocator()
 
     @property
-    def load_arrays(self):
+    def _load_arrays(self):
         """Load 2D and 3D structured grid arrays."""
         self.WSE_2D = self.vtksgrid2d.GetPointData().GetScalars("WaterSurfaceElevation")
         self.Depth_2D = self.vtksgrid2d.GetPointData().GetScalars("Depth")
@@ -47,7 +56,7 @@ class RiverGrid:
         if self.track3d:
             self.VelocityVec3D = self.vtksgrid3d.GetPointData().GetScalars("Velocity")
 
-    def read_2d_data(self, filename):
+    def _read_2d_data(self, filename):
         """Read 2D structured grid data file.
 
         Args:
@@ -65,7 +74,7 @@ class RiverGrid:
         # output2d = reader2d.GetOutput()
         # scalar_range = output2d.GetScalarRange()
 
-    def read_3d_data(self, filename):
+    def _read_3d_data(self, filename):
         """Read 3D structured grid data file.
 
         Args:

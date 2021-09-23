@@ -41,16 +41,16 @@ class Particles:
         self._velz = np.zeros(nparts)
         self._shearstress = np.zeros(nparts)
         self._ustar = np.zeros(nparts)
-        self._dx = np.zeros(nparts)
-        self._dy = np.zeros(nparts)
-        self._dz = np.zeros(nparts)
+        self._diffx = np.zeros(nparts)
+        self._diffy = np.zeros(nparts)
+        self._diffz = np.zeros(nparts)
+        self._time = np.zeros(nparts)
+        self._htabvbed = np.zeros(nparts)
         self.xrnum = np.zeros(nparts)  # make property?
         self.yrnum = np.zeros(nparts)  # make property?
         self.zrnum = np.zeros(nparts)  # make property?
 
         # Not used:
-        self.time = np.zeros(nparts)  # make property?
-        self.htabvbed = np.zeros(nparts)  # make property?
         # tmpibc = np.zeros(nparts)
         # tmpvel = np.zeros(npart)
 
@@ -77,9 +77,9 @@ class Particles:
             bz ([type]): [description]
         """
         ustarh = self.depth * self.ustar
-        self.dx = lev + bx * ustarh
-        self.dy = lev + by * ustarh
-        self.dz = lev + bz * ustarh
+        self.diffx = lev + bx * ustarh
+        self.diffy = lev + by * ustarh
+        self.diffz = bz * ustarh  # lev + bz * ustarh
 
     def find_pos_in_2dcell(self, newpoint2d, cellid):
         """Find position in 2D cell, return info for interpolation.
@@ -143,13 +143,6 @@ class Particles:
             # Any still dry particles will have no positional update this step
             px[b] = self.x[b]
             py[b] = self.y[b]
-            # Ensure that move_all() does nothing for any of these particles
-            self.velx[a] = 0.0
-            self.vely[a] = 0.0
-            self.velz[a] = 0.0
-            self.dx[a] = 0.0
-            self.dy[a] = 0.0
-            self.dz[a] = 0.0
             # update cell indices
             for i in np.nditer(b):
                 point = [px[i], py[i], 0.0]
@@ -346,12 +339,12 @@ class Particles:
         return result, vtkid2, tmpxval, tmpyval, 0.0
 
     def is_part_wet(self, px, py, a):
-        """Determine if particles' new positions is wet.
+        """Determine if particles' new positions are wet.
 
         Args:
             px ([type]): [description]
             py ([type]): [description]
-            a ([type]): [description]
+            a (int): Numpy array of indices to check
 
         Returns:
             [type]: [description]
@@ -396,7 +389,7 @@ class Particles:
             time (float): the new time at end of position update
             dt (float): time step
         """
-        # first move 2d only
+        # first perturb 2d only
         px = np.copy(self.x)
         py = np.copy(self.y)
         self.perturb_2d(px, py, dt)
@@ -424,8 +417,9 @@ class Particles:
         if np.any(self.depth < min_depth):
             self.prevent_mindepth(px, py, min_depth)
 
-        # Update particle elevation in new water column to same fractional depth as last
-        zranwalk = self.zrnum * (2.0 * self.dz * dt) ** 0.5
+        # update particle elevation in new water column to same fractional depth as last
+        zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
+        # apply random walk in the vertical
         pz = self.bedelev + (self.normdepth * self.depth) + self.velz * dt + zranwalk
         self.adjust_z(pz, alpha)
 
@@ -449,8 +443,8 @@ class Particles:
         vx = self.velx
         vy = self.vely
         velmag = (vx ** 2 + vy ** 2) ** 0.5
-        xranwalk = self.xrnum * (2.0 * self.dx * dt) ** 0.5
-        yranwalk = self.yrnum * (2.0 * self.dy * dt) ** 0.5
+        xranwalk = self.xrnum * (2.0 * self.diffx * dt) ** 0.5
+        yranwalk = self.yrnum * (2.0 * self.diffy * dt) ** 0.5
         # Move and update positions in-place on each array
         a = self.indices[velmag > 0.0]
         px[a] += (
@@ -473,8 +467,8 @@ class Particles:
             idx ([type]): [description]
             dt ([type]): [description]
         """
-        px[idx] = self.x[idx] + self.xrnum[idx] * (2.0 * self.dx[idx] * dt) ** 0.5
-        py[idx] = self.y[idx] + self.yrnum[idx] * (2.0 * self.dy[idx] * dt) ** 0.5
+        px[idx] = self.x[idx] + self.xrnum[idx] * (2.0 * self.diffx[idx] * dt) ** 0.5
+        py[idx] = self.y[idx] + self.yrnum[idx] * (2.0 * self.diffy[idx] * dt) ** 0.5
 
     def prevent_mindepth(self, px, py, min_depth):
         """Prevent particles from entering a position with depth < min_depth.
@@ -486,14 +480,6 @@ class Particles:
         """
         print("particle entered min_depth")
         a = self.indices[self.depth < min_depth]
-        px[a] = self.x[a]
-        py[a] = self.y[a]
-        self.velx[a] = 0.0
-        self.vely[a] = 0.0
-        self.velz[a] = 0.0
-        self.dx[a] = 0.0
-        self.dy[a] = 0.0
-        self.dz[a] = 0.0
         # update cell indices and interpolations
         for i in np.nditer(a):
             point = [px[i], py[i], 0.0]
@@ -596,67 +582,88 @@ class Particles:
         self._depth = values
 
     @property
-    def dx(self):
-        """Get dx.
+    def diffx(self):
+        """Get diffx.
 
         Returns:
             [type]: [description]
         """
-        return self._dx
+        return self._diffx
 
-    @dx.setter
-    def dx(self, values):
-        """Set dx.
+    @diffx.setter
+    def diffx(self, values):
+        """Set diffx.
 
         Args:
             values ([type]): [description]
         """
         assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "dx.setter wrong size etc. etc."
+            "diffx.setter wrong size etc. etc."
         )
-        self._dx = values
+        self._diffx = values
 
     @property
-    def dy(self):
-        """Get dy.
+    def diffy(self):
+        """Get diffy.
 
         Returns:
             [type]: [description]
         """
-        return self._dy
+        return self._diffy
 
-    @dy.setter
-    def dy(self, values):
-        """Set dy.
+    @diffy.setter
+    def diffy(self, values):
+        """Set diffy.
 
         Args:
             values ([type]): [description]
         """
         assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "dy.setter wrong size etc. etc."
+            "diffy.setter wrong size etc. etc."
         )
-        self._dy = values
+        self._diffy = values
 
     @property
-    def dz(self):
-        """Get dz.
+    def diffz(self):
+        """Get diffz.
 
         Returns:
             [type]: [description]
         """
-        return self._dz
+        return self._diffz
 
-    @dz.setter
-    def dz(self, values):
-        """Set dz.
+    @diffz.setter
+    def diffz(self, values):
+        """Set diffz.
 
         Args:
             values ([type]): [description]
         """
         assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "dz.setter wrong size etc. etc."
+            "diffz.setter wrong size etc. etc."
         )
-        self._dz = values
+        self._diffz = values
+
+    @property
+    def htabvbed(self):
+        """Get htabvbed.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._htabvbed
+
+    @htabvbed.setter
+    def htabvbed(self, values):
+        """Set htabvbed.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "htabvbed.setter wrong size etc. etc."
+        )
+        self._htabvbed = values
 
     @property
     def mesh(self):
@@ -755,6 +762,27 @@ class Particles:
             "shearstress.setter wrong size etc. etc."
         )
         self._shearstress = values
+
+    @property
+    def time(self):
+        """Get time.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._time
+
+    @time.setter
+    def time(self, values):
+        """Set time.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "time.setter wrong size etc. etc."
+        )
+        self._time = values
 
     @property
     def track2d(self):
