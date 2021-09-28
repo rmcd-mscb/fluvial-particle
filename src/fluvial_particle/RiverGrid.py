@@ -14,12 +14,14 @@ class RiverGrid:
             filename3d ([type], optional): [description]. Defaults to None.
         """
         self.vtksgrid2d = vtk.vtkStructuredGrid()
-        self._read_2d_data(filename2d)
+        self._fname2d = filename2d
+        self._fname3d = filename3d
+        self._read_2d_data
         if track3d:
             self.track3d = 1
             self.vtksgrid3d = vtk.vtkStructuredGrid()
             if filename3d is not None:
-                self._read_3d_data(filename3d)
+                self._read_3d_data
             else:
                 print("no 3d filename provided")
         else:
@@ -56,16 +58,13 @@ class RiverGrid:
         if self.track3d:
             self.VelocityVec3D = self.vtksgrid3d.GetPointData().GetScalars("Velocity")
 
-    def _read_2d_data(self, filename):
-        """Read 2D structured grid data file.
-
-        Args:
-            filename ([type]): [description]
-        """
+    @property
+    def _read_2d_data(self):
+        """Read 2D structured grid data file."""
         # Assert filename???
 
         reader2d = vtk.vtkStructuredGridReader()
-        reader2d.SetFileName(filename)
+        reader2d.SetFileName(self._fname2d)
         reader2d.SetOutput(self.vtksgrid2d)
         reader2d.Update()
         self.ns, self.nn, self.nz = self.vtksgrid2d.GetDimensions()
@@ -74,16 +73,13 @@ class RiverGrid:
         # output2d = reader2d.GetOutput()
         # scalar_range = output2d.GetScalarRange()
 
-    def _read_3d_data(self, filename):
-        """Read 3D structured grid data file.
-
-        Args:
-            filename ([type]): [description]
-        """
+    @property
+    def _read_3d_data(self):
+        """Read 3D structured grid data file."""
         # Assert filename???
         if self.track3d:
             reader3d = vtk.vtkStructuredGridReader()
-            reader3d.SetFileName(filename)
+            reader3d.SetFileName(self._fname3d)
             reader3d.SetOutput(self.vtksgrid3d)
             reader3d.Update()
             # output3d = reader3d.GetOutput()
