@@ -417,10 +417,9 @@ class Particles:
         if np.any(self.depth < min_depth):
             self.prevent_mindepth(px, py, min_depth)
 
-        # update particle elevation in new water column to same fractional depth as last
-        zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
-        # apply random walk in the vertical
-        pz = self.bedelev + (self.normdepth * self.depth) + self.velz * dt + zranwalk
+        # Perturb vertical, random wiggle by default
+        # subclasses can update perturb_z for an active drift
+        pz = self.perturb_z(dt)
         self.adjust_z(pz, alpha)
 
         # Move particles
@@ -469,6 +468,19 @@ class Particles:
         """
         px[idx] = self.x[idx] + self.xrnum[idx] * (2.0 * self.diffx[idx] * dt) ** 0.5
         py[idx] = self.y[idx] + self.yrnum[idx] * (2.0 * self.diffy[idx] * dt) ** 0.5
+
+    def perturb_z(self, dt):
+        """Project particles' vertical trajectories, random wiggle.
+
+        Args:
+            dt ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
+        pz = self.bedelev + (self.normdepth * self.depth) + self.velz * dt + zranwalk
+        return pz
 
     def prevent_mindepth(self, px, py, min_depth):
         """Prevent particles from entering a position with depth < min_depth.

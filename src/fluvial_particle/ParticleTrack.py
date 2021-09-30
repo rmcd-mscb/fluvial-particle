@@ -10,7 +10,8 @@ import vtk
 from vtk.util import numpy_support  # type:ignore
 
 import fluvial_particle.settings as settings
-from fluvial_particle.Particles import Particles
+from fluvial_particle.LarvalParticles import LarvalParticles
+from fluvial_particle.Particles import Particles  # noqa
 from fluvial_particle.RiverGrid import RiverGrid
 
 
@@ -94,13 +95,8 @@ x = np.zeros(npart) + xstart
 y = np.zeros(npart) + ystart
 z = np.zeros(npart) + zstart
 rng = np.random.default_rng(0)  # Numpy recommended method for new code
-particles = Particles(npart, x, y, z, rng, River, Track2D, Track3D)
-# Particles start at midpoint of water column
-particles.initialize_location(0.5)
-anpart = np.arange(npart).tolist()
 
-# Sinusoid properties; these aren't used, REMOVE?
-# Will be used for larval drift subclass eventually
+# Sinusoid properties for larval drift subclass
 amplitude = 1.0
 period = 60.0
 min_elev = 0.5
@@ -108,6 +104,14 @@ amplitude = settings.amplitude
 period = settings.period
 min_elev = settings.min_elev
 ttime = rng.uniform(0.0, period, npart)
+
+# particles = Particles(npart, x, y, z, rng, River, Track2D, Track3D)
+particles = LarvalParticles(
+    npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track2D, Track3D
+)
+# Particles start at midpoint of water column
+particles.initialize_location(0.9)
+anpart = np.arange(npart).tolist()
 
 TotTime = 0.0
 count_index = 0
