@@ -507,6 +507,59 @@ class Particles:
             )
         self.depth[a] = self.wse[a] - self.bedelev[a]
 
+    def write_hdf5_xmf(self, filexmf, time, idx):
+        """[summary].
+
+        Args:
+            filexmf ([type]): [description]
+            time ([type]): [description]
+            idx ([type]): [description]
+        """
+        filexmf.write(
+            f"""
+            <Grid GridType="Uniform">
+                <Time Value="{time}"/>
+                <Topology NodesPerElement="{self.nparts}" TopologyType="Polyvertex"/>
+                <Geometry GeometryType="X_Y" Name="particles">
+                    <DataItem Dimensions="{self.nparts}" Format="HDF">vtk2dtohdf5.h5:/particles/x_{idx}</DataItem>
+                    <DataItem Dimensions="{self.nparts}" Format="HDF">vtk2dtohdf5.h5:/particles/y_{idx}</DataItem>
+                </Geometry>
+                <Attribute AttributeType="Vector" Center="Node" Name="Vel">
+                    <DataItem Dimensions="1000 self.3" ItemType="Function" Function="JOIN($0, $1, $2)">
+                        <DataItem Dimensions="{self.nparts} 1" Format="HDF">vtk2dtohdf5.h5:/particles/velx_{idx}</DataItem>
+                        <DataItem Dimensions="{self.nparts} 1" Format="HDF">vtk2dtohdf5.h5:/particles/vely_{idx}</DataItem>
+                        <DataItem Dimensions="{self.nparts} 1" Format="HDF">vtk2dtohdf5.h5:/particles/velz_{idx}</DataItem>
+                    </DataItem>
+                </Attribute>
+            </Grid>"""
+        )
+
+    def write_hdf5_xmf_footer(self, filexmf):
+        """[summary].
+
+        Args:
+            filexmf ([type]): [description]
+        """
+        filexmf.write(
+            """
+                </Grid>
+            </Domain>
+        </Xdmf>
+        """
+        )
+
+    def write_hdf5_xmf_header(self, filexmf):
+        """[summary].
+
+        Args:
+            filexmf ([type]): [description]
+        """
+        filexmf.write(
+            """<Xdmf Version="3.0">
+            <Domain>
+                <Grid GridType="Collection" CollectionType="Temporal">"""
+        )
+
     # Properties
 
     @property

@@ -127,7 +127,7 @@ g = gen_filenames("fish1_", ".csv")
 gg = gen_filenames("nsPart_", ".csv")
 ggg = gen_filenames("Sim_Result_2D_", ".vtk")
 g4 = gen_filenames("Sim_Result_3D_", ".vtk")
-
+# %%
 #  HDF5 file writing initialization protocol
 vtkcoords = River.vtksgrid2d.GetPoints().GetData()
 coords = numpy_support.vtk_to_numpy(vtkcoords)
@@ -138,17 +138,17 @@ y = y.reshape(ns, nn)
 file = h5py.File("vtk2dtohdf5.h5", "w")
 file["/X"] = x
 file["/Y"] = y
+grpc = file.create_group("cells")
+grpp = file.create_group("particles")
 h5pyidx = 0
-xmlfilename = "vtk2dtohdf5.xmf"
+xmlfilename = "cells.xmf"
+xmlfilename2 = "particles.xmf"
 filexmf = open(xmlfilename, "w")
-# Header for xml file
-filexmf.write(
-    """
-<Xdmf Version="3.0">
-    <Domain>
-        <Grid GridType="Collection" CollectionType="Temporal">
-"""
-)
+filexmf2 = open(xmlfilename2, "w")
+# Header for xml files
+River.write_hdf5_xmf_header(filexmf)
+particles.write_hdf5_xmf_header(filexmf2)
+
 while TotTime <= EndTime:  # noqa C901
     # Increment counters, reset counter arrays
     TotTime = TotTime + dt
@@ -182,39 +182,16 @@ while TotTime <= EndTime:  # noqa C901
     # Print occasionally
     if count_index % print_inc == 0:
         # New HDF5 file writing protocol, saves iterates to same group as a temporal collection
-        dataset = "fractionalParticleCount_%d" % (h5pyidx)
-        file.create_dataset(dataset, (ns - 1, nn - 1), dtype="f")
-        file[dataset][...] = NumPartInCell.reshape(ns - 1, nn - 1) / npart
-        # Write xmf for file
-        filexmf.write(
-            """
-            <Grid GridType="Uniform">
-                <Time Value="%f"/>
-                <Topology TopologyType="2DSMesh" Dimensions="%d %d"/>
-                <Geometry GeometryType="X_Y">
-                    <DataItem Name="X" Dimensions="%d %d" Format="HDF">
-                        vtk2dtohdf5.h5:/X
-                    </DataItem>
-                    <DataItem Name="Y" Dimensions="%d %d" Format="HDF">
-                        vtk2dtohdf5.h5:/Y
-                    </DataItem>
-                </Geometry>
-        """
-            % (TotTime, nn, ns, nn, ns, nn, ns)
-        )
+        River.write_hdf5(grpc, NumPartInCell / npart, h5pyidx, filexmf, TotTime)
 
-        # Add Attribute
-        filexmf.write(
-            """\n
-                <Attribute Name="fPC" AttributeType="Scalar" Center="Cell">
-                    <DataItem Dimensions="%d %d" NumberType="Float" Format="HDF">
-                        vtk2dtohdf5.h5:/%s
-                    </DataItem>
-                </Attribute>
-            </Grid>
-        """
-            % (nn - 1, ns - 1, dataset)
-        )
+        # Particles hdf5
+        grpp[f"x_{h5pyidx}"] = particles.x
+        grpp[f"y_{h5pyidx}"] = particles.y
+        grpp[f"z_{h5pyidx}"] = particles.bedelev
+        grpp[f"velx_{h5pyidx}"] = particles.velx
+        grpp[f"vely_{h5pyidx}"] = particles.vely
+        grpp[f"velz_{h5pyidx}"] = particles.velz
+        particles.write_hdf5_xmf(filexmf2, TotTime, h5pyidx)
         h5pyidx = h5pyidx + 1
         # HDF5 printing end
 
@@ -337,17 +314,11 @@ wsg.SetFileTypeToBinary()
 wsg.SetFileName("NoStrmLnCurv_185cms2d1_part.vtk")
 wsg.Write()
 # Finalize HDF5/xmf file writing
-filexmf.write(
-    """
-        </Grid>
-    </Domain>
-</Xdmf>
-"""
-)
+River.write_hdf5_xmf_footer(filexmf)
+particles.write_hdf5_xmf_footer(filexmf2)
 filexmf.close()
+filexmf2.close()
 file.close()
 
 if __name__ == "__main__":
     pass
-
-# %%

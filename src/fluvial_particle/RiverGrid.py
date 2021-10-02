@@ -84,3 +84,76 @@ class RiverGrid:
             reader3d.Update()
             # output3d = reader3d.GetOutput()
             # scalar_range = output3d.GetScalarRange()
+
+    def write_hdf5(self, obj, dset, idx, filexmf, time):
+        """Write cell arrays to HDF5 object.
+
+        Args:
+            obj ([type]): [description]
+            dset ([type]): [description]
+            idx ([type]): [description]
+            filexmf ([type]): [description]
+            time ([type]): [description]
+        """
+        name = "FractionalParticleCount"
+        nametime = name + f"_{idx}"
+        obj.create_dataset(nametime, (self.ns - 1, self.nn - 1))
+        obj[nametime][...] = dset.reshape(self.ns - 1, self.nn - 1)
+        # Write xmf for file
+        self.write_hdf5_xmf(filexmf, time, name, obj[nametime].name)
+
+    def write_hdf5_xmf(self, filexmf, time, attrname, name):
+        """Body for cell-centered time series data.
+
+        Args:
+            filexmf ([type]): [description]
+            time ([type]): [description]
+            attrname ([type]): [description]
+            name ([type]): [description]
+        """
+        filexmf.write(
+            f"""
+            <Grid GridType="Uniform">
+                <Time Value="{time}"/>
+                <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
+                <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
+                <Attribute Name="{attrname}" AttributeType="Scalar" Center="Cell">
+                    <DataItem Dimensions="{self.nn - 1} {self.ns - 1}" Format="HDF">vtk2dtohdf5.h5:{name}</DataItem>
+                </Attribute>
+            </Grid>"""
+        )
+
+    def write_hdf5_xmf_header(self, filexmf):
+        """Header for cell-centered time series data.
+
+        Args:
+            filexmf ([type]): [description]
+        """
+        filexmf.write(
+            """<Xdmf Version="3.0">
+            <Domain>
+                <Topology Name="Topo" TopologyType="2DSMesh" Dimensions="11 601"/>
+                <Geometry Name="Geo" GeometryType="X_Y">
+                    <DataItem Name="X" Dimensions="11 601" Format="HDF">
+                        vtk2dtohdf5.h5:/X
+                    </DataItem>
+                    <DataItem Name="Y" Dimensions="11 601" Format="HDF">
+                        vtk2dtohdf5.h5:/Y
+                    </DataItem>
+                </Geometry>
+                <Grid GridType="Collection" CollectionType="Temporal">"""
+        )
+
+    def write_hdf5_xmf_footer(self, filexmf):
+        """Footer for cell-centered time series data.
+
+        Args:
+            filexmf ([type]): [description]
+        """
+        filexmf.write(
+            """
+                </Grid>
+            </Domain>
+        </Xdmf>
+        """
+        )
