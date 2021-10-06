@@ -85,24 +85,22 @@ class RiverGrid:
             # output3d = reader3d.GetOutput()
             # scalar_range = output3d.GetScalarRange()
 
-    def write_hdf5(self, obj, dset, idx, filexmf, time):
+    def write_hdf5(self, obj, name, dset, idx, filexmf, time):
         """Write cell arrays to HDF5 object.
 
         Args:
             obj ([type]): [description]
+            name ([type]): [description]
             dset ([type]): [description]
             idx ([type]): [description]
             filexmf ([type]): [description]
             time ([type]): [description]
         """
-        name = "FractionalParticleCount"
-        nametime = name + f"_{idx}"
-        obj.create_dataset(nametime, (self.ns - 1, self.nn - 1))
-        obj[nametime][...] = dset.reshape(self.ns - 1, self.nn - 1)
+        obj[name][idx, :, :] = dset.reshape(self.ns - 1, self.nn - 1)
         # Write xmf for file
-        self.write_hdf5_xmf(filexmf, time, name, obj[nametime].name)
+        self.write_hdf5_xmf(filexmf, time, name, obj[name].name, idx)
 
-    def write_hdf5_xmf(self, filexmf, time, attrname, name):
+    def write_hdf5_xmf(self, filexmf, time, attrname, name, idx):
         """Body for cell-centered time series data.
 
         Args:
@@ -110,6 +108,7 @@ class RiverGrid:
             time ([type]): [description]
             attrname ([type]): [description]
             name ([type]): [description]
+            idx ([type]): [description]
         """
         filexmf.write(
             f"""
@@ -118,7 +117,14 @@ class RiverGrid:
                 <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
                 <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
                 <Attribute Name="{attrname}" AttributeType="Scalar" Center="Cell">
-                    <DataItem Dimensions="{self.nn - 1} {self.ns - 1}" Format="HDF">vtk2dtohdf5.h5:{name}</DataItem>
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.ns - 1} {self.nn - 1}" Format="XML">
+                        <DataItem Dimensions="3 3" Format="XML">
+                            {idx} 0 0
+                            1 1 1
+                            1 {self.ns - 1} {self.nn - 1}
+                        </DataItem>
+                        <DataItem Dimensions="100 {self.ns - 1} {self.nn - 1}" Format="HDF">results.h5:{name}</DataItem>
+                    </DataItem>
                 </Attribute>
             </Grid>"""
         )
@@ -135,10 +141,10 @@ class RiverGrid:
                 <Topology Name="Topo" TopologyType="2DSMesh" Dimensions="11 601"/>
                 <Geometry Name="Geo" GeometryType="X_Y">
                     <DataItem Name="X" Dimensions="11 601" Format="HDF">
-                        vtk2dtohdf5.h5:/X
+                        results.h5:/cells/X
                     </DataItem>
                     <DataItem Name="Y" Dimensions="11 601" Format="HDF">
-                        vtk2dtohdf5.h5:/Y
+                        results.h5:/cells/Y
                     </DataItem>
                 </Geometry>
                 <Grid GridType="Collection" CollectionType="Temporal">"""

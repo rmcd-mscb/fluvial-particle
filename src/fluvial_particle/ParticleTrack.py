@@ -1,16 +1,16 @@
 """ParticleTrack."""
 # %%
-import csv
+import csv  # noqa
 import os
 from itertools import count
 
 import h5py
 import numpy as np
-import vtk
+import vtk  # noqa
 from vtk.util import numpy_support  # type:ignore
 
 import fluvial_particle.settings as settings
-from fluvial_particle.LarvalParticles import LarvalParticles
+from fluvial_particle.LarvalParticles import LarvalParticles  # noqa
 from fluvial_particle.Particles import Particles  # noqa
 from fluvial_particle.RiverGrid import RiverGrid
 
@@ -105,10 +105,10 @@ period = settings.period
 min_elev = settings.min_elev
 ttime = rng.uniform(0.0, period, npart)
 
-# particles = Particles(npart, x, y, z, rng, River, Track2D, Track3D)
-particles = LarvalParticles(
+particles = Particles(npart, x, y, z, rng, River, Track2D, Track3D)
+""" particles = LarvalParticles(
     npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track2D, Track3D
-)
+) """
 # Particles start at midpoint of water column
 particles.initialize_location(0.9)
 anpart = np.arange(npart).tolist()
@@ -128,34 +128,38 @@ gg = gen_filenames("nsPart_", ".csv")
 ggg = gen_filenames("Sim_Result_2D_", ".vtk")
 g4 = gen_filenames("Sim_Result_3D_", ".vtk")
 # %%
-#  HDF5 file writing initialization protocol
+# HDF5 file writing initialization protocol
+# In MPI, this whole section will need to be COLLECTIVE
 vtkcoords = River.vtksgrid2d.GetPoints().GetData()
 coords = numpy_support.vtk_to_numpy(vtkcoords)
 x = coords[:, 0]
 y = coords[:, 1]
 x = x.reshape(ns, nn)
 y = y.reshape(ns, nn)
-file = h5py.File("vtk2dtohdf5.h5", "w")
-file["/X"] = x
-file["/Y"] = y
+dimtime = np.ceil(EndTime / (dt * print_inc))
+file = h5py.File("results.h5", "w")
 grpc = file.create_group("cells")
+grpc["X"] = x
+grpc["Y"] = y
+grpc.create_dataset("FractionalParticleCount", (dimtime, ns - 1, nn - 1))
+grpc.create_dataset("TotalParticleCount", (dimtime, ns - 1, nn - 1))
 grpp = file.create_group("particles")
+grpp.create_dataset("x", (dimtime, npart), dtype="f")
+grpp.create_dataset("y", (dimtime, npart), dtype="f")
+grpp.create_dataset("z", (dimtime, npart), dtype="f")
+grpp.create_dataset("cell2D", (dimtime, npart), dtype="i")
+grpp.create_dataset("cell3D", (dimtime, npart), dtype="i")
+grpp.create_dataset("time", (dimtime, 1), dtype="f")
 h5pyidx = 0
 xmlfilename = "cells.xmf"
-xmlfilename2 = "particles.xmf"
 filexmf = open(xmlfilename, "w")
-filexmf2 = open(xmlfilename2, "w")
 # Header for xml files
 River.write_hdf5_xmf_header(filexmf)
-particles.write_hdf5_xmf_header(filexmf2)
 
 while TotTime <= EndTime:  # noqa C901
     # Increment counters, reset counter arrays
     TotTime = TotTime + dt
     count_index += 1
-    PartInNSCellPTime[:] = 0
-    NumPartIn3DCell[:] = 0
-    NumPartInCell[:] = 0
     print(TotTime, count_index)
 
     # Generate new random numbers
@@ -168,7 +172,7 @@ while TotTime <= EndTime:  # noqa C901
     particles.move_all(alpha, min_depth, TotTime, dt)
 
     # Update the particle counts per cell
-    np.add.at(NumPartIn3DCell, particles.cellindex3d, 1)
+    """ np.add.at(NumPartIn3DCell, particles.cellindex3d, 1)
     np.add.at(NumPartInCell, particles.cellindex2d, 1)
     if np.sum(NumPartInCell) != npart:
         print("bad sum in NumPartInCell")
@@ -177,25 +181,18 @@ while TotTime <= EndTime:  # noqa C901
     if np.sum(PartInNSCellPTime) != npart:
         print("bad sum in PartInNSCellPTime")
     np.add.at(PartTimeInCell, particles.cellindex2d, dt)
-    np.add.at(TotPartInCell, particles.cellindex2d, 1)
+    np.add.at(TotPartInCell, particles.cellindex2d, 1) """
 
     # Print occasionally
     if count_index % print_inc == 0:
         # New HDF5 file writing protocol, saves iterates to same group as a temporal collection
-        River.write_hdf5(grpc, NumPartInCell / npart, h5pyidx, filexmf, TotTime)
-
-        # Particles hdf5
-        grpp[f"x_{h5pyidx}"] = particles.x
-        grpp[f"y_{h5pyidx}"] = particles.y
-        grpp[f"z_{h5pyidx}"] = particles.bedelev
-        grpp[f"velx_{h5pyidx}"] = particles.velx
-        grpp[f"vely_{h5pyidx}"] = particles.vely
-        grpp[f"velz_{h5pyidx}"] = particles.velz
-        particles.write_hdf5_xmf(filexmf2, TotTime, h5pyidx)
+        # River.write_hdf5(grpc, NumPartInCell / npart, h5pyidx, filexmf, TotTime)
+        particles.write_hdf5(grpp, TotTime, h5pyidx)
+        # particles.write_hdf5_xmf(filexmf2, TotTime, h5pyidx)
         h5pyidx = h5pyidx + 1
         # HDF5 printing end
 
-        carray4 = vtk.vtkFloatArray()
+        """ carray4 = vtk.vtkFloatArray()
         carray4.SetNumberOfValues(num2dcells)
         carray5 = vtk.vtkFloatArray()
         carray5.SetNumberOfValues(num3dcells)
@@ -312,7 +309,36 @@ wsg = vtk.vtkStructuredGridWriter()
 wsg.SetInputData(River.vtksgrid2d)
 wsg.SetFileTypeToBinary()
 wsg.SetFileName("NoStrmLnCurv_185cms2d1_part.vtk")
-wsg.Write()
+wsg.Write() """
+
+xmlfilename2 = "particles.xmf"
+filexmf2 = open(xmlfilename2, "w")
+# Header for xml files
+particles.write_hdf5_xmf_header(filexmf2)
+for i in range(h5pyidx):
+    x = grpp["x"][i, :]
+    y = grpp["y"][i, :]
+    z = grpp["z"][i, :]
+    cell2d = grpp["cell2D"][i, :]
+    cell3d = grpp["cell3D"][i, :]
+    time = grpp["time"][i]
+    time = time.item(0)  # this returns a python scalar, for use in f-strings
+    particles.write_hdf5_xmf(filexmf2, time, i)
+
+    PartInNSCellPTime[:] = 0
+    NumPartIn3DCell[:] = 0
+    NumPartInCell[:] = 0
+    np.add.at(NumPartInCell, cell2d, 1)
+    np.add.at(NumPartIn3DCell, cell3d, 1)
+    CI_IDB = cell2d % nsc
+    np.add.at(PartInNSCellPTime, CI_IDB, 1)
+    np.add.at(PartTimeInCell, cell2d, dt)
+    np.add.at(TotPartInCell, cell2d, 1)
+
+    name = "FractionalParticleCount"
+    River.write_hdf5(grpc, name, NumPartInCell / npart, i, filexmf, time)
+
+
 # Finalize HDF5/xmf file writing
 River.write_hdf5_xmf_footer(filexmf)
 particles.write_hdf5_xmf_footer(filexmf2)

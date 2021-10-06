@@ -507,6 +507,31 @@ class Particles:
             )
         self.depth[a] = self.wse[a] - self.bedelev[a]
 
+    def write_hdf5(self, obj, time, idx):
+        """[summary].
+
+        Args:
+            obj ([type]): [description]
+            time ([type]): [description]
+            idx ([type]): [description]
+        """
+        """ obj[f"x_{idx}"] = self.x
+        obj[f"y_{idx}"] = self.y
+        obj[f"z_{idx}"] = self.z
+        obj[f"bed_{idx}"] = self.bedelev
+        obj[f"htabvbed_{idx}"] = self.htabvbed
+        obj[f"wse_{idx}"] = self.wse
+        obj[f"velx_{idx}"] = self.velx
+        obj[f"vely_{idx}"] = self.vely
+        obj[f"velz_{idx}"] = self.velz """
+        obj["x"][idx, :] = self.x
+        obj["y"][idx, :] = self.y
+        obj["z"][idx, :] = self.z
+        obj["cell2D"][idx, :] = self.cellindex2d
+        obj["cell3D"][idx, :] = self.cellindex3d
+        obj["time"][idx] = time
+        # self.write_hdf5_xmf(filexmf, time, idx)
+
     def write_hdf5_xmf(self, filexmf, time, idx):
         """[summary].
 
@@ -521,16 +546,23 @@ class Particles:
                 <Time Value="{time}"/>
                 <Topology NodesPerElement="{self.nparts}" TopologyType="Polyvertex"/>
                 <Geometry GeometryType="X_Y" Name="particles">
-                    <DataItem Dimensions="{self.nparts}" Format="HDF">vtk2dtohdf5.h5:/particles/x_{idx}</DataItem>
-                    <DataItem Dimensions="{self.nparts}" Format="HDF">vtk2dtohdf5.h5:/particles/y_{idx}</DataItem>
-                </Geometry>
-                <Attribute AttributeType="Vector" Center="Node" Name="Vel">
-                    <DataItem Dimensions="1000 self.3" ItemType="Function" Function="JOIN($0, $1, $2)">
-                        <DataItem Dimensions="{self.nparts} 1" Format="HDF">vtk2dtohdf5.h5:/particles/velx_{idx}</DataItem>
-                        <DataItem Dimensions="{self.nparts} 1" Format="HDF">vtk2dtohdf5.h5:/particles/vely_{idx}</DataItem>
-                        <DataItem Dimensions="{self.nparts} 1" Format="HDF">vtk2dtohdf5.h5:/particles/velz_{idx}</DataItem>
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                            {idx} 0
+                            1 1
+                            1 {self.nparts}
+                        </DataItem>
+                        <DataItem Dimensions="100 {self.nparts}" NumberType="Float" Format="HDF">results.h5:/particles/x</DataItem>
                     </DataItem>
-                </Attribute>
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                            {idx} 0
+                            1 1
+                            1 {self.nparts}
+                        </DataItem>
+                        <DataItem Dimensions="100 {self.nparts}" NumberType="Float" Format="HDF">results.h5:/particles/y</DataItem>
+                    </DataItem>
+                </Geometry>
             </Grid>"""
         )
 
