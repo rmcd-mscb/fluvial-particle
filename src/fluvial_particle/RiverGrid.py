@@ -85,27 +85,24 @@ class RiverGrid:
             # output3d = reader3d.GetOutput()
             # scalar_range = output3d.GetScalarRange()
 
-    def write_hdf5(self, obj, name, dset, idx, filexmf, time):
+    def write_hdf5(self, obj, name, data, idx):
         """Write cell arrays to HDF5 object.
 
         Args:
             obj ([type]): [description]
             name ([type]): [description]
-            dset ([type]): [description]
+            data ([type]): [description]
             idx ([type]): [description]
-            filexmf ([type]): [description]
-            time ([type]): [description]
         """
-        obj[name][idx, :, :] = dset.reshape(self.ns - 1, self.nn - 1)
-        # Write xmf for file
-        self.write_hdf5_xmf(filexmf, time, name, obj[name].name, idx)
+        obj[name][idx, :, :] = data.reshape(self.ns - 1, self.nn - 1)
 
-    def write_hdf5_xmf(self, filexmf, time, attrname, name, idx):
+    def write_hdf5_xmf(self, filexmf, time, nsteps, attrname, name, idx):
         """Body for cell-centered time series data.
 
         Args:
             filexmf ([type]): [description]
             time ([type]): [description]
+            nsteps ([type]): [description]
             attrname ([type]): [description]
             name ([type]): [description]
             idx ([type]): [description]
@@ -123,7 +120,7 @@ class RiverGrid:
                             1 1 1
                             1 {self.ns - 1} {self.nn - 1}
                         </DataItem>
-                        <DataItem Dimensions="100 {self.ns - 1} {self.nn - 1}" Format="HDF">results.h5:{name}</DataItem>
+                        <DataItem Dimensions="{nsteps} {self.ns - 1} {self.nn - 1}" Format="HDF">cells.h5:{name}</DataItem>
                     </DataItem>
                 </Attribute>
             </Grid>"""
@@ -135,16 +132,20 @@ class RiverGrid:
         Args:
             filexmf ([type]): [description]
         """
+        # Important! For whatever reason, dimensions of the xdmf Topology and Geometry files must be switched
+        # relative to their order in both the input NumPy arrays and in the cell-centered xdmf body; can't
+        # figure out why, but this is the only permutation that works.
+        # You've tried the other permutations, don't mess with it
         filexmf.write(
             """<Xdmf Version="3.0">
             <Domain>
                 <Topology Name="Topo" TopologyType="2DSMesh" Dimensions="11 601"/>
                 <Geometry Name="Geo" GeometryType="X_Y">
                     <DataItem Name="X" Dimensions="11 601" Format="HDF">
-                        results.h5:/cells/X
+                        cells.h5:/X
                     </DataItem>
                     <DataItem Name="Y" Dimensions="11 601" Format="HDF">
-                        results.h5:/cells/Y
+                        cells.h5:/Y
                     </DataItem>
                 </Geometry>
                 <Grid GridType="Collection" CollectionType="Temporal">"""

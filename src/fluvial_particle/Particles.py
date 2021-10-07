@@ -515,29 +515,25 @@ class Particles:
             time ([type]): [description]
             idx ([type]): [description]
         """
-        """ obj[f"x_{idx}"] = self.x
-        obj[f"y_{idx}"] = self.y
-        obj[f"z_{idx}"] = self.z
-        obj[f"bed_{idx}"] = self.bedelev
-        obj[f"htabvbed_{idx}"] = self.htabvbed
-        obj[f"wse_{idx}"] = self.wse
-        obj[f"velx_{idx}"] = self.velx
-        obj[f"vely_{idx}"] = self.vely
-        obj[f"velz_{idx}"] = self.velz """
         obj["x"][idx, :] = self.x
         obj["y"][idx, :] = self.y
         obj["z"][idx, :] = self.z
+        obj["bedelev"][idx, :] = self.bedelev
+        obj["htabvbed"][idx, :] = self.htabvbed
+        obj["wse"][idx, :] = self.wse
+        obj["velvec"][idx, :, :] = np.vstack((self.velx, self.vely, self.velz)).T
         obj["cell2D"][idx, :] = self.cellindex2d
         obj["cell3D"][idx, :] = self.cellindex3d
         obj["time"][idx] = time
         # self.write_hdf5_xmf(filexmf, time, idx)
 
-    def write_hdf5_xmf(self, filexmf, time, idx):
+    def write_hdf5_xmf(self, filexmf, time, nsteps, idx):
         """[summary].
 
         Args:
             filexmf ([type]): [description]
             time ([type]): [description]
+            nsteps ([type]): [description]
             idx ([type]): [description]
         """
         filexmf.write(
@@ -545,14 +541,14 @@ class Particles:
             <Grid GridType="Uniform">
                 <Time Value="{time}"/>
                 <Topology NodesPerElement="{self.nparts}" TopologyType="Polyvertex"/>
-                <Geometry GeometryType="X_Y" Name="particles">
+                <Geometry GeometryType="X_Y_Z" Name="particles">
                     <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
                             {idx} 0
                             1 1
                             1 {self.nparts}
                         </DataItem>
-                        <DataItem Dimensions="100 {self.nparts}" NumberType="Float" Format="HDF">results.h5:/particles/x</DataItem>
+                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/x</DataItem>
                     </DataItem>
                     <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
@@ -560,9 +556,57 @@ class Particles:
                             1 1
                             1 {self.nparts}
                         </DataItem>
-                        <DataItem Dimensions="100 {self.nparts}" NumberType="Float" Format="HDF">results.h5:/particles/y</DataItem>
+                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/y</DataItem>
+                    </DataItem>
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                            {idx} 0
+                            1 1
+                            1 {self.nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/z</DataItem>
                     </DataItem>
                 </Geometry>
+                <Attribute Name="BedElevation" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {idx} 0
+                        1 1
+                        1 {self.nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/bedelev</DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="HeightAboveBed" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {idx} 0
+                        1 1
+                        1 {self.nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/htabvbed</DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="WaterSurfaceElevation" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {idx} 0
+                        1 1
+                        1 {self.nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/wse</DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="VelocityVector" AttributeType="Vector" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts} 3" Format="XML">
+                        <DataItem Dimensions="3 3" Format="XML">
+                        {idx} 0 0
+                        1 1 1
+                        1 {self.nparts} 3
+                        </DataItem>
+                        <DataItem Dimensions="{nsteps} {self.nparts} 3" Format="HDF">particles.h5:/velvec</DataItem>
+                    </DataItem>
+                </Attribute>
             </Grid>"""
         )
 
