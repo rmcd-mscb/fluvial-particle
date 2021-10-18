@@ -1,5 +1,8 @@
 """RiverGrid class module."""
+import h5py
+import numpy as np
 import vtk
+from vtk.util import numpy_support  # noqa
 
 
 class RiverGrid:
@@ -28,6 +31,33 @@ class RiverGrid:
             self.track3d = 0
         self._load_arrays
         self._build_locators
+
+    def create_hdf5(self, dimtime):
+        """Create HDF5 file for cell-centered results.
+
+        Args:
+            dimtime ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        vtkcoords = self.vtksgrid2d.GetPoints().GetData()
+        coords = numpy_support.vtk_to_numpy(vtkcoords)
+        x = coords[:, 0]
+        y = coords[:, 1]
+        x = x.reshape(self.ns, self.nn)
+        y = y.reshape(self.ns, self.nn)
+        arr = np.zeros((dimtime, self.ns - 1, self.nn - 1), dtype="f")
+        cells_h5 = h5py.File("cells.h5", "w")
+        cells_h5.create_dataset("X", (self.ns, self.nn), dtype="f", data=x)
+        cells_h5.create_dataset("Y", (self.ns, self.nn), dtype="f", data=y)
+        cells_h5.create_dataset(
+            "FractionalParticleCount",
+            (dimtime, self.ns - 1, self.nn - 1),
+            dtype="f8",
+            data=arr,
+        )
+        return cells_h5
 
     @property
     def _build_locators(self):
@@ -96,13 +126,13 @@ class RiverGrid:
         """
         obj[name][idx, :, :] = data.reshape(self.ns - 1, self.nn - 1)
 
-    def write_hdf5_xmf(self, filexmf, time, nsteps, attrname, name, idx):
+    def write_hdf5_xmf(self, filexmf, time, dimtime, attrname, name, idx):
         """Body for cell-centered time series data.
 
         Args:
             filexmf ([type]): [description]
             time ([type]): [description]
-            nsteps ([type]): [description]
+            dimtime ([type]): [description]
             attrname ([type]): [description]
             name ([type]): [description]
             idx ([type]): [description]
@@ -120,7 +150,9 @@ class RiverGrid:
                             1 1 1
                             1 {self.ns - 1} {self.nn - 1}
                         </DataItem>
-                        <DataItem Dimensions="{nsteps} {self.ns - 1} {self.nn - 1}" Format="HDF">cells.h5:{name}</DataItem>
+                        <DataItem Dimensions="{dimtime} {self.ns - 1} {self.nn - 1}" Precision="8" Format="HDF">
+                            cells.h5:{name}
+                        </DataItem>
                     </DataItem>
                 </Attribute>
             </Grid>"""

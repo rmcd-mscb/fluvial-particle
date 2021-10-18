@@ -1,4 +1,5 @@
 """Particles Class module."""
+import h5py
 import numpy as np
 import vtk
 
@@ -80,6 +81,49 @@ class Particles:
         self.diffx = lev + bx * ustarh
         self.diffy = lev + by * ustarh
         self.diffz = bz * ustarh  # lev + bz * ustarh
+
+    def create_hdf(self, dimtime, globalnparts):
+        """Create an HDF5 file to write incremental particles results.
+
+        Args:
+            dimtime (int): size of first dimension, indexes time slices
+            globalnparts (int): global number of particles, distributed across processors
+
+        Returns:
+            [type]: [description]
+        """
+        parts_h5 = h5py.File("particles.h5", "w")
+        # parts_h5 = h5py.File("particles.h5", "w", driver="mpio", comm=MPI.COMM_WORLD)  # MPI version
+        parts_h5.create_group("coords")
+        parts_h5["coords"].attrs["Description"] = "Position x,y,z of particles"
+        parts_h5["coords"].create_dataset("x", (dimtime, globalnparts), dtype="f")
+        parts_h5["coords"].create_dataset("y", (dimtime, globalnparts), dtype="f")
+        parts_h5["coords"].create_dataset("z", (dimtime, globalnparts), dtype="f")
+        parts_h5.create_dataset("bedelev", (dimtime, globalnparts), dtype="f")
+        parts_h5["bedelev"].attrs[
+            "Description"
+        ] = "Bed elevation at x,y position of particles"
+        parts_h5.create_dataset("htabvbed", (dimtime, globalnparts), dtype="f")
+        parts_h5["htabvbed"].attrs[
+            "Description"
+        ] = "Height of particle above bed elevation"
+        parts_h5.create_dataset("wse", (dimtime, globalnparts), dtype="f")
+        parts_h5["wse"].attrs[
+            "Description"
+        ] = "Water surface elevation at x,y position of particles"
+        parts_h5.create_dataset("velvec", (dimtime, globalnparts, 3), dtype="f")
+        parts_h5["velvec"].attrs["Description"] = "Velocity vector (u,v,w) of particles"
+        parts_h5.create_dataset("cell2d", (dimtime, globalnparts), dtype="i")
+        parts_h5["cell2d"].attrs[
+            "Description"
+        ] = "Index of 2D grid cell containing each particle"
+        parts_h5.create_dataset("cell3d", (dimtime, globalnparts), dtype="i")
+        parts_h5["cell3d"].attrs[
+            "Description"
+        ] = "Index of 3D grid cell containing each particle"
+        parts_h5.create_dataset("time", (dimtime, 1), dtype="f")
+        parts_h5["time"].attrs["Description"] = "Time value at which data was written"
+        return parts_h5
 
     def find_pos_in_2dcell(self, newpoint2d, cellid):
         """Find position in 2D cell, return info for interpolation.
@@ -507,104 +551,117 @@ class Particles:
             )
         self.depth[a] = self.wse[a] - self.bedelev[a]
 
-    def write_hdf5(self, obj, time, idx):
+    def write_hdf5(self, obj, time, idx, start, end, rank):
         """[summary].
 
         Args:
             obj ([type]): [description]
             time ([type]): [description]
             idx ([type]): [description]
+            start ([type]): [description]
+            end ([type]): [description]
+            rank ([type]): [description]
         """
-        obj["x"][idx, :] = self.x
-        obj["y"][idx, :] = self.y
-        obj["z"][idx, :] = self.z
-        obj["bedelev"][idx, :] = self.bedelev
-        obj["htabvbed"][idx, :] = self.htabvbed
-        obj["wse"][idx, :] = self.wse
-        obj["velvec"][idx, :, :] = np.vstack((self.velx, self.vely, self.velz)).T
-        obj["cell2D"][idx, :] = self.cellindex2d
-        obj["cell3D"][idx, :] = self.cellindex3d
-        obj["time"][idx] = time
+        obj["coords/x"][idx, start:end] = self.x
+        obj["coords/y"][idx, start:end] = self.y
+        obj["coords/z"][idx, start:end] = self.z
+        obj["bedelev"][idx, start:end] = self.bedelev
+        obj["htabvbed"][idx, start:end] = self.htabvbed
+        obj["wse"][idx, start:end] = self.wse
+        obj["velvec"][idx, start:end, :] = np.vstack(
+            (self.velx, self.vely, self.velz)
+        ).T
+        obj["cell2d"][idx, start:end] = self.cellindex2d
+        obj["cell3d"][idx, start:end] = self.cellindex3d
+        if rank == 0:
+            obj["time"][idx] = time
         # self.write_hdf5_xmf(filexmf, time, idx)
 
-    def write_hdf5_xmf(self, filexmf, time, nsteps, idx):
+    def write_hdf5_xmf(self, filexmf, time, dimtime, nparts, idx):
         """[summary].
 
         Args:
             filexmf ([type]): [description]
             time ([type]): [description]
-            nsteps ([type]): [description]
+            dimtime ([type]): [description]
+            nparts ([type]): Global number of particles (i.e. summed across processors)
             idx ([type]): [description]
         """
         filexmf.write(
             f"""
             <Grid GridType="Uniform">
                 <Time Value="{time}"/>
-                <Topology NodesPerElement="{self.nparts}" TopologyType="Polyvertex"/>
+                <Topology NodesPerElement="{nparts}" TopologyType="Polyvertex"/>
                 <Geometry GeometryType="X_Y_Z" Name="particles">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
                             {idx} 0
                             1 1
-                            1 {self.nparts}
+                            1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/x</DataItem>
+                        <DataItem Dimensions="{dimtime} {nparts}" Format="HDF">
+                            particles.h5:/coords/x
+                        </DataItem>
                     </DataItem>
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
                             {idx} 0
                             1 1
-                            1 {self.nparts}
+                            1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/y</DataItem>
+                        <DataItem Dimensions="{dimtime} {nparts}" Format="HDF">
+                            particles.h5:/coords/y
+                        </DataItem>
                     </DataItem>
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
                             {idx} 0
                             1 1
-                            1 {self.nparts}
+                            1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/z</DataItem>
+                        <DataItem Dimensions="{dimtime} {nparts}" Format="HDF">
+                            particles.h5:/coords/z
+                        </DataItem>
                     </DataItem>
                 </Geometry>
                 <Attribute Name="BedElevation" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
                         {idx} 0
                         1 1
-                        1 {self.nparts}
+                        1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/bedelev</DataItem>
+                        <DataItem Dimensions="{dimtime} {nparts}" Format="HDF">particles.h5:/bedelev</DataItem>
                     </DataItem>
                 </Attribute>
                 <Attribute Name="HeightAboveBed" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
                         {idx} 0
                         1 1
-                        1 {self.nparts}
+                        1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/htabvbed</DataItem>
+                        <DataItem Dimensions="{dimtime} {nparts}" Format="HDF">particles.h5:/htabvbed</DataItem>
                     </DataItem>
                 </Attribute>
                 <Attribute Name="WaterSurfaceElevation" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
                         {idx} 0
                         1 1
-                        1 {self.nparts}
+                        1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nsteps} {self.nparts}" Format="HDF">particles.h5:/wse</DataItem>
+                        <DataItem Dimensions="{dimtime} {nparts}" Format="HDF">particles.h5:/wse</DataItem>
                     </DataItem>
                 </Attribute>
                 <Attribute Name="VelocityVector" AttributeType="Vector" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {self.nparts} 3" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts} 3" Format="XML">
                         <DataItem Dimensions="3 3" Format="XML">
                         {idx} 0 0
                         1 1 1
-                        1 {self.nparts} 3
+                        1 {nparts} 3
                         </DataItem>
-                        <DataItem Dimensions="{nsteps} {self.nparts} 3" Format="HDF">particles.h5:/velvec</DataItem>
+                        <DataItem Dimensions="{dimtime} {nparts} 3" Format="HDF">particles.h5:/velvec</DataItem>
                     </DataItem>
                 </Attribute>
             </Grid>"""
