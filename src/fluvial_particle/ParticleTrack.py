@@ -4,6 +4,7 @@ import os
 import numpy as np
 
 import fluvial_particle.settings as settings
+from fluvial_particle.FallingParticles import FallingParticles  # noqa
 from fluvial_particle.LarvalParticles import LarvalParticles  # noqa
 from fluvial_particle.Particles import Particles  # noqa
 from fluvial_particle.RiverGrid import RiverGrid
@@ -87,7 +88,7 @@ ttime = rng.uniform(0.0, period, npart)
     npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track2D, Track3D
 ) """
 
-particles = Particles(npart, x, y, z, rng, River, Track2D, Track3D)
+particles = FallingParticles(npart, x, y, z, rng, River, radius=0.00025)
 particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
 TotTime = 0.0

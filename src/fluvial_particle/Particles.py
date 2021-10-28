@@ -573,7 +573,7 @@ class Particles:
         grpp["htabvbed"][idx, start:end] = self.htabvbed
         grpp["wse"][idx, start:end] = self.wse
         grpp["velvec"][idx, start:end, :] = np.vstack(
-            (self.velx, self.vely, self.velx)
+            (self.velx, self.vely, self.velz)
         ).T
         grpp["cellidx2d"][idx, start:end] = self.cellindex2d
         grpp["cellidx3d"][idx, start:end] = self.cellindex3d
