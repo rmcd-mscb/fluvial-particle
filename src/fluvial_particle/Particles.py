@@ -82,19 +82,20 @@ class Particles:
         self.diffy = lev + by * ustarh
         self.diffz = bz * ustarh  # lev + bz * ustarh
 
-    def create_hdf(self, dimtime, globalnparts, fname="particles.h5"):
+    def create_hdf(self, dimtime, globalnparts, comm=None, fname="particles.h5"):
         """Create an HDF5 file to write incremental particles results.
 
         Args:
             dimtime (int): size of first dimension, indexes time slices
             globalnparts (int): global number of particles, distributed across processors
+            comm (typ): [d]
             fname (string): name of the HDF5 file
 
         Returns:
             [type]: [description]
         """
-        parts_h5 = h5py.File(fname, "w")
-        # parts_h5 = h5py.File(fname, "w", driver="mpio", comm=MPI.COMM_WORLD)  # MPI version
+        # parts_h5 = h5py.File(fname, "w")
+        parts_h5 = h5py.File(fname, "w", driver="mpio", comm=comm)  # MPI version
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
         grpc.create_dataset("x", (dimtime, globalnparts), dtype="f")

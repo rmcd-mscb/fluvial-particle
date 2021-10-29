@@ -2,6 +2,7 @@
 import os
 
 import numpy as np
+from mpi4py import MPI
 
 import fluvial_particle.settings as settings
 from fluvial_particle.FallingParticles import FallingParticles  # noqa
@@ -9,7 +10,8 @@ from fluvial_particle.LarvalParticles import LarvalParticles  # noqa
 from fluvial_particle.Particles import Particles  # noqa
 from fluvial_particle.RiverGrid import RiverGrid
 
-# from mpi4py import MPI
+# import sys
+# sys.path.insert(0, "../")
 
 
 # Some Variables
@@ -61,11 +63,11 @@ npart = 300  # number of particles per processor
 npart = settings.NumPart
 
 # # Get rank, number of processors, global number of particles, and local slice indices
-# comm = MPI.COMM_WORLD
-rank = 0  # comm.Get_rank()
-size = 1  # comm.Get_size()
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 globalnparts = npart * size  # total number of particles across processors
-start = rank * globalnparts  # slice starting index for HDF5 file
+start = rank * npart  # slice starting index for HDF5 file
 end = start + npart  # slice ending index (non-inclusive) for HDF5 file
 
 xstart, ystart, zstart = settings.StartLoc
@@ -88,7 +90,7 @@ ttime = rng.uniform(0.0, period, npart)
     npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track2D, Track3D
 ) """
 
-particles = FallingParticles(npart, x, y, z, rng, River, radius=0.00025)
+particles = FallingParticles(npart, x, y, z, rng, River, radius=0.0001)
 particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
 TotTime = 0.0
@@ -106,11 +108,11 @@ os.chdir(settings.out_dir)
 # Find total number of possible printing steps
 dimtime = np.ceil(EndTime / (dt * print_inc)).astype("int")
 # Create HDF5 particles dataset
-parts_h5 = particles.create_hdf(dimtime, globalnparts)
-# parts_h5 = Particles.create_hdf(dimtime, globalnparts, comm)  # MPI version
+# parts_h5 = particles.create_hdf(dimtime, globalnparts)
+parts_h5 = particles.create_hdf(dimtime, globalnparts, comm=comm)  # MPI version
 # end COLLECTIVE
 # MPI Barrier
-
+comm.Barrier()
 h5pyidx = 0
 while TotTime <= EndTime:  # noqa C901
     # Increment counters, reset counter arrays
@@ -134,7 +136,7 @@ while TotTime <= EndTime:  # noqa C901
         # MPI version:
         particles.write_hdf5(parts_h5, h5pyidx, start, end, TotTime, rank)
         h5pyidx += 1
-
+comm.Barrier()
 # Write xml files and cumulative cell counters
 # ROOT processor only
 if rank == 0:
@@ -164,7 +166,7 @@ if rank == 0:
         cell2d = grpp["cellidx2d"][i, :]
         cell3d = grpp["cellidx3d"][i, :]
         t = t.item(0)  # this returns a python scalar, for use in f-strings
-        particles.write_hdf5_xmf(parts_xmf, t, dimtime, npart, i)
+        particles.write_hdf5_xmf(parts_xmf, t, dimtime, globalnparts, i)
 
         PartInNSCellPTime[:] = 0
         NumPartIn3DCell[:] = 0
@@ -224,7 +226,7 @@ if rank == 0:
     cells_h5.close()
 # end ROOT section
 # the preceeding section could be done on several processors, split over the first index (time)
-
+comm.Barrier()
 # MPI Barrier
 
 # COLLECTIVE file close
