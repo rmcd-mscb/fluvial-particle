@@ -81,9 +81,9 @@ out_3d_dir = "Sim3D"
 # out_part = 'NoStrmLnCurv_185cms2d1_part.vtk'
 out_part = "Result_2D_Part.vtk"
 
-file_name_3da = "/home/aprescott/fluvparticle/data/Result_FM_MEander_1_long_3D1_new.vtk"
-file_name_2da = "/home/aprescott/fluvparticle/data/Result_FM_MEander_1_long_2D1.vtk"
-out_dir = r"/home/aprescott/fluvparticle/output"
+file_name_3da = "/home/aprescott/repositories/fluvparticle/data/Result_FM_MEander_1_long_3D1_new.vtk"
+file_name_2da = "/home/aprescott/repositories/fluvparticle/data/Result_FM_MEander_1_long_2D1.vtk"
+out_dir = r"/home/aprescott/repositories/fluvparticle/output"
 
 
 def printtimes():

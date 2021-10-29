@@ -30,7 +30,6 @@ test_requirements = [
 setup(
     author="Richard McDonald",
     author_email="rmcd@usgs.gov",
-    python_requires=">=3.8",
     classifiers=[
         "Development Status :: 1 - Planning",
         "Intended Audience :: Developers",
