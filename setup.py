@@ -42,7 +42,8 @@ setup(
     description="Lagrangian particle-tracking for fluvial environments",
     entry_points={
         "console_scripts": [
-            "fluvial-particle=fluvial_particle.__main__:main",
+            "fluvial_particle=fluvial_particle:track_serial",
+            "fluvial_particle_mpi=fluvial_particle:track_mpi"
         ],
     },
     install_requires=requirements,
