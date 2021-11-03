@@ -19,12 +19,12 @@ class RiverGrid:
         self.vtksgrid2d = vtk.vtkStructuredGrid()
         self._fname2d = filename2d
         self._fname3d = filename3d
-        self._read_2d_data
+        self._read_2d_data()
         if track3d:
             self.track3d = 1
             self.vtksgrid3d = vtk.vtkStructuredGrid()
             if filename3d is not None:
-                self._read_3d_data
+                self._read_3d_data()
             else:
                 print("no 3d filename provided")
             self.ns, self.nn, self.nz = self.vtksgrid3d.GetDimensions()
@@ -35,8 +35,8 @@ class RiverGrid:
             self.ns, self.nn, self.nz = self.vtksgrid2d.GetDimensions()
             self.nsc = self.ns - 1
             self.nnc = self.nn - 1
-        self._load_arrays
-        self._build_locators
+        self._load_arrays()
+        self._build_locators()
 
     def create_hdf5(self, dimtime, time):
         """Create HDF5 file for cell-centered results.
@@ -88,7 +88,6 @@ class RiverGrid:
             )
         return cells_h5
 
-    @property
     def _build_locators(self):
         """Build Static Cell Locators (thread-safe)."""
         self.CellLocator2D = vtk.vtkStaticCellLocator()
@@ -102,7 +101,6 @@ class RiverGrid:
             # CellLocator3D.SetTolerance(0.000000001)
             self.CellLocator3D.BuildLocator()
 
-    @property
     def _load_arrays(self):
         """Load 2D and 3D structured grid arrays."""
         self.WSE_2D = self.vtksgrid2d.GetPointData().GetScalars("WaterSurfaceElevation")
@@ -117,7 +115,6 @@ class RiverGrid:
         if self.track3d:
             self.VelocityVec3D = self.vtksgrid3d.GetPointData().GetScalars("Velocity")
 
-    @property
     def _read_2d_data(self):
         """Read 2D structured grid data file."""
         # Assert filename???
@@ -129,7 +126,6 @@ class RiverGrid:
         # output2d = reader2d.GetOutput()
         # scalar_range = output2d.GetScalarRange()
 
-    @property
     def _read_3d_data(self):
         """Read 3D structured grid data file."""
         # Assert filename???

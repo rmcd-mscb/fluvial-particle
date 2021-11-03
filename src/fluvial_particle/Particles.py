@@ -205,7 +205,7 @@ class Particles:
         """
         # ASSERT check that x,y are within the mesh domain
         # ASSERT check that frac in (epsilon, 1-epsilon)
-        self.interp_fields
+        self.interp_fields()
         self.z = self.bedelev + frac * self.depth
 
     def interp_cell_value(self, weights, idlist1, numpts, valarray):
@@ -226,7 +226,7 @@ class Particles:
 
         return tmpval
 
-    @property
+    # @property
     def interp_field_3d(self):
         """Interpolate 3D velocity field at current particles' positions."""
         idlist1 = vtk.vtkIdList()
@@ -293,7 +293,7 @@ class Particles:
                 for j in range(vtkpts.GetNumberOfPoints()):
                 print(vtkpts.GetPoint(j)) """
 
-    @property
+    # @property
     def interp_fields(self):
         """Interpolate mesh fields at current particles' positions."""
         # Find current location in 2D grid and interpolate 2D fields
@@ -331,7 +331,7 @@ class Particles:
         if self.track3d:
             self.normdepth = (self.z - self.bedelev) / self.depth
             # Get 3D Velocity Components
-            self.interp_field_3d
+            self.interp_field_3d()
 
     def interp_vel2d_value(self, weights, idlist1, numpts):
         """Interpolate 2D velocity vector at a point.

@@ -6,39 +6,64 @@ __version__ = "0.0.1-dev0"
 
 
 """ParticleTrack."""
+from datetime import timedelta
 import os
-from os import getcwd
-
+from os import getcwd, getpid
+import time
 import numpy as np
 import argparse
 from .settings import settings
-from .FallingParticles import FallingParticles  # noqa
-from .LarvalParticles import LarvalParticles  # noqa
-from .Particles import Particles  # noqa
+from .FallingParticles import FallingParticles
+from .LarvalParticles import LarvalParticles
+from .Particles import Particles
 from .RiverGrid import RiverGrid
 
 def checkCommandArguments():
     """Check the users command line arguments. """
-    import warnings
-    # warnings.filterwarnings('error')
-
     Parser = argparse.ArgumentParser(description="fluvial_particle", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     Parser.add_argument('settings_file', help='User settings file')
     Parser.add_argument('output_directory', help='Output directory for results')
-    # Parser.add_argument('--seed', dest='seed', type=int, default=None, help='Specify a single integer to fix the seed of the random number generator. Only used in serial mode.')
+    Parser.add_argument('--seed', dest='seed', type=int, default=None, help='Specify a single integer to fix the seed of the random number generator. Only used in serial mode.')
 
     args = Parser.parse_args()
 
     return args.settings_file, args.output_directory
 
 
-def simulate(settings, output_directory, comm=None):
+def get_prng(timer):
+    """Generate a random seed using time and the process id
+
+    Returns
+    -------
+    seed : int
+        The seed on each core
+
+    """
+    seed = np.int64(np.abs(((timer()*181)*((getpid()-83)*359))%104729))
+
+    print('Using seed {}'.format(seed), flush=True)
+
+    prng = np.random.RandomState(seed)
+    return prng
+
+def simulate(settings, output_directory, timer, comm=None):
+
+    t0 = timer()
+
+    # Get rank, number of processors, global number of particles, and local slice indices
+    rank = 0
+    size = 1
+    master = rank == 0
+    if not comm is None:
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+
+    if master:
+        print("Beginning simulation", flush=True)
+
     # Some Variables
-    # EndTime = 14400  # end time of simulation
     EndTime = settings['SimTime']
-    # dt = 0.05  # dt of simulation
     dt = settings['dt']
-    # min_depth = 0.01  # Minimum depth particles can enter]
     min_depth = settings['min_depth']
 
     lev = settings['LEV']  # lateral eddy viscosity
@@ -52,8 +77,6 @@ def simulate(settings, output_directory, comm=None):
     beta_z = settings['beta_z']
 
     # 2D or 3D particle tracking
-    # Track2D = 0
-    # Track3D = 1
     Track2D = settings['Track2D']
     Track3D = settings['Track3D']
     print_inc = settings['PrintAtTick']
@@ -73,96 +96,97 @@ def simulate(settings, output_directory, comm=None):
     nsc = River.nsc
     num3dcells = River.vtksgrid3d.GetNumberOfCells()
     num2dcells = River.vtksgrid2d.GetNumberOfCells()
-    print(num3dcells, num2dcells)
 
     # Initialize particles with initial location and attach RiverGrid
     # npart = 300  # number of particles per processor
     npart = settings['NumPart']
 
-    # Get rank, number of processors, global number of particles, and local slice indices
-    rank = 0
-    size = 1
-    if not comm is None:
-        rank = comm.Get_rank()
-        size = comm.Get_size()
     globalnparts = npart * size  # total number of particles across processors
     start = rank * npart  # slice starting index for HDF5 file
     end = start + npart  # slice ending index (non-inclusive) for HDF5 file
+
+    if master:
+        if size > 1:
+            s = "Simulating {} particles, {} on each rank".format(globalnparts, npart)
+        else:
+            s = "Simulating {} particles".format(globalnparts)
+        print(s, flush=True)
 
     xstart, ystart, zstart = settings['StartLoc']
     x = np.full(npart, fill_value=xstart, dtype=np.float64)
     y = np.full(npart, fill_value=ystart, dtype=np.float64)
     z = np.full(npart, fill_value=zstart, dtype=np.float64)
-    rng = np.random.default_rng(rank)
+
+    rng = get_prng(timer)
     # confirmed in test.py this generates unique rands to each proc
     # Other parallel random options available: https://numpy.org/devdocs/reference/random/parallel.html
 
     # Sinusoid properties for larval drift subclass
-    # amplitude = 1.0
-    # period = 60.0
-    # min_elev = 0.5
     amplitude = settings['amplitude']
     period = settings['period']
     min_elev = settings['min_elev']
     ttime = rng.uniform(0.0, period, npart)
-    """ particles = LarvalParticles(
-        npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track2D, Track3D
-    ) """
+    # """ particles = LarvalParticles(
+    #     npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track2D, Track3D
+    # ) """
 
     particles = FallingParticles(npart, x, y, z, rng, River, radius=0.0001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
-    TotTime = 0.0
-    count_index = 0
+    times = np.arange(0.0, EndTime+dt, dt)
+    n_times = times.size
+
+    # HDF5 file writing initialization protocol
+    # In MPI, this whole section will need to be COLLECTIVE
+    # Find total number of possible printing steps
+    dimtime = np.int32(np.ceil(times.size / dt))
+
+    # Create HDF5 particles dataset
+    parts_h5 = particles.create_hdf(dimtime, globalnparts, fname=output_directory+'//particles.h5', comm=comm)  # MPI version
+    
+    if not comm is None:
+        comm.Barrier()
+
+    t0 = timer()
+
+    for i in range(n_times):  # noqa C901
+        # Generate new random numbers
+        particles.gen_rands()
+        # Interpolate RiverGrid field data to particles
+        particles.interp_fields()
+        # Calculate dispersion terms
+        particles.calc_diffusion_coefs(lev, beta_x, beta_y, beta_z)
+        # Move particles (checks on new position done internally)
+        particles.move_all(alpha, min_depth, times[i], dt)
+
+        # Write to HDF5
+        if i % print_inc == 0:
+            particles.write_hdf5(parts_h5, np.int32(i/print_inc), start, end, times[i], rank)
+
+            e = timer() - t0
+            elapsed = str(timedelta(seconds=e))
+
+            if i == 0:
+                print("Remaining time steps {}/{} || Elapsed Time: {} h:m:s".format(n_times-i-1, n_times, elapsed), flush=True)
+            else:
+                time_per_time = np.float64(e / i)
+                eta = str(timedelta(seconds=((n_times - i)*time_per_time)))
+                print("Remaining time steps {}/{} || Elapsed Time: {} h:m:s || ETA {} h:m:s".format(n_times-i-1, n_times, elapsed, eta), flush=True)
+
+    if not comm is None:
+        comm.Barrier()
+
+    if master:
+        print("Finished simulation in {} h:m:s".format(str(timedelta(seconds=timer()-t0)), flush=True))
+
+    # Write xml files and cumulative cell counters
+    # ROOT processor only
     NumPartInCell = np.zeros(num2dcells, dtype=np.int64)
     NumPartIn3DCell = np.zeros(num3dcells, dtype=np.int64)
     PartTimeInCell = np.zeros(num2dcells)
     TotPartInCell = np.zeros(num2dcells, dtype=np.int64)
     PartInNSCellPTime = np.zeros(nsc, dtype=np.int64)
 
-    # os.chdir(settings['out_dir)
-
-    # HDF5 file writing initialization protocol
-    # In MPI, this whole section will need to be COLLECTIVE
-    # Find total number of possible printing steps
-    dimtime = np.ceil(EndTime / (dt * print_inc)).astype("int")
-    # Create HDF5 particles dataset
-    # parts_h5 = particles.create_hdf(dimtime, globalnparts)
-    parts_h5 = particles.create_hdf(dimtime, globalnparts, fname=output_directory+'//particles.h5', comm=comm)  # MPI version
-    # end COLLECTIVE
-    # MPI Barrier
-    if not comm is None:
-        comm.Barrier()
-
-    h5pyidx = 0
-    while TotTime <= EndTime:  # noqa C901
-        # Increment counters, reset counter arrays
-        TotTime = TotTime + dt
-        count_index += 1
-        print(TotTime, count_index)
-
-        # Generate new random numbers
-        particles.gen_rands()
-        # Interpolate RiverGrid field data to particles
-        particles.interp_fields
-        # Calculate dispersion terms
-        particles.calc_diffusion_coefs(lev, beta_x, beta_y, beta_z)
-        # Move particles (checks on new position done internally)
-        particles.move_all(alpha, min_depth, TotTime, dt)
-
-        # Print occasionally
-        if count_index % print_inc == 0:
-            # INDEPENDENT write to HDF5
-            # particles.write_hdf5(parts_h5, TotTime, h5pyidx)
-            # MPI version:
-            particles.write_hdf5(parts_h5, h5pyidx, start, end, TotTime, rank)
-            h5pyidx += 1
-
-    if not comm is None:
-        comm.Barrier()
-
-    # Write xml files and cumulative cell counters
-    # ROOT processor only
     if rank == 0:
         # Create and open xdmf files
         cells1d_xmf = open(output_directory + "//cells_onedim.xmf", "w")
@@ -182,10 +206,7 @@ def simulate(settings, output_directory, comm=None):
 
         # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
         # write the arrays to the cells HDF5, and write metadata to the XDMF files
-        for i in range(h5pyidx):
-            x = grpc["x"][i, :]
-            y = grpc["y"][i, :]
-            z = grpc["z"][i, :]
+        for i in range(dimtime):
             t = time[i]
             cell2d = grpp["cellidx2d"][i, :]
             cell3d = grpp["cellidx3d"][i, :]
@@ -255,6 +276,9 @@ def simulate(settings, output_directory, comm=None):
     # COLLECTIVE file close
     parts_h5.close()
 
+    if master:
+        print("Finished in {} h:m:s".format(str(timedelta(seconds=timer()-t0)), flush=True))
+
 
 def track_serial():
 
@@ -263,7 +287,7 @@ def track_serial():
 
     options = settings.read(settings_file)
 
-    simulate(options, output_directory)
+    simulate(options, output_directory, timer=time.time)
 
 def track_mpi():
 
@@ -275,4 +299,4 @@ def track_mpi():
 
     options = settings.read(settings_file)
 
-    simulate(options, output_directory, comm=comm)
+    simulate(options, output_directory, comm=comm, timer=MPI.Wtime)
