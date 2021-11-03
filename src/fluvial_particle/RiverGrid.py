@@ -38,7 +38,7 @@ class RiverGrid:
         self._load_arrays()
         self._build_locators()
 
-    def create_hdf5(self, dimtime, time):
+    def create_hdf5(self, dimtime, time, fname="cells.h5"):
         """Create HDF5 file for cell-centered results.
 
         Args:
@@ -62,7 +62,7 @@ class RiverGrid:
         z = z.reshape(self.nz, self.nn, self.ns)
         zeros = np.zeros((self.ns - 1,), dtype="f")
         arr = np.zeros((self.ns - 1, self.nn - 1, self.nz - 1), dtype="f")
-        cells_h5 = h5py.File("cells.h5", "w")
+        cells_h5 = h5py.File(fname, "w")
         grpg = cells_h5.create_group("grid")
         grp1 = cells_h5.create_group("cells1d")
         grp2 = cells_h5.create_group("cells2d")

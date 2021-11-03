@@ -39,7 +39,7 @@ def get_prng(timer):
         The seed on each core
 
     """
-    seed = np.int64(np.abs(((timer()*181)*((getpid()-83)*359))%104729))
+    seed = 0  # np.int64(np.abs(((timer()*181)*((getpid()-83)*359))%104729))
 
     print('Using seed {}'.format(seed), flush=True)
 
@@ -139,7 +139,7 @@ def simulate(settings, output_directory, timer, comm=None):
     # HDF5 file writing initialization protocol
     # In MPI, this whole section will need to be COLLECTIVE
     # Find total number of possible printing steps
-    dimtime = np.int32(np.ceil(times.size / dt))
+    dimtime = np.int32(np.ceil(times.size / print_inc))
 
     # Create HDF5 particles dataset
     parts_h5 = particles.create_hdf(dimtime, globalnparts, fname=output_directory+'//particles.h5', comm=comm)  # MPI version
@@ -202,7 +202,7 @@ def simulate(settings, output_directory, timer, comm=None):
         grpc = parts_h5["coordinates"]
         grpp = parts_h5["properties"]
         time = grpc["time"]
-        cells_h5 = River.create_hdf5(dimtime, time)
+        cells_h5 = River.create_hdf5(dimtime, time, output_directory + "//cells.h5")
 
         # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
         # write the arrays to the cells HDF5, and write metadata to the XDMF files
