@@ -1,55 +1,23 @@
 
 
-file_name_3da = "Result_FM_MEander_1_long_3D1_new.vtk"
-file_name_2da = "Result_FM_MEander_1_long_2D1.vtk"
+file_name_3da = "~/Meander_269cms_Result_3D_lev_250_1.vtk"
+file_name_2da = "~/Meander_269cms_Result_2D_lev_250_1.vtk"
 
 
 # Prod
-SimTime = 100.0
+SimTime = 129600.0
 dt = 0.25
-avg_depth = 0.5
-avg_bed_shearstress = 6
-avg_shear_dev = 0.004
 min_depth = 0.02
 
-# vertical movement
-# vert_type = int
-# vert_type = 0: vertConstDepth
-# vert_type = 1: vert_sinusoid
-# vert_type = 2: vert_sinusoid_bottom
-# vert_type = 3: vert_sinusoid_surface
-# vert_type = 4: vert_sawtooth
-# vert_type = 5: vert_random_walk
-
-vert_type = 5
-
-# DispersionType = 1 Local ku*h/6
-# DispersionType = 2 Local ku*h/6 + LEV
-# DispersionType = 3 Reach avg ku*h/6
-# DispersionType = 4 Reach avg ku*h/6 + LEV
-DispersionType = 2
-
-LEV = 0.0025
+LEV = 0.25
 
 beta_x = 0.067
 beta_y = 0.067
 beta_z = 0.067
 
-NumPart = 1000
+NumPart = 10000
 
-# A Tick = seconds * delta so  7200 ticks ==  1 hour
-# A Tick = seconds * delta so 14400 ticks ==  2 hour
-# A Tick = seconds * delta so 28800 ticks ==  4 hour 6 per Day
-
-# A Tick = seconds * delta so 57600 ticks ==  8 hour 3 per Day
-# A Tick = seconds * delta so  2400 ticks == 20 mins 3 per hour
-CheckAtTick = 2
-
-# A Tick = seconds * delta so   20 ticks ==  10 seconds
-# A Tick = seconds * delta so 1200 ticks == 600 seconds == 10 minutes
-PrintAtTick = 4
-
-delta = 0.1
+PrintAtTick = 800
 
 # yo-yo paramters
 amplitude = 1.0
@@ -57,22 +25,8 @@ period = 60.0
 min_elev = 0.01
 
 # Start Locations
-StartLoc = (6.14, 9.09, 10.3)
-# StartLoc = (4645,-3163,774)
-# StartLoc = (1819,-4963,776)
-# StartLoc = (289,-236,765)
+StartLoc = (490.0, -4965.0, 530.0)
+# StartLoc = (6.14, 9.09, 10.3)
 
 Track2D = 0
 Track3D = 1
-
-# Source Files
-# A2DFile = 'NoStrmLnCurv_185cms2d1.vtk'
-# A3DFile = 'NoStrmLnCurv_185cms3d1.vtk'
-A2DFile = "Result_2D_1.vtk"
-A3DFile = "Result_3D_1.vtk"
-
-
-out_2d_dir = "Sim2D"
-out_3d_dir = "Sim3D"
-# out_part = 'NoStrmLnCurv_185cms2d1_part.vtk'
-out_part = "Result_2D_Part.vtk"
