@@ -164,15 +164,16 @@ def simulate(settings, output_directory, timer, comm=None):
         if i % print_inc == 0:
             particles.write_hdf5(parts_h5, np.int32(i/print_inc), start, end, times[i], rank)
 
-            e = timer() - t0
-            elapsed = str(timedelta(seconds=e))
+            if master:
+                e = timer() - t0
+                elapsed = str(timedelta(seconds=e))
 
-            if i == 0:
-                print("Remaining time steps {}/{} || Elapsed Time: {} h:m:s".format(n_times-i-1, n_times, elapsed), flush=True)
-            else:
-                time_per_time = np.float64(e / i)
-                eta = str(timedelta(seconds=((n_times - i)*time_per_time)))
-                print("Remaining time steps {}/{} || Elapsed Time: {} h:m:s || ETA {} h:m:s".format(n_times-i-1, n_times, elapsed, eta), flush=True)
+                if i == 0:
+                    print("Remaining time steps {}/{} || Elapsed Time: {} h:m:s".format(n_times-i-1, n_times, elapsed), flush=True)
+                else:
+                    time_per_time = np.float64(e / i)
+                    eta = str(timedelta(seconds=((n_times - i)*time_per_time)))
+                    print("Remaining time steps {}/{} || Elapsed Time: {} h:m:s || ETA {} h:m:s".format(n_times-i-1, n_times, elapsed, eta), flush=True)
 
     if not comm is None:
         comm.Barrier()
