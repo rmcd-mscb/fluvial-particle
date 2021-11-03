@@ -39,7 +39,7 @@ def get_prng(timer):
         The seed on each core
 
     """
-    seed = 0  # np.int64(np.abs(((timer()*181)*((getpid()-83)*359))%104729))
+    seed = np.int64(np.abs(((timer()*181)*((getpid()-83)*359))%104729))
 
     print('Using seed {}'.format(seed), flush=True)
 
