@@ -53,10 +53,11 @@ def simulate(settings, output_directory, timer, comm=None):
     # Get rank, number of processors, global number of particles, and local slice indices
     rank = 0
     size = 1
-    master = rank == 0
     if not comm is None:
         rank = comm.Get_rank()
         size = comm.Get_size()
+
+    master = rank == 0
 
     if master:
         print("Beginning simulation", flush=True)
@@ -187,7 +188,7 @@ def simulate(settings, output_directory, timer, comm=None):
     TotPartInCell = np.zeros(num2dcells, dtype=np.int64)
     PartInNSCellPTime = np.zeros(nsc, dtype=np.int64)
 
-    if rank == 0:
+    if master:
         # Create and open xdmf files
         cells1d_xmf = open(output_directory + "//cells_onedim.xmf", "w")
         cells2d_xmf = open(output_directory + "//cells_twodim.xmf", "w")
