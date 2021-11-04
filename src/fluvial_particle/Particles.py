@@ -94,12 +94,11 @@ class Particles:
         Returns:
             [type]: [description]
         """
-        # parts_h5 = h5py.File(fname, "w")
         if comm is None:
             parts_h5 = h5py.File(fname, "w")  # Serial version
         else:
             parts_h5 = h5py.File(fname, "w", driver="mpio", comm=comm)  # MPI version
-            
+
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
         grpc.create_dataset("x", (dimtime, globalnparts), dtype="f")

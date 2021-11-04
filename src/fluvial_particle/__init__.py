@@ -9,6 +9,7 @@ __version__ = "0.0.1-dev0"
 from datetime import timedelta
 import os
 from os import getcwd, getpid
+import pathlib
 import time
 import numpy as np
 import argparse
@@ -286,6 +287,13 @@ def track_serial():
 
     settings_file, output_directory = checkCommandArguments()
     # sys.path.append(getcwd())
+
+    inputfile = pathlib.Path(settings_file)
+    if not inputfile.exists():
+        raise Exception(f"Cannot find settings file {inputfile}")
+    outdir = pathlib.Path(output_directory)
+    if not outdir.is_dir():
+        raise Exception(f"Output directory {outdir} does not exist")
 
     options = settings.read(settings_file)
 

@@ -7,5 +7,6 @@ dependencies:
   - pip
   # Production dependencies defined here (as well as in requirements.txt)
   - click
+  - h5py
   - vtk
   - numpy
