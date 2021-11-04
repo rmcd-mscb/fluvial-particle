@@ -1,4 +1,5 @@
 """RiverGrid class module."""
+import pathlib
 import h5py
 import numpy as np
 import vtk
@@ -23,10 +24,7 @@ class RiverGrid:
         if track3d:
             self.track3d = 1
             self.vtksgrid3d = vtk.vtkStructuredGrid()
-            if filename3d is not None:
-                self._read_3d_data()
-            else:
-                print("no 3d filename provided")
+            self._read_3d_data()
             self.ns, self.nn, self.nz = self.vtksgrid3d.GetDimensions()
             self.nsc = self.ns - 1
             self.nnc = self.nn - 1
@@ -44,6 +42,7 @@ class RiverGrid:
         Args:
             dimtime ([type]): [description]
             time ([type]): [description]
+            fname ([type]): [description]
 
         Returns:
             [type]: [description]
@@ -117,7 +116,10 @@ class RiverGrid:
 
     def _read_2d_data(self):
         """Read 2D structured grid data file."""
-        # Assert filename???
+        # Check that input file exists
+        inputfile = pathlib.Path(self._fname2d)
+        if not inputfile.exists():
+            raise Exception(f"Cannot find 2D input file {inputfile}")
 
         reader2d = vtk.vtkStructuredGridReader()
         reader2d.SetFileName(self._fname2d)
@@ -128,14 +130,14 @@ class RiverGrid:
 
     def _read_3d_data(self):
         """Read 3D structured grid data file."""
-        # Assert filename???
-        if self.track3d:
-            reader3d = vtk.vtkStructuredGridReader()
-            reader3d.SetFileName(self._fname3d)
-            reader3d.SetOutput(self.vtksgrid3d)
-            reader3d.Update()
-            # output3d = reader3d.GetOutput()
-            # scalar_range = output3d.GetScalarRange()
+        # Check that input file exists
+        inputfile = pathlib.Path(self._fname3d)
+        if not inputfile.exists():
+            raise Exception(f"Cannot find 3D input file {inputfile}")
+        reader3d = vtk.vtkStructuredGridReader()
+        reader3d.SetFileName(self._fname3d)
+        reader3d.SetOutput(self.vtksgrid3d)
+        reader3d.Update()
 
     def update_velocity_fields(self, tidx):
         """Updates time-dependent velocity vtk arrays.
