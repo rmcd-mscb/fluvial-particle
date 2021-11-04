@@ -120,13 +120,17 @@ class RiverGrid:
         inputfile = pathlib.Path(self._fname2d)
         if not inputfile.exists():
             raise Exception(f"Cannot find 2D input file {inputfile}")
-
+        # Read 2D grid
         reader2d = vtk.vtkStructuredGridReader()
         reader2d.SetFileName(self._fname2d)
         reader2d.SetOutput(self.vtksgrid2d)
         reader2d.Update()
-        # output2d = reader2d.GetOutput()
-        # scalar_range = output2d.GetScalarRange()
+        # Check for required field arrays
+        a = self.vtksgrid2d.GetAttributesAsFieldData(0)  # 0 for point data
+        names = [a.GetArrayName(i) for i in range(a.GetNumberOfArrays())]
+        missing = [x for x in self.required_keys2d if x not in names]
+        if len(missing) > 0:
+            raise ValueError(f"Missing {missing} from the user parameter file")
 
     def _read_3d_data(self):
         """Read 3D structured grid data file."""
@@ -134,10 +138,30 @@ class RiverGrid:
         inputfile = pathlib.Path(self._fname3d)
         if not inputfile.exists():
             raise Exception(f"Cannot find 3D input file {inputfile}")
+        # Read 2D grid
         reader3d = vtk.vtkStructuredGridReader()
         reader3d.SetFileName(self._fname3d)
         reader3d.SetOutput(self.vtksgrid3d)
         reader3d.Update()
+        # Check for required field arrays
+        a = self.vtksgrid3d.GetAttributesAsFieldData(0)  # 0 for point data
+        names = [a.GetArrayName(i) for i in range(a.GetNumberOfArrays())]
+        missing = [x for x in self.required_keys3d if x not in names]
+        if len(missing) > 0:
+            raise ValueError(f"Missing {missing} from the user parameter file")
+
+    @property
+    def required_keys2d(self):
+        return ("Elevation",
+                "IBC",
+                "ShearStress (magnitude)",
+                "Velocity",
+                "WaterSurfaceElevation"
+                )
+
+    @property
+    def required_keys3d(self):
+        return ("Velocity",)
 
     def update_velocity_fields(self, tidx):
         """Updates time-dependent velocity vtk arrays.
