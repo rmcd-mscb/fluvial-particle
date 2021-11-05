@@ -29,5 +29,4 @@ min_elev = 0.01
 StartLoc = (490.0, -4965.0, 530.0)
 # StartLoc = (6.14, 9.09, 10.3)
 
-Track2D = 0
 Track3D = 1

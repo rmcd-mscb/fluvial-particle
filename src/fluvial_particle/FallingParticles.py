@@ -17,7 +17,6 @@ class FallingParticles(Particles):
         rho=2650,
         c1=20,
         c2=1.1,
-        track2d=0,
         track3d=1,
     ):
         """[Summary].
@@ -33,10 +32,9 @@ class FallingParticles(Particles):
             rho (float): density of the particles [kg/m^3]
             c1 (float): dimensionless viscous drag coefficient
             c2 (float): dimensionless turbulent wake drag coefficient
-            track2d (bool): 1 if 2D model run, 0 else
             track3d (bool): 1 if 3D model run, 0 else
         """
-        super().__init__(nparts, x, y, z, rng, mesh, track2d, track3d)
+        super().__init__(nparts, x, y, z, rng, mesh, track3d)
         self.radius = radius
         self.rho = rho
         self.c1 = c1

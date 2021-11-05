@@ -19,7 +19,6 @@ class LarvalParticles(Particles):
         period,
         min_elev,
         ttime,
-        track2d=0,
         track3d=1,
     ):
         """[summary].
@@ -35,10 +34,9 @@ class LarvalParticles(Particles):
             period ([type]): [description]
             min_elev ([type]): [description]
             ttime ([type]): [description]
-            track2d (int, optional): [description]. Defaults to 0.
             track3d (int, optional): [description]. Defaults to 1.
         """
-        super().__init__(nparts, x, y, z, rng, mesh, track2d, track3d)
+        super().__init__(nparts, x, y, z, rng, mesh, track3d)
         self.amp = amp
         self.period = period
         self.min_elev = min_elev

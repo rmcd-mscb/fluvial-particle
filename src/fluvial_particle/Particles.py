@@ -7,7 +7,7 @@ import vtk
 class Particles:
     """A class of particles, each with a velocity, size, and mass."""
 
-    def __init__(self, nparts, x, y, z, rng, mesh, track2d=0, track3d=1):
+    def __init__(self, nparts, x, y, z, rng, mesh, track3d=1):
         """Initialize instance of class Particles.
 
         Args:
@@ -17,8 +17,7 @@ class Particles:
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            track2d (bool): 1 if 2D model run, 0 else
-            track3d (bool): 1 if 3D model run, 0 else
+            track3d (bool): 1 if 3D model run, 0 if 2D model run
         """
         self.nparts = nparts
         self.x = np.copy(x)
@@ -26,9 +25,7 @@ class Particles:
         self.z = np.copy(z)
         self.rng = rng
         self.mesh = mesh
-        self.track2d = track2d
         self.track3d = track3d
-        # Add an XOR on track2d & track3d ?
 
         self._bedelev = np.zeros(nparts)
         self._wse = np.zeros(nparts)
@@ -320,7 +317,7 @@ class Particles:
             self.shearstress[i] = self.interp_cell_value(
                 weights, idlist1, numpts, self.mesh.ShearStress2D
             )
-            if self.track2d:
+            if ~self.track3d:
                 self.velx[i], self.vely[i] = self.interp_vel2d_value(
                     weights, idlist1, numpts
                 )
@@ -1020,28 +1017,6 @@ class Particles:
             "time.setter wrong size etc. etc."
         )
         self._time = values
-
-    @property
-    def track2d(self):
-        """Get track2d.
-
-        Returns:
-            [type]: [description]
-        """
-        return self._track2d
-
-    @track2d.setter
-    def track2d(self, value):
-        """Set track2d.
-
-        Args:
-            value ([type]): [description]
-        """
-        assert isinstance(value, int), TypeError("track2d must be int")  # noqa: S101
-        assert value >= 0 and value < 2, ValueError(  # noqa: S101
-            "track2d must be 0 or 1"
-        )
-        self._track2d = value
 
     @property
     def track3d(self):

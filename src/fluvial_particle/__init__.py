@@ -75,14 +75,12 @@ def simulate(settings, output_directory, timer, comm=None):
     beta_z = settings['beta_z']
 
     # 2D or 3D particle tracking
-    Track2D = settings['Track2D']
     Track3D = settings['Track3D']
     print_inc_time = settings['PrintAtTick']
 
     # Fractional depth that bounds vertical particle positions from bed and WSE
-    if Track2D:
-        alpha = 0.5
-    else:
+    alpha = 0.5
+    if Track3D:
         alpha = 0.01
 
     # The source file
@@ -123,7 +121,7 @@ def simulate(settings, output_directory, timer, comm=None):
     min_elev = settings['min_elev']
     ttime = rng.uniform(0.0, period, npart)
     # """ particles = LarvalParticles(
-    #     npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track2D, Track3D
+    #     npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track3D
     # ) """
 
     particles = FallingParticles(npart, x, y, z, rng, River, radius=0.000001)
