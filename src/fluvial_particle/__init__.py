@@ -126,7 +126,7 @@ def simulate(settings, output_directory, timer, comm=None):
     #     npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track2D, Track3D
     # ) """
 
-    particles = FallingParticles(npart, x, y, z, rng, River, radius=0.0001)
+    particles = FallingParticles(npart, x, y, z, rng, River, radius=0.000001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
     times = np.arange(dt, EndTime + dt, dt)
