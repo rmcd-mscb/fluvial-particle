@@ -70,10 +70,6 @@ def simulate(settings, output_directory, timer, comm=None):
 
     lev = settings['LEV']  # lateral eddy viscosity
 
-    beta_x = 0.067
-    beta_y = 0.067
-    beta_z = 0.067
-
     beta_x = settings['beta_x']
     beta_y = settings['beta_y']
     beta_z = settings['beta_z']
@@ -81,7 +77,7 @@ def simulate(settings, output_directory, timer, comm=None):
     # 2D or 3D particle tracking
     Track2D = settings['Track2D']
     Track3D = settings['Track3D']
-    print_inc = settings['PrintAtTick']
+    print_inc_time = settings['PrintAtTick']
 
     # Fractional depth that bounds vertical particle positions from bed and WSE
     if Track2D:
@@ -120,9 +116,7 @@ def simulate(settings, output_directory, timer, comm=None):
     z = np.full(npart, fill_value=zstart, dtype=np.float64)
 
     rng = get_prng(timer)
-    # confirmed in test.py this generates unique rands to each proc
-    # Other parallel random options available: https://numpy.org/devdocs/reference/random/parallel.html
-
+    
     # Sinusoid properties for larval drift subclass
     amplitude = settings['amplitude']
     period = settings['period']
@@ -135,17 +129,26 @@ def simulate(settings, output_directory, timer, comm=None):
     particles = FallingParticles(npart, x, y, z, rng, River, radius=0.0001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
-    times = np.arange(0.0, EndTime+dt, dt)
+    times = np.arange(dt, EndTime + dt, dt)
     n_times = times.size
 
-    # HDF5 file writing initialization protocol
-    # In MPI, this whole section will need to be COLLECTIVE
-    # Find total number of possible printing steps
-    dimtime = np.int32(np.ceil(times.size / print_inc))
+    print_inc = np.max([np.int32(print_inc_time / dt), 1])  # smallest possible increment = 1
+    print_inc = np.min([print_inc, n_times])  # prevent print increments longer than the simulation
+    print_times = times[print_inc - 1:n_times:print_inc]
+    # Add final time to print_times, if necessary
+    if print_times[-1] != times[-1]:
+        print_times = np.append(print_times, times[-1])
+    n_prints = print_times.size + 1  # plus one so we can write t=0.0 to file
 
-    # Create HDF5 particles dataset
-    parts_h5 = particles.create_hdf(dimtime, globalnparts, fname=output_directory+'//particles.h5', comm=comm)  # MPI version
-    
+    # Create HDF5 particles dataset; collective in MPI
+    parts_h5 = particles.create_hdf(n_prints, globalnparts, fname=output_directory+'//particles.h5', comm=comm)  # MPI version
+
+    if not comm is None:
+        comm.Barrier()
+
+    # Write initial conditions to file
+    particles.write_hdf5(parts_h5, 0, start, end, 0.0, rank)
+
     if not comm is None:
         comm.Barrier()
 
@@ -162,8 +165,8 @@ def simulate(settings, output_directory, timer, comm=None):
         particles.move_all(alpha, min_depth, times[i], dt)
 
         # Write to HDF5
-        if i % print_inc == 0:
-            particles.write_hdf5(parts_h5, np.int32(i/print_inc), start, end, times[i], rank)
+        if times[i] in print_times:
+            particles.write_hdf5(parts_h5, np.int32(i / print_inc) + 1, start, end, times[i], rank)
 
             if master:
                 e = timer() - t0
@@ -205,16 +208,16 @@ def simulate(settings, output_directory, timer, comm=None):
         grpc = parts_h5["coordinates"]
         grpp = parts_h5["properties"]
         time = grpc["time"]
-        cells_h5 = River.create_hdf5(dimtime, time, output_directory + "//cells.h5")
+        cells_h5 = River.create_hdf5(n_prints, time, output_directory + "//cells.h5")
 
         # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
         # write the arrays to the cells HDF5, and write metadata to the XDMF files
-        for i in range(dimtime):
+        for i in range(n_prints):
             t = time[i]
             cell2d = grpp["cellidx2d"][i, :]
             cell3d = grpp["cellidx3d"][i, :]
             t = t.item(0)  # this returns a python scalar, for use in f-strings
-            particles.write_hdf5_xmf(parts_xmf, t, dimtime, globalnparts, i)
+            particles.write_hdf5_xmf(parts_xmf, t, n_prints, globalnparts, i)
 
             PartInNSCellPTime[:] = 0
             NumPartIn3DCell[:] = 0

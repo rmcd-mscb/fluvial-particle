@@ -206,6 +206,8 @@ class Particles:
         # ASSERT check that frac in (epsilon, 1-epsilon)
         self.interp_fields()
         self.z = self.bedelev + frac * self.depth
+        self.htabvbed = self.z - self.bedelev
+        self.time.fill(0.0)
 
     def interp_cell_value(self, weights, idlist1, numpts, valarray):
         """Interpolate valarray at a point.

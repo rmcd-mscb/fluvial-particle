@@ -17,7 +17,8 @@ beta_z = 0.067
 
 NumPart = 10000
 
-PrintAtTick = 800
+# Print every PrintAtTick seconds
+PrintAtTick = 200.0
 
 # yo-yo paramters
 amplitude = 1.0
