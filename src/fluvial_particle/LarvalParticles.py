@@ -15,11 +15,11 @@ class LarvalParticles(Particles):
         z,
         rng,
         mesh,
-        amp,
-        period,
-        min_elev,
-        ttime,
         track3d=1,
+        amp=0.2,
+        period=60.0,
+        min_elev=0.01,
+        ttime=None,
     ):
         """[summary].
 
@@ -30,17 +30,20 @@ class LarvalParticles(Particles):
             z ([type]): [description]
             rng ([type]): [description]
             mesh ([type]): [description]
+            track3d (int, optional): [description]. Defaults to 1.
             amp ([type]): [description]
             period ([type]): [description]
             min_elev ([type]): [description]
             ttime ([type]): [description]
-            track3d (int, optional): [description]. Defaults to 1.
         """
         super().__init__(nparts, x, y, z, rng, mesh, track3d)
         self.amp = amp
         self.period = period
         self.min_elev = min_elev
         self.ttime = ttime
+        # Build ndarray ttime if necessary
+        if ttime is None:
+            self.ttime = self.rng.uniform(0.0, self.period, self.nparts)
 
     def perturb_z(self, dt):
         """Project particles vertical trajectory, sinusoidal bed-swimmer.

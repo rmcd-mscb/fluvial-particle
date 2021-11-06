@@ -121,7 +121,7 @@ def simulate(settings, output_directory, timer, comm=None):
     min_elev = settings['min_elev']
     ttime = rng.uniform(0.0, period, npart)
     # """ particles = LarvalParticles(
-    #     npart, x, y, z, rng, River, 0.2, period, min_elev, ttime, Track3D
+    #     npart, x, y, z, rng, River, Track3D, 0.2, period, min_elev, ttime
     # ) """
 
     particles = FallingParticles(npart, x, y, z, rng, River, radius=0.000001)
