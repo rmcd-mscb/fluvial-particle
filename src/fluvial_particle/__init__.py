@@ -28,10 +28,10 @@ def checkCommandArguments():
 
     args = Parser.parse_args()
 
-    return args.settings_file, args.output_directory
+    return args.settings_file, args.output_directory, args.seed
 
 
-def get_prng(timer):
+def get_prng(timer, seed=None):
     """Generate a random seed using time and the process id
 
     Returns
@@ -40,14 +40,15 @@ def get_prng(timer):
         The seed on each core
 
     """
-    seed = np.int64(np.abs(((timer()*181)*((getpid()-83)*359))%104729))
+    if seed is None:
+        seed = np.int64(np.abs(((timer()*181)*((getpid()-83)*359))%104729))
 
     print('Using seed {}'.format(seed), flush=True)
 
     prng = np.random.RandomState(seed)
     return prng
 
-def simulate(settings, output_directory, timer, comm=None):
+def simulate(settings, output_directory, timer, seed=None, comm=None):
 
     t0 = timer()
 
@@ -113,7 +114,7 @@ def simulate(settings, output_directory, timer, comm=None):
     y = np.full(npart, fill_value=ystart, dtype=np.float64)
     z = np.full(npart, fill_value=zstart, dtype=np.float64)
 
-    rng = get_prng(timer)
+    rng = get_prng(timer, seed)
     
     # Sinusoid properties for larval drift subclass
     amplitude = settings['amplitude']
@@ -286,7 +287,7 @@ def simulate(settings, output_directory, timer, comm=None):
 
 def track_serial():
 
-    settings_file, output_directory = checkCommandArguments()
+    settings_file, output_directory, seed = checkCommandArguments()
     # sys.path.append(getcwd())
 
     inputfile = pathlib.Path(settings_file)
@@ -298,14 +299,14 @@ def track_serial():
 
     options = settings.read(settings_file)
 
-    simulate(options, output_directory, timer=time.time)
+    simulate(options, output_directory, timer=time.time, seed=seed)
 
 def track_mpi():
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
 
-    settings_file, output_directory = checkCommandArguments()
+    settings_file, output_directory, seed = checkCommandArguments()
     # sys.path.append(getcwd())
 
     options = settings.read(settings_file)

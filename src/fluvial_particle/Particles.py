@@ -44,13 +44,10 @@ class Particles:
         self._diffz = np.zeros(nparts)
         self._time = np.zeros(nparts)
         self._htabvbed = np.zeros(nparts)
-        self.xrnum = np.zeros(nparts)  # make property?
-        self.yrnum = np.zeros(nparts)  # make property?
-        self.zrnum = np.zeros(nparts)  # make property?
-
-        # Not used:
-        # tmpibc = np.zeros(nparts)
-        # tmpvel = np.zeros(npart)
+        self._mask = None
+        self.xrnum = np.zeros(nparts)
+        self.yrnum = np.zeros(nparts)
+        self.zrnum = np.zeros(nparts)
 
     def adjust_z(self, pz, alpha):
         """Check that new particle vertical position is within bounds.
@@ -98,18 +95,18 @@ class Particles:
 
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
-        grpc.create_dataset("x", (dimtime, globalnparts), dtype="f")
-        grpc.create_dataset("y", (dimtime, globalnparts), dtype="f")
-        grpc.create_dataset("z", (dimtime, globalnparts), dtype="f")
-        grpc.create_dataset("time", (dimtime, 1), dtype="f")
+        grpc.create_dataset("x", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)
+        grpc.create_dataset("y", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)
+        grpc.create_dataset("z", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)
+        grpc.create_dataset("time", (dimtime, 1), dtype="f", fillvalue=np.nan)
 
         grpp = parts_h5.create_group("properties")
-        grpp.create_dataset("bedelev", (dimtime, globalnparts), dtype="f")
-        grpp.create_dataset("cellidx2d", (dimtime, globalnparts), dtype="i")
-        grpp.create_dataset("cellidx3d", (dimtime, globalnparts), dtype="i")
-        grpp.create_dataset("htabvbed", (dimtime, globalnparts), dtype="f")
-        grpp.create_dataset("velvec", (dimtime, globalnparts, 3), dtype="f")
-        grpp.create_dataset("wse", (dimtime, globalnparts), dtype="f")
+        grpp.create_dataset("bedelev", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)
+        grpp.create_dataset("cellidx2d", (dimtime, globalnparts), dtype="i", fillvalue=np.nan)
+        grpp.create_dataset("cellidx3d", (dimtime, globalnparts), dtype="i", fillvalue=np.nan)
+        grpp.create_dataset("htabvbed", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)
+        grpp.create_dataset("velvec", (dimtime, globalnparts, 3), dtype="f", fillvalue=np.nan)
+        grpp.create_dataset("wse", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)
         grpp["bedelev"].attrs[
             "Description"
         ] = "Bed elevation at x,y position of particles"
@@ -125,6 +122,26 @@ class Particles:
             "Description"
         ] = "Water surface elevation at x,y position of particles"
         return parts_h5
+
+    def deactivate_particle(self, idx):
+        self._x[idx] = np.nan
+        self._y[idx] = np.nan
+        self._z[idx] = np.nan
+        self._bedelev[idx] = np.nan
+        self._wse[idx] = np.nan
+        self._normdepth[idx] = np.nan
+        self._cellindex2d[idx] = -1
+        self._cellindex3d[idx] = -1
+        self._velx[idx] = np.nan
+        self._vely[idx] = np.nan
+        self._velz[idx] = np.nan
+        self._htabvbed[idx] = np.nan
+        self._shearstress[idx] = np.nan
+        self._ustar[idx] = np.nan
+        self._diffx[idx] = np.nan
+        self._diffy[idx] = np.nan
+        self._diffz[idx] = np.nan
+        self._time[idx] = np.nan
 
     def find_pos_in_2dcell(self, newpoint2d, cellid):
         """Find position in 2D cell, return info for interpolation.
@@ -169,27 +186,26 @@ class Particles:
             self.wse,
         )
 
-    def handle_dry_parts(self, px, py, dry, dt):
+    def handle_dry_parts(self, px, py, a, dt):
         """Adjust trajectories of dry particles.
 
         Args:
             px ([type]): [description]
             py ([type]): [description]
-            dry ([type]): [description]
+            a ([type]): [description]
             dt ([type]): [description]
         """
         # Move dry particles with only 2d random motion
-        a = self.indices[dry]
         self.perturb_random_only_2d(px, py, a, dt)
         # Run is_part_wet again
-        wet2 = self.is_part_wet(px, py, a)
-        if np.any(~wet2):
-            b = a[~wet2]
+        wet = self.is_part_wet(px, py, a)
+        if np.any(~wet):
+            b = a[~wet]
             # Any still dry particles will have no positional update this step
             px[b] = self.x[b]
             py[b] = self.y[b]
             # update cell indices
-            for i in np.nditer(b):
+            for i in np.nditer(b, ["zerosize_ok"]):
                 point = [px[i], py[i], 0.0]
                 self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
 
@@ -228,7 +244,10 @@ class Particles:
     def interp_field_3d(self):
         """Interpolate 3D velocity field at current particles' positions."""
         idlist1 = vtk.vtkIdList()
-        for i in range(self.nparts):
+        a = self.indices
+        if self.mask is not None:
+            a = self.indices[self.mask]
+        for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], self.z[i]]
             self.cellindex3d[i] = self.mesh.CellLocator3D.FindCell(point)
             if self.cellindex3d[i] >= 0:
@@ -295,7 +314,10 @@ class Particles:
     def interp_fields(self):
         """Interpolate mesh fields at current particles' positions."""
         # Find current location in 2D grid and interpolate 2D fields
-        for i in range(self.nparts):
+        a = self.indices
+        if self.mask is not None:
+            a = self.indices[self.mask]
+        for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], 0.0]
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
             weights, idlist1, numpts = self.find_pos_in_2dcell(
@@ -376,7 +398,7 @@ class Particles:
         idlist1 = vtkcell3d.GetPointIds()
         tmpxval = np.float64(0.0)
         tmpyval = np.float64(0.0)
-        for i in range(0, numpts):
+        for i in range(numpts):
             tmpxval += (
                 weights[i] * self.mesh.VelocityVec3D.GetTuple(idlist1.GetId(i))[0]
             )
@@ -398,34 +420,41 @@ class Particles:
         """
         wet = np.empty(np.size(a), dtype=bool)
         j = 0
-        for i in np.nditer(a):
+        for i in np.nditer(a, ["zerosize_ok"]):
             point = [px[i], py[i], 0.0]
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
             weights, idlist1, numpts = self.find_pos_in_2dcell(
                 point, self.cellindex2d[i]
             )
-            wet[j] = self.is_part_wet_kernel(weights, idlist1, numpts)
+            wet[j] = self.is_part_wet_kernel(i, idlist1, numpts)
             j += 1
         return wet
 
-    def is_part_wet_kernel(self, weights, idlist1, numpts):
+    def is_part_wet_kernel(self, idx, idlist1, numpts):
         """Interpolate IBC mesh array to a point.
 
         Args:
-            weights ([type]): [description]
+            idx ([type]): [description]
             idlist1 ([type]): [description]
             numpts ([type]): [description]
 
         Returns:
             [type]: [description]
         """
-        tmpibc = 0.0
+        a = np.zeros((numpts,), dtype=np.int32)
         for i in range(numpts):
-            tmpibc += weights[i] * self.mesh.IBC_2D.GetTuple(idlist1.GetId(i))[0]
-        if tmpibc >= 0.9999999:
-            return True
-        else:
+            a[i] = idlist1.GetId(i)
+        if -1 in a:
+            if self.mask is None:
+                self.mask = np.full(self.nparts, fill_value=True)
+            self.mask[idx] = False
+            self.deactivate_particle(idx)
             return False
+        for i in range(numpts):
+            b = self.mesh.IBC_2D.GetTuple(a[i])[0]
+            if b < 1:
+                return False
+        return True
 
     def move_all(self, alpha, min_depth, time, dt):
         """Update position based on speed, angle.
@@ -442,12 +471,17 @@ class Particles:
         self.perturb_2d(px, py, dt)
 
         # check if new positions are wet
-        wet = self.is_part_wet(px, py, self.indices)
+        a = self.indices
+        if self.mask is not None:
+            a = a[self.mask]
+        wet = self.is_part_wet(px, py, a)
         if np.any(~wet):
-            self.handle_dry_parts(px, py, ~wet, dt)
+            self.handle_dry_parts(px, py, a[~wet], dt)
+        if self.mask is not None:
+            a = self.indices[self.mask]
 
         # update bed elevation, wse, depth
-        for i in range(self.nparts):
+        for i in np.nditer(a, ["zerosize_ok"]):
             point = [px[i], py[i], 0.0]
             weights, idlist1, numpts = self.find_pos_in_2dcell(
                 point, self.cellindex2d[i]
@@ -540,7 +574,9 @@ class Particles:
         print("particle entered min_depth")
         a = self.indices[self.depth < min_depth]
         # update cell indices and interpolations
-        for i in np.nditer(a):
+        for i in np.nditer(a, ["zerosize_ok"]):
+            px[i] = self.x[i]
+            py[i] = self.y[i]
             point = [px[i], py[i], 0.0]
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
             weights, idlist1, numpts = self.find_pos_in_2dcell(
@@ -898,6 +934,30 @@ class Particles:
             "htabvbed.setter wrong size etc. etc."
         )
         self._htabvbed = values
+
+    @property
+    def mask(self):
+        """Get mask.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._mask
+
+    @mask.setter
+    def mask(self, values):
+        """Set mask.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert np.issubdtype(values.dtype,'bool'), ValueError(  # noqa: S101
+            "mask.setter: mask must be of 'bool' data type"
+        )
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "mask.setter: wrong size"
+        )
+        self._mask = values
 
     @property
     def mesh(self):
