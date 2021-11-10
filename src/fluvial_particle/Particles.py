@@ -102,8 +102,8 @@ class Particles:
 
         grpp = parts_h5.create_group("properties")
         grpp.create_dataset("bedelev", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)
-        grpp.create_dataset("cellidx2d", (dimtime, globalnparts), dtype="i", fillvalue=np.nan)
-        grpp.create_dataset("cellidx3d", (dimtime, globalnparts), dtype="i", fillvalue=np.nan)
+        grpp.create_dataset("cellidx2d", (dimtime, globalnparts), dtype="i", fillvalue=-1)
+        grpp.create_dataset("cellidx3d", (dimtime, globalnparts), dtype="i", fillvalue=-1)
         grpp.create_dataset("htabvbed", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)
         grpp.create_dataset("velvec", (dimtime, globalnparts, 3), dtype="f", fillvalue=np.nan)
         grpp.create_dataset("wse", (dimtime, globalnparts), dtype="f", fillvalue=np.nan)

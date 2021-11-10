@@ -162,6 +162,14 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
         particles.calc_diffusion_coefs(lev, beta_x, beta_y, beta_z)
         # Move particles (checks on new position done internally)
         particles.move_all(alpha, min_depth, times[i], dt)
+        # Check that there are still active particles
+        if particles.mask is not None:
+            if ~np.any(particles.mask):
+                if comm is None:
+                    print(f"No active particles remain; exiting loop at time T={times[i]}")
+                else:
+                    print(f"No active particles remain on processor {rank}; exiting local loop at T={times[i]}")
+                break
 
         # Write to HDF5
         if times[i] in print_times:
@@ -211,8 +219,9 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
 
         # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
         # write the arrays to the cells HDF5, and write metadata to the XDMF files
-        for i in range(n_prints):
-            t = time[i]
+        gen = [t for t in time if not np.isnan(t)]
+        for i in range(len(gen)):
+            t = gen[i]
             cell2d = grpp["cellidx2d"][i, :]
             cell3d = grpp["cellidx3d"][i, :]
             t = t.item(0)  # this returns a python scalar, for use in f-strings
