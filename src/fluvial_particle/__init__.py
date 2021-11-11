@@ -193,13 +193,6 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
         print("Finished simulation in {} h:m:s".format(str(timedelta(seconds=timer()-t0)), flush=True))
 
     # Write xml files and cumulative cell counters
-    # ROOT processor only
-    NumPartInCell = np.zeros(num2dcells, dtype=np.int64)
-    NumPartIn3DCell = np.zeros(num3dcells, dtype=np.int64)
-    PartTimeInCell = np.zeros(num2dcells)
-    TotPartInCell = np.zeros(num2dcells, dtype=np.int64)
-    PartInNSCellPTime = np.zeros(nsc, dtype=np.int64)
-
     if master:
         # Create and open xdmf files
         cells1d_xmf = open(output_directory + "//cells_onedim.xmf", "w")
@@ -216,6 +209,12 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
         grpp = parts_h5["properties"]
         time = grpc["time"]
         cells_h5 = River.create_hdf5(n_prints, time, output_directory + "//cells.h5")
+
+        NumPartInCell = np.zeros(num2dcells, dtype=np.int64)
+        NumPartIn3DCell = np.zeros(num3dcells, dtype=np.int64)
+        PartTimeInCell = np.zeros(num2dcells)
+        TotPartInCell = np.zeros(num2dcells, dtype=np.int64)
+        PartInNSCellPTime = np.zeros(nsc, dtype=np.int64)
 
         # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
         # write the arrays to the cells HDF5, and write metadata to the XDMF files
