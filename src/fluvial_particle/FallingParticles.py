@@ -13,11 +13,11 @@ class FallingParticles(Particles):
         z,
         rng,
         mesh,
+        track3d=1,
         radius=0.0005,
         rho=2650,
         c1=20,
         c2=1.1,
-        track3d=1,
     ):
         """[Summary].
 
@@ -28,11 +28,11 @@ class FallingParticles(Particles):
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
+            track3d (bool): 1 if 3D model run, 0 else
             radius (float): radius of the particles [m]
             rho (float): density of the particles [kg/m^3]
             c1 (float): dimensionless viscous drag coefficient
             c2 (float): dimensionless turbulent wake drag coefficient
-            track3d (bool): 1 if 3D model run, 0 else
         """
         super().__init__(nparts, x, y, z, rng, mesh, track3d)
         self.radius = radius

@@ -1,8 +1,8 @@
 class settings(dict):
-    """ Handler class to user defined parameters. Allows us to check a users input parameters in the backend """
+    """Handler class to user defined parameters. Allows us to check a users input parameters in the backend."""
 
     def __init__(self, **kwargs):
-        missing = [ x for x in self.required_keys if not x in kwargs ]
+        missing = [x for x in self.required_keys if x not in kwargs]
         if len(missing) > 0:
             raise ValueError("Missing {} from the user parameter file".format(missing))
 
@@ -37,15 +37,3 @@ class settings(dict):
             exec(f, {}, options)
 
         return cls(**options)
-
-
-
-# def printtimes():
-#     """[summary].
-
-#     Returns:
-#         [type]: [description]
-#     """
-#     step = CheckAtTick * delta
-#     return range(int(step), int(SimTime) + 1, int(step))
-

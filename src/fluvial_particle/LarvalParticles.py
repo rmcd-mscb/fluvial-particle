@@ -24,17 +24,17 @@ class LarvalParticles(Particles):
         """[summary].
 
         Args:
-            nparts ([type]): [description]
-            x ([type]): [description]
-            y ([type]): [description]
-            z ([type]): [description]
-            rng ([type]): [description]
-            mesh ([type]): [description]
-            track3d (int, optional): [description]. Defaults to 1.
-            amp ([type]): [description]
-            period ([type]): [description]
-            min_elev ([type]): [description]
-            ttime ([type]): [description]
+            nparts (int): number of particles in this instance
+            x (float): x-coordinate of each particle, numpy array of length nparts
+            y (float): y-coordinate of each particle, numpy array of length nparts
+            z (float): z-coordinate of each particle, numpy array of length nparts
+            rng (Numpy object): random number generator
+            mesh (RiverGrid): class instance of the river hydrodynamic data
+            track3d (bool): 1 if 3D model run, 0 if 2D model run
+            amp (float): amplitude of sinusoidal swimming, as fraction of depth
+            period (float): period of swimming, to compute ttime
+            min_elev (float): minimum depth (nonfraction) that particles can enter
+            ttime (float): phase of swimmers, numpy array of length nparts, optional
         """
         super().__init__(nparts, x, y, z, rng, mesh, track3d)
         self.amp = amp
@@ -133,4 +133,7 @@ class LarvalParticles(Particles):
         Args:
             values ([type]): [description]
         """
+        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
+            "ttime.setter wrong size"
+        )
         self._ttime = values

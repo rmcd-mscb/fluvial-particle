@@ -5,10 +5,8 @@ __email__ = "rmcd@usgs.gov"
 __version__ = "0.0.1-dev0"
 
 
-"""ParticleTrack."""
 from datetime import timedelta
-import os
-from os import getcwd, getpid
+from os import getpid
 import pathlib
 import time
 import numpy as np
@@ -19,8 +17,9 @@ from .LarvalParticles import LarvalParticles
 from .Particles import Particles
 from .RiverGrid import RiverGrid
 
+
 def checkCommandArguments():
-    """Check the users command line arguments. """
+    """Check the users command line arguments."""
     Parser = argparse.ArgumentParser(description="fluvial_particle", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     Parser.add_argument('settings_file', help='User settings file')
     Parser.add_argument('output_directory', help='Output directory for results')
@@ -32,7 +31,7 @@ def checkCommandArguments():
 
 
 def get_prng(timer, seed=None):
-    """Generate a random seed using time and the process id
+    """Generate a random seed using time and the process id.
 
     Returns
     -------
@@ -41,21 +40,30 @@ def get_prng(timer, seed=None):
 
     """
     if seed is None:
-        seed = np.int64(np.abs(((timer()*181)*((getpid()-83)*359))%104729))
+        seed = np.int64(np.abs(((timer() * 181) * ((getpid() - 83) * 359)) % 104729))
 
     print('Using seed {}'.format(seed), flush=True)
 
     prng = np.random.RandomState(seed)
     return prng
 
-def simulate(settings, output_directory, timer, seed=None, comm=None):
 
+def simulate(settings, output_directory, timer, seed=None, comm=None):
+    """Run the fluvial particle simulation.
+
+    Args:
+        settings (dict subclass): parameter settings for the simulation
+        output_directory (string): path to print output
+        timer (time object): does timing
+        seed (int): for serial runs only, random seed specified from command line
+        comm (MPI intracomm object): for parallel runs only, MPI communicator
+    """
     t0 = timer()
 
     # Get rank, number of processors, global number of particles, and local slice indices
     rank = 0
     size = 1
-    if not comm is None:
+    if comm is not None:
         rank = comm.Get_rank()
         size = comm.Get_size()
 
@@ -115,7 +123,7 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
     z = np.full(npart, fill_value=zstart, dtype=np.float64)
 
     rng = get_prng(timer, seed)
-    
+
     # Sinusoid properties for larval drift subclass
     amplitude = settings['amplitude']
     period = settings['period']
@@ -140,15 +148,16 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
     n_prints = print_times.size + 1  # plus one so we can write t=0.0 to file
 
     # Create HDF5 particles dataset; collective in MPI
-    parts_h5 = particles.create_hdf(n_prints, globalnparts, fname=output_directory+'//particles.h5', comm=comm)  # MPI version
+    fname = output_directory + '//particles.h5'
+    parts_h5 = particles.create_hdf(n_prints, globalnparts, fname=fname, comm=comm)  # MPI version
 
-    if not comm is None:
+    if comm is not None:
         comm.Barrier()
 
     # Write initial conditions to file
     particles.write_hdf5(parts_h5, 0, start, end, 0.0, rank)
 
-    if not comm is None:
+    if comm is not None:
         comm.Barrier()
 
     t0 = timer()
@@ -166,9 +175,9 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
         if particles.mask is not None:
             if ~np.any(particles.mask):
                 if comm is None:
-                    print(f"No active particles remain; exiting loop at time T={times[i]}")
+                    print(f"No active particles remain; exiting loop at time T={times[i]}", flush=True)
                 else:
-                    print(f"No active particles remain on processor {rank}; exiting local loop at T={times[i]}")
+                    print(f"No active particles remain on processor {rank}; exiting local loop at T={times[i]}", flush=True)
                 break
 
         # Write to HDF5
@@ -180,17 +189,17 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
                 elapsed = str(timedelta(seconds=e))
 
                 if i == 0:
-                    print("Remaining time steps {}/{} || Elapsed Time: {} h:m:s".format(n_times-i-1, n_times, elapsed), flush=True)
+                    print(f"Remaining time steps {n_times - i - 1}/{n_times} || Elapsed Time: {elapsed} h:m:s", flush=True)
                 else:
                     time_per_time = np.float64(e / i)
-                    eta = str(timedelta(seconds=((n_times - i)*time_per_time)))
-                    print("Remaining time steps {}/{} || Elapsed Time: {} h:m:s || ETA {} h:m:s".format(n_times-i-1, n_times, elapsed, eta), flush=True)
+                    eta = str(timedelta(seconds=((n_times - i) * time_per_time)))
+                    print(f"Remaining time steps {n_times - i - 1}/{n_times} || Elapsed Time: {elapsed} h:m:s || ETA {eta} h:m:s", flush=True)
 
-    if not comm is None:
+    if comm is not None:
         comm.Barrier()
 
     if master:
-        print("Finished simulation in {} h:m:s".format(str(timedelta(seconds=timer()-t0)), flush=True))
+        print(f"Finished simulation in {str(timedelta(seconds=timer() - t0))} h:m:s", flush=True)
 
     # Write xml files and cumulative cell counters
     if master:
@@ -290,13 +299,12 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
     parts_h5.close()
 
     if master:
-        print("Finished in {} h:m:s".format(str(timedelta(seconds=timer()-t0)), flush=True))
+        print(f"Finished in {str(timedelta(seconds=timer()-t0))} h:m:s", flush=True)
 
 
 def track_serial():
-
+    """Run fluvial particle in serial."""
     settings_file, output_directory, seed = checkCommandArguments()
-    # sys.path.append(getcwd())
 
     inputfile = pathlib.Path(settings_file)
     if not inputfile.exists():
@@ -309,13 +317,13 @@ def track_serial():
 
     simulate(options, output_directory, timer=time.time, seed=seed)
 
-def track_mpi():
 
+def track_mpi():
+    """Run fluvial particle in parallel."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
 
     settings_file, output_directory, seed = checkCommandArguments()
-    # sys.path.append(getcwd())
 
     options = settings.read(settings_file)
 

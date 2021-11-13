@@ -158,31 +158,6 @@ class Particles:
         self._diffz[idx] = np.nan
         self._time[idx] = np.nan
 
-    def find_pos_in_2dcell(self, point, cellid):
-        """Find position in 2D cell, return info for interpolation.
-
-        Args:
-            point (float): position vector (x,y,z) of the particle
-            cellid (int): index of the 2D grid cell containing the particle
-
-        Returns:
-            weights (float): parametric interpolation weights
-            idlist (vtkIdList): list of points that define cell # cellid
-            numpts (vtkIdType): number of points in idlist
-        """
-        pcoords = [0.0, 0.0, 0.0]
-        weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        clspoint = [0.0, 0.0, 0.0]
-        tmpid = vtk.mutable(0)
-        vtkid = vtk.mutable(0)
-        vtkcell2d = self.mesh.vtksgrid2d.GetCell(cellid)
-        tmpres = vtkcell2d.EvaluatePosition(  # noqa F841
-            point, clspoint, tmpid, pcoords, vtkid, weights
-        )
-        numpts = vtkcell2d.GetNumberOfPoints()
-        idlist = vtkcell2d.GetPointIds()
-        return weights, idlist, numpts
-
     def gen_rands(self):
         """Generate random numbers drawn from standard normal distribution."""
         self.xrnum = self.rng.standard_normal(self.nparts)
@@ -257,24 +232,25 @@ class Particles:
 
         return interpval
 
-    # @property
     def interp_field_3d(self):
         """Interpolate 3D velocity field at current particle positions."""
         idlist = vtk.vtkIdList()
+        cell = vtk.vtkGenericCell()
+        pcoords = [0.0, 0.0, 0.0]
+        weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         a = self.indices
         if self.mask is not None:
             a = self.indices[self.mask]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], self.z[i]]
-            self.cellindex3d[i] = self.mesh.CellLocator3D.FindCell(point)
+            self.cellindex3d[i] = self.mesh.CellLocator3D.FindCell(point, 0.0, cell, pcoords, weights)
             if self.cellindex3d[i] >= 0:
+                idlist = cell.GetPointIds()
                 (
-                    result,
-                    dist,
                     tmp3dux,
                     tmp3duy,
                     tmp3duz,
-                ) = self.interp_vel3d_value(point, self.cellindex3d[i])
+                ) = self.interp_vel3d_value(idlist, weights)
                 self.velx[i] = tmp3dux
                 self.vely[i] = tmp3duy
                 self.velz[i] = tmp3duz
@@ -292,7 +268,7 @@ class Particles:
                         tmp3dux,
                         tmp3duy,
                         tmp3duz,
-                    ) = self.interp_vel3d_value(point, idlist.GetId(t))
+                    ) = self.interp_vel3d_value_alongline(point, idlist.GetId(t))
                     if result == 1:
                         self.velx[i] = tmp3dux
                         self.vely[i] = tmp3duy
@@ -327,19 +303,20 @@ class Particles:
                 for j in range(vtkpts.GetNumberOfPoints()):
                 print(vtkpts.GetPoint(j)) """
 
-    # @property
     def interp_fields(self):
         """Interpolate mesh fields at current particle positions."""
         # Find current location in 2D grid and interpolate 2D fields
+        cell = vtk.vtkGenericCell()
+        pcoords = [0.0, 0.0, 0.0]
+        weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         a = self.indices
         if self.mask is not None:
             a = self.indices[self.mask]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], 0.0]
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-            weights, idlist, numpts = self.find_pos_in_2dcell(
-                point, self.cellindex2d[i]
-            )
+            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
+            idlist = cell.GetPointIds()
+            numpts = cell.GetNumberOfPoints()
             self.bedelev[i] = self.interp_cell_value(
                 weights, idlist, numpts, self.mesh.Elevation_2D
             )
@@ -393,7 +370,28 @@ class Particles:
             )
         return interpxval, interpyval
 
-    def interp_vel3d_value(self, point, cellid):
+    def interp_vel3d_value(self, idlist, weights):
+        """Interpolate 3D velocity vector at a point.
+
+        Args:
+            point (float): position vector (x,y,z) of the particle
+            cellid (int): index of the 2D grid cell containing the particle
+
+        Returns:
+            [type]: [description]
+        """
+        interpvalx = np.float64(0.0)
+        interpvaly = np.float64(0.0)
+        interpvalz = np.float64(0.0)
+        
+        for i in range(8):
+            a = self.mesh.VelocityVec3D.GetTuple(idlist.GetId(i))
+            interpvalx += weights[i] * a[0]
+            interpvaly += weights[i] * a[1]
+            interpvalz += weights[i] * a[2]
+        return interpvalx, interpvaly, interpvalz
+
+    def interp_vel3d_value_alongline(self, point, cellid):
         """Interpolate 3D velocity vector at a point.
 
         Args:
@@ -418,6 +416,7 @@ class Particles:
         interpyval = np.float64(0.0)
         interpzval = np.float64(0.0)
         for i in range(numpts):
+            a = self.mesh.VelocityVec3D.GetTuple(idlist.GetId(i))
             interpxval += (
                 weights[i] * self.mesh.VelocityVec3D.GetTuple(idlist.GetId(i))[0]
             )
@@ -440,14 +439,16 @@ class Particles:
         Returns:
             wet (boolean NumPy array): True indices mean wet, False means dry
         """
+        cell = vtk.vtkGenericCell()
+        pcoords = [0.0, 0.0, 0.0]
+        weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         wet = np.empty(np.size(a), dtype=bool)
         j = 0
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [px[i], py[i], 0.0]
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-            weights, idlist, numpts = self.find_pos_in_2dcell(
-                point, self.cellindex2d[i]
-            )
+            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
+            idlist = cell.GetPointIds()
+            numpts = cell.GetNumberOfPoints()
             wet[j] = self.is_part_wet_kernel(i, idlist, numpts)
             j += 1
         return wet
@@ -503,11 +504,14 @@ class Particles:
             a = self.indices[self.mask]
 
         # update bed elevation, wse, depth
+        cell = vtk.vtkGenericCell()
+        pcoords = [0.0, 0.0, 0.0]
+        weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [px[i], py[i], 0.0]
-            weights, idlist, numpts = self.find_pos_in_2dcell(
-                point, self.cellindex2d[i]
-            )
+            self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
+            idlist = cell.GetPointIds()
+            numpts = cell.GetNumberOfPoints()
             self.bedelev[i] = self.interp_cell_value(
                 weights, idlist, numpts, self.mesh.Elevation_2D
             )
@@ -594,16 +598,18 @@ class Particles:
             min_depth (float): minimum allowed depth that particles may enter
         """
         print("particle entered min_depth")
+        cell = vtk.vtkGenericCell()
+        pcoords = [0.0, 0.0, 0.0]
+        weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         a = self.indices[self.depth < min_depth]
         # update cell indices and interpolations
         for i in np.nditer(a, ["zerosize_ok"]):
             px[i] = self.x[i]
             py[i] = self.y[i]
             point = [px[i], py[i], 0.0]
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
-            weights, idlist, numpts = self.find_pos_in_2dcell(
-                point, self.cellindex2d[i]
-            )
+            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
+            idlist = cell.GetPointIds()
+            numpts = cell.GetNumberOfPoints()
             self.bedelev[i] = self.interp_cell_value(
                 weights, idlist, numpts, self.mesh.Elevation_2D
             )
@@ -776,7 +782,7 @@ class Particles:
         )
 
     def write_hdf5_xmf_header(self, filexmf):
-        """Write initial lines of XDMF file
+        """Write initial lines of XDMF file.
 
         Args:
             filexmf (file): open file to write
@@ -973,7 +979,7 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.issubdtype(values.dtype,'bool'), ValueError(  # noqa: S101
+        assert np.issubdtype(values.dtype, 'bool'), ValueError(  # noqa: S101
             "mask.setter: mask must be of 'bool' data type"
         )
         assert np.size(values) == self.nparts, ValueError(  # noqa: S101
