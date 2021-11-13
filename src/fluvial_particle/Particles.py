@@ -244,7 +244,6 @@ class Particles:
 
     def interp_field_3d(self):
         """Interpolate 3D velocity field at current particle positions."""
-        idlist = vtk.vtkIdList()
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -263,8 +262,10 @@ class Particles:
                 self.vely[i] = uy
                 self.velz[i] = uz
             else:
-                print("3d findcell failed, particle number: ", i)
-                print("switching to FindCellsAlongLine() method")
+                print(
+                    f"3d findcell failed particle number: {i}, switching to FindCellsAlongLine()"
+                )
+                idlist = vtk.vtkIdList()
                 pp1 = [point[0], point[1], self.wse[i] + 10]
                 pp2 = [point[0], point[1], self.bedelev[i] - 10]
                 self.mesh.CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist)
@@ -450,6 +451,7 @@ class Particles:
         j = 0
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [px[i], py[i], 0.0]
+            cell.SetCellTypeToEmptyCell()
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
                 point, 0.0, cell, pcoords, weights
             )
@@ -473,7 +475,7 @@ class Particles:
         a = np.zeros((numpts,), dtype=np.int32)
         for i in range(numpts):
             a[i] = idlist.GetId(i)
-        if -1 in a:
+        if -1 in a or numpts == 0:
             if self.mask is None:
                 self.mask = np.full(self.nparts, fill_value=True)
             self.mask[idx] = False
