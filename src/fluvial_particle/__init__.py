@@ -11,21 +11,30 @@ import pathlib
 import time
 import numpy as np
 import argparse
-from .settings import settings
-from .FallingParticles import FallingParticles
-from .LarvalParticles import LarvalParticles
-from .Particles import Particles
+from .Settings import Settings
+from .FallingParticles import FallingParticles  # noqa
+from .LarvalParticles import LarvalParticles  # noqa
+from .Particles import Particles  # noqa
 from .RiverGrid import RiverGrid
 
 
-def checkCommandArguments():
+def checkcommandarguments():
     """Check the users command line arguments."""
-    Parser = argparse.ArgumentParser(description="fluvial_particle", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    Parser.add_argument('settings_file', help='User settings file')
-    Parser.add_argument('output_directory', help='Output directory for results')
-    Parser.add_argument('--seed', dest='seed', type=int, default=None, help='Specify a single integer to fix the seed of the random number generator. Only used in serial mode.')
+    parser = argparse.ArgumentParser(
+        description="fluvial_particle",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("settings_file", help="User settings file")
+    parser.add_argument("output_directory", help="Output directory for results")
+    parser.add_argument(
+        "--seed",
+        dest="seed",
+        type=int,
+        default=None,
+        help="Specify a single integer to fix the seed of the random number generator. Only used in serial mode.",
+    )
 
-    args = Parser.parse_args()
+    args = parser.parse_args()
 
     return args.settings_file, args.output_directory, args.seed
 
@@ -42,13 +51,13 @@ def get_prng(timer, seed=None):
     if seed is None:
         seed = np.int64(np.abs(((timer() * 181) * ((getpid() - 83) * 359)) % 104729))
 
-    print('Using seed {}'.format(seed), flush=True)
+    print(f"Using seed {seed}", flush=True)
 
     prng = np.random.RandomState(seed)
     return prng
 
 
-def simulate(settings, output_directory, timer, seed=None, comm=None):
+def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
     """Run the fluvial particle simulation.
 
     Args:
@@ -73,38 +82,38 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
         print("Beginning simulation", flush=True)
 
     # Some Variables
-    EndTime = settings['SimTime']
-    dt = settings['dt']
-    min_depth = settings['min_depth']
+    endtime = settings["SimTime"]
+    dt = settings["dt"]
+    min_depth = settings["min_depth"]
 
-    lev = settings['LEV']  # lateral eddy viscosity
+    lev = settings["LEV"]  # lateral eddy viscosity
 
-    beta_x = settings['beta_x']
-    beta_y = settings['beta_y']
-    beta_z = settings['beta_z']
+    beta_x = settings["beta_x"]
+    beta_y = settings["beta_y"]
+    beta_z = settings["beta_z"]
 
     # 2D or 3D particle tracking
-    Track3D = settings['Track3D']
-    print_inc_time = settings['PrintAtTick']
+    track3d = settings["Track3D"]
+    print_inc_time = settings["PrintAtTick"]
 
     # Fractional depth that bounds vertical particle positions from bed and WSE
     alpha = 0.5
-    if Track3D:
+    if track3d:
         alpha = 0.01
 
     # The source file
-    file_name_2da = settings['file_name_2da']
-    file_name_3da = settings['file_name_3da']
+    file_name_2da = settings["file_name_2da"]
+    file_name_3da = settings["file_name_3da"]
 
     # Initialize RiverGrid object
-    River = RiverGrid(Track3D, file_name_2da, file_name_3da)
-    nsc = River.nsc
-    num3dcells = River.vtksgrid3d.GetNumberOfCells()
-    num2dcells = River.vtksgrid2d.GetNumberOfCells()
+    river = RiverGrid(track3d, file_name_2da, file_name_3da)
+    nsc = river.nsc
+    num3dcells = river.vtksgrid3d.GetNumberOfCells()
+    num2dcells = river.vtksgrid2d.GetNumberOfCells()
 
     # Initialize particles with initial location and attach RiverGrid
     # npart = 300  # number of particles per processor
-    npart = settings['NumPart']
+    npart = settings["NumPart"]
 
     globalnparts = npart * size  # total number of particles across processors
     start = rank * npart  # slice starting index for HDF5 file
@@ -117,39 +126,43 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
             s = "Simulating {} particles".format(globalnparts)
         print(s, flush=True)
 
-    xstart, ystart, zstart = settings['StartLoc']
+    xstart, ystart, zstart = settings["StartLoc"]
     x = np.full(npart, fill_value=xstart, dtype=np.float64)
     y = np.full(npart, fill_value=ystart, dtype=np.float64)
     z = np.full(npart, fill_value=zstart, dtype=np.float64)
 
     rng = get_prng(timer, seed)
 
-    # Sinusoid properties for larval drift subclass
-    amplitude = settings['amplitude']
-    period = settings['period']
-    min_elev = settings['min_elev']
+    """ # Sinusoid properties for larval drift subclass
+    amplitude = settings["amplitude"]
+    period = settings["period"]
+    min_elev = settings["min_elev"]
     ttime = rng.uniform(0.0, period, npart)
-    # """ particles = LarvalParticles(
-    #     npart, x, y, z, rng, River, Track3D, 0.2, period, min_elev, ttime
-    # ) """
+    particles = LarvalParticles(
+        npart, x, y, z, rng, river, track3d, 0.2, period, min_elev, ttime
+    ) """
 
-    particles = FallingParticles(npart, x, y, z, rng, River, radius=0.000001)
+    particles = FallingParticles(npart, x, y, z, rng, river, radius=0.000001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
-    times = np.arange(dt, EndTime + dt, dt)
+    times = np.arange(dt, endtime + dt, dt)
     n_times = times.size
 
-    print_inc = np.max([np.int32(print_inc_time / dt), 1])  # smallest possible increment = 1
-    print_inc = np.min([print_inc, n_times])  # prevent print increments longer than the simulation
-    print_times = times[print_inc - 1:n_times:print_inc]
+    print_inc = np.max(
+        [np.int32(print_inc_time / dt), 1]
+    )  # smallest possible increment = 1
+    print_inc = np.min(
+        [print_inc, n_times]
+    )  # prevent print increments longer than the simulation
+    print_times = times[print_inc - 1 : n_times : print_inc]
     # Add final time to print_times, if necessary
     if print_times[-1] != times[-1]:
         print_times = np.append(print_times, times[-1])
     n_prints = print_times.size + 1  # plus one so we can write t=0.0 to file
 
     # Create HDF5 particles dataset; collective in MPI
-    fname = output_directory + '//particles.h5'
-    parts_h5 = particles.create_hdf(n_prints, globalnparts, fname=fname, comm=comm)  # MPI version
+    fname = output_directory + "//particles.h5"
+    parts_h5 = particles.create_hdf(n_prints, globalnparts, fname=fname, comm=comm)
 
     if comm is not None:
         comm.Barrier()
@@ -175,31 +188,48 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
         if particles.mask is not None:
             if ~np.any(particles.mask):
                 if comm is None:
-                    print(f"No active particles remain; exiting loop at time T={times[i]}", flush=True)
+                    print(
+                        f"No active particles remain; exiting loop at time T={times[i]}",
+                        flush=True,
+                    )
                 else:
-                    print(f"No active particles remain on processor {rank}; exiting local loop at T={times[i]}", flush=True)
+                    print(
+                        f"No active particles remain on processor {rank}; exiting local loop at T={times[i]}",
+                        flush=True,
+                    )
                 break
 
         # Write to HDF5
         if times[i] in print_times:
-            particles.write_hdf5(parts_h5, np.int32(i / print_inc) + 1, start, end, times[i], rank)
+            particles.write_hdf5(
+                parts_h5, np.int32(i / print_inc) + 1, start, end, times[i], rank
+            )
 
             if master:
                 e = timer() - t0
                 elapsed = str(timedelta(seconds=e))
 
                 if i == 0:
-                    print(f"Remaining time steps {n_times - i - 1}/{n_times} || Elapsed Time: {elapsed} h:m:s", flush=True)
+                    print(
+                        f"Remaining time steps {n_times - i - 1}/{n_times} || Elapsed Time: {elapsed} h:m:s",
+                        flush=True,
+                    )
                 else:
                     time_per_time = np.float64(e / i)
                     eta = str(timedelta(seconds=((n_times - i) * time_per_time)))
-                    print(f"Remaining time steps {n_times - i - 1}/{n_times} || Elapsed Time: {elapsed} h:m:s || ETA {eta} h:m:s", flush=True)
+                    print(
+                        f"Remaining time steps {n_times - i - 1}/{n_times} || Elapsed Time: {elapsed} h:m:s || ETA {eta} h:m:s",
+                        flush=True,
+                    )
 
     if comm is not None:
         comm.Barrier()
 
     if master:
-        print(f"Finished simulation in {str(timedelta(seconds=timer() - t0))} h:m:s", flush=True)
+        print(
+            f"Finished simulation in {str(timedelta(seconds=timer() - t0))} h:m:s",
+            flush=True,
+        )
 
     # Write xml files and cumulative cell counters
     if master:
@@ -208,22 +238,22 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
         cells2d_xmf = open(output_directory + "//cells_twodim.xmf", "w")
         cells3d_xmf = open(output_directory + "//cells_threedim.xmf", "w")
         parts_xmf = open(output_directory + "//particles.xmf", "w")
-        River.write_hdf5_xmf_header1d(cells1d_xmf)
-        River.write_hdf5_xmf_header2d(cells2d_xmf)
-        River.write_hdf5_xmf_header3d(cells3d_xmf)
+        river.write_hdf5_xmf_header1d(cells1d_xmf)
+        river.write_hdf5_xmf_header2d(cells2d_xmf)
+        river.write_hdf5_xmf_header3d(cells3d_xmf)
         particles.write_hdf5_xmf_header(parts_xmf)
 
         # Create cells HDF5 file
         grpc = parts_h5["coordinates"]
         grpp = parts_h5["properties"]
         time = grpc["time"]
-        cells_h5 = River.create_hdf5(n_prints, time, output_directory + "//cells.h5")
+        cells_h5 = river.create_hdf5(n_prints, time, output_directory + "//cells.h5")
 
-        NumPartInCell = np.zeros(num2dcells, dtype=np.int64)
-        NumPartIn3DCell = np.zeros(num3dcells, dtype=np.int64)
-        PartTimeInCell = np.zeros(num2dcells)
-        TotPartInCell = np.zeros(num2dcells, dtype=np.int64)
-        PartInNSCellPTime = np.zeros(nsc, dtype=np.int64)
+        numpartincell = np.zeros(num2dcells, dtype=np.int64)
+        numpartin3dcell = np.zeros(num3dcells, dtype=np.int64)
+        parttimeincell = np.zeros(num2dcells)
+        totpartincell = np.zeros(num2dcells, dtype=np.int64)
+        partinnscell = np.zeros(nsc, dtype=np.int64)
 
         # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
         # write the arrays to the cells HDF5, and write metadata to the XDMF files
@@ -235,15 +265,14 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
             t = t.item(0)  # this returns a python scalar, for use in f-strings
             particles.write_hdf5_xmf(parts_xmf, t, n_prints, globalnparts, i)
 
-            PartInNSCellPTime[:] = 0
-            NumPartIn3DCell[:] = 0
-            NumPartInCell[:] = 0
-            CI_IDB = cell2d % nsc
-            np.add.at(PartInNSCellPTime, CI_IDB, 1)
-            np.add.at(PartTimeInCell, cell2d, dt)
-            np.add.at(TotPartInCell, cell2d, 1)
-            np.add.at(NumPartInCell, cell2d, 1)
-            np.add.at(NumPartIn3DCell, cell3d, 1)
+            partinnscell[:] = 0
+            numpartin3dcell[:] = 0
+            numpartincell[:] = 0
+            np.add.at(partinnscell, cell2d % nsc, 1)
+            np.add.at(parttimeincell, cell2d, dt)
+            np.add.at(totpartincell, cell2d, 1)
+            np.add.at(numpartincell, cell2d, 1)
+            np.add.at(numpartin3dcell, cell3d, 1)
 
             # dims, name, and attrname must be passed to write_hdf5_xmf as iterable objects
             # dtypes too, but it is optional (defaults to "Float")
@@ -251,10 +280,10 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
             attrname = [[]]
             name[0] = f"/cells1d/fpc{i}"
             attrname[0] = "FractionalParticleCount"
-            data = PartInNSCellPTime / globalnparts
-            River.write_hdf5(cells_h5, name[0], data)
-            dims = (River.ns - 1,)
-            River.write_hdf5_xmf(cells1d_xmf, t, dims, name, attrname, center="Node")
+            data = partinnscell / globalnparts
+            river.write_hdf5(cells_h5, name[0], data)
+            dims = (river.ns - 1,)
+            river.write_hdf5_xmf(cells1d_xmf, t, dims, name, attrname, center="Node")
 
             name = [[], []]
             attrname = [[], []]
@@ -262,30 +291,30 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
             name[0] = f"/cells2d/fpc{i}"
             attrname[0] = "FractionalParticleCount"
             dtypes[0] = "Float"
-            dims = (River.ns - 1, River.nn - 1)
-            data = (NumPartInCell / globalnparts).reshape(dims)
-            River.write_hdf5(cells_h5, name[0], data)
+            dims = (river.ns - 1, river.nn - 1)
+            data = (numpartincell / globalnparts).reshape(dims)
+            river.write_hdf5(cells_h5, name[0], data)
             name[1] = f"/cells2d/tpc{i}"
             attrname[1] = "TotalParticleCount"
             dtypes[1] = "Int"
-            dims = (River.ns - 1, River.nn - 1)
-            data = TotPartInCell.reshape(dims)
-            River.write_hdf5(cells_h5, name[1], data)
-            River.write_hdf5_xmf(cells2d_xmf, t, dims, name, attrname, dtypes)
+            dims = (river.ns - 1, river.nn - 1)
+            data = totpartincell.reshape(dims)
+            river.write_hdf5(cells_h5, name[1], data)
+            river.write_hdf5_xmf(cells2d_xmf, t, dims, name, attrname, dtypes)
 
             name = [[]]
             attrname = [[]]
             name[0] = f"/cells3d/fpc{i}"
             attrname[0] = "FractionalParticleCount"
-            dims = (River.ns - 1, River.nn - 1, River.nz - 1)
-            data = (NumPartIn3DCell / globalnparts).reshape(dims)
-            River.write_hdf5(cells_h5, name[0], data)
-            River.write_hdf5_xmf(cells3d_xmf, t, dims, name, attrname)
+            dims = (river.ns - 1, river.nn - 1, river.nz - 1)
+            data = (numpartin3dcell / globalnparts).reshape(dims)
+            river.write_hdf5(cells_h5, name[0], data)
+            river.write_hdf5_xmf(cells3d_xmf, t, dims, name, attrname)
 
         # Finalize xmf file writing
-        River.write_hdf5_xmf_footer(cells1d_xmf)
-        River.write_hdf5_xmf_footer(cells2d_xmf)
-        River.write_hdf5_xmf_footer(cells3d_xmf)
+        river.write_hdf5_xmf_footer(cells1d_xmf)
+        river.write_hdf5_xmf_footer(cells2d_xmf)
+        river.write_hdf5_xmf_footer(cells3d_xmf)
         particles.write_hdf5_xmf_footer(parts_xmf)
         cells1d_xmf.close()
         cells2d_xmf.close()
@@ -304,7 +333,7 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):
 
 def track_serial():
     """Run fluvial particle in serial."""
-    settings_file, output_directory, seed = checkCommandArguments()
+    settings_file, output_directory, seed = checkcommandarguments()
 
     inputfile = pathlib.Path(settings_file)
     if not inputfile.exists():
@@ -313,7 +342,7 @@ def track_serial():
     if not outdir.is_dir():
         raise Exception(f"Output directory {outdir} does not exist")
 
-    options = settings.read(settings_file)
+    options = Settings.read(settings_file)
 
     simulate(options, output_directory, timer=time.time, seed=seed)
 
@@ -321,10 +350,11 @@ def track_serial():
 def track_mpi():
     """Run fluvial particle in parallel."""
     from mpi4py import MPI
+
     comm = MPI.COMM_WORLD
 
-    settings_file, output_directory, seed = checkCommandArguments()
+    settings_file, output_directory, seed = checkcommandarguments()
 
-    options = settings.read(settings_file)
+    options = Settings.read(settings_file)
 
     simulate(options, output_directory, comm=comm, timer=MPI.Wtime)

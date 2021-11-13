@@ -43,7 +43,7 @@ setup(
     entry_points={
         "console_scripts": [
             "fluvial_particle=fluvial_particle:track_serial",
-            "fluvial_particle_mpi=fluvial_particle:track_mpi"
+            "fluvial_particle_mpi=fluvial_particle:track_mpi",
         ],
     },
     install_requires=requirements,

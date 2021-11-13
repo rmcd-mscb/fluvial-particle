@@ -105,11 +105,21 @@ class Particles:
         grpc["time"].attrs["Units"] = "seconds"
 
         grpp = parts_h5.create_group("properties")
-        grpp.create_dataset("bedelev", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
-        grpp.create_dataset("cellidx2d", (nprints, globalnparts), dtype="i", fillvalue=-1)
-        grpp.create_dataset("cellidx3d", (nprints, globalnparts), dtype="i", fillvalue=-1)
-        grpp.create_dataset("htabvbed", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
-        grpp.create_dataset("velvec", (nprints, globalnparts, 3), dtype="f", fillvalue=np.nan)
+        grpp.create_dataset(
+            "bedelev", (nprints, globalnparts), dtype="f", fillvalue=np.nan
+        )
+        grpp.create_dataset(
+            "cellidx2d", (nprints, globalnparts), dtype="i", fillvalue=-1
+        )
+        grpp.create_dataset(
+            "cellidx3d", (nprints, globalnparts), dtype="i", fillvalue=-1
+        )
+        grpp.create_dataset(
+            "htabvbed", (nprints, globalnparts), dtype="f", fillvalue=np.nan
+        )
+        grpp.create_dataset(
+            "velvec", (nprints, globalnparts, 3), dtype="f", fillvalue=np.nan
+        )
         grpp.create_dataset("wse", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
         grpp["bedelev"].attrs[
             "Description"
@@ -243,17 +253,15 @@ class Particles:
             a = self.indices[self.mask]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], self.z[i]]
-            self.cellindex3d[i] = self.mesh.CellLocator3D.FindCell(point, 0.0, cell, pcoords, weights)
+            self.cellindex3d[i] = self.mesh.CellLocator3D.FindCell(
+                point, 0.0, cell, pcoords, weights
+            )
             if self.cellindex3d[i] >= 0:
                 idlist = cell.GetPointIds()
-                (
-                    tmp3dux,
-                    tmp3duy,
-                    tmp3duz,
-                ) = self.interp_vel3d_value(idlist, weights)
-                self.velx[i] = tmp3dux
-                self.vely[i] = tmp3duy
-                self.velz[i] = tmp3duz
+                ux, uy, uz = self.interp_vel3d_value(idlist, weights)
+                self.velx[i] = ux
+                self.vely[i] = uy
+                self.velz[i] = uz
             else:
                 print("3d findcell failed, particle number: ", i)
                 print("switching to FindCellsAlongLine() method")
@@ -314,7 +322,9 @@ class Particles:
             a = self.indices[self.mask]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], 0.0]
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
+            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
+                point, 0.0, cell, pcoords, weights
+            )
             idlist = cell.GetPointIds()
             numpts = cell.GetNumberOfPoints()
             self.bedelev[i] = self.interp_cell_value(
@@ -371,19 +381,19 @@ class Particles:
         return interpxval, interpyval
 
     def interp_vel3d_value(self, idlist, weights):
-        """Interpolate 3D velocity vector at a point.
+        """Interpolate 3D velocity vector at a point contained in a cell.
 
         Args:
-            point (float): position vector (x,y,z) of the particle
-            cellid (int): index of the 2D grid cell containing the particle
+            idlist (vtkIdList): list of points that define the cell
+            weights (list): list of interpolation weights
 
         Returns:
-            [type]: [description]
+            float: 3D velocity vector components
         """
         interpvalx = np.float64(0.0)
         interpvaly = np.float64(0.0)
         interpvalz = np.float64(0.0)
-        
+
         for i in range(8):
             a = self.mesh.VelocityVec3D.GetTuple(idlist.GetId(i))
             interpvalx += weights[i] * a[0]
@@ -417,15 +427,9 @@ class Particles:
         interpzval = np.float64(0.0)
         for i in range(numpts):
             a = self.mesh.VelocityVec3D.GetTuple(idlist.GetId(i))
-            interpxval += (
-                weights[i] * self.mesh.VelocityVec3D.GetTuple(idlist.GetId(i))[0]
-            )
-            interpyval += (
-                weights[i] * self.mesh.VelocityVec3D.GetTuple(idlist.GetId(i))[1]
-            )
-            interpzval += (
-                weights[i] * self.mesh.VelocityVec3D.GetTuple(idlist.GetId(i))[2]
-            )
+            interpxval += weights[i] * a[0]
+            interpyval += weights[i] * a[1]
+            interpzval += weights[i] * a[2]
         return result, vtkid, interpxval, interpyval, interpzval
 
     def is_part_wet(self, px, py, a):
@@ -446,7 +450,9 @@ class Particles:
         j = 0
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [px[i], py[i], 0.0]
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
+            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
+                point, 0.0, cell, pcoords, weights
+            )
             idlist = cell.GetPointIds()
             numpts = cell.GetNumberOfPoints()
             wet[j] = self.is_part_wet_kernel(i, idlist, numpts)
@@ -607,7 +613,9 @@ class Particles:
             px[i] = self.x[i]
             py[i] = self.y[i]
             point = [px[i], py[i], 0.0]
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
+            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
+                point, 0.0, cell, pcoords, weights
+            )
             idlist = cell.GetPointIds()
             numpts = cell.GetNumberOfPoints()
             self.bedelev[i] = self.interp_cell_value(
@@ -979,7 +987,7 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.issubdtype(values.dtype, 'bool'), ValueError(  # noqa: S101
+        assert np.issubdtype(values.dtype, "bool"), ValueError(  # noqa: S101
             "mask.setter: mask must be of 'bool' data type"
         )
         assert np.size(values) == self.nparts, ValueError(  # noqa: S101

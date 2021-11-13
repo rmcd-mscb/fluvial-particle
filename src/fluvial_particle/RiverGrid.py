@@ -1,5 +1,6 @@
 """RiverGrid class module."""
 import pathlib
+
 import h5py
 import numpy as np
 import vtk
@@ -152,15 +153,26 @@ class RiverGrid:
 
     @property
     def required_keys2d(self):
-        return ("Elevation",
-                "IBC",
-                "ShearStress (magnitude)",
-                "Velocity",
-                "WaterSurfaceElevation"
-                )
+        """Array names required in the input 2D grid.
+
+        Returns:
+            tuple
+        """
+        return (
+            "Elevation",
+            "IBC",
+            "ShearStress (magnitude)",
+            "Velocity",
+            "WaterSurfaceElevation",
+        )
 
     @property
     def required_keys3d(self):
+        """Array names required in the input 3D grid.
+
+        Returns:
+            tuple
+        """
         return ("Velocity",)
 
     def update_velocity_fields(self, tidx):

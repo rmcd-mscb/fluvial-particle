@@ -1,5 +1,4 @@
-
-
+"""Options file for fluvial particle model."""
 file_name_3da = "~/Meander_269cms_Result_3D_lev_250_1.vtk"
 file_name_2da = "~/Meander_269cms_Result_2D_lev_250_1.vtk"
 
