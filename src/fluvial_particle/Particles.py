@@ -207,9 +207,18 @@ class Particles:
             px[b] = self.x[b]
             py[b] = self.y[b]
             # update cell indices
+            cell = vtk.vtkGenericCell()
+            pcoords = [0.0, 0.0, 0.0]
+            weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             for i in np.nditer(b, ["zerosize_ok"]):
                 point = [px[i], py[i], 0.0]
-                self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(point)
+                self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
+                    point,
+                    0.0,
+                    cell,
+                    pcoords,
+                    weights,
+                )
 
     def initialize_location(self, frac):
         """Initialize position in water column and interpolate mesh arrays.
@@ -455,9 +464,16 @@ class Particles:
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
                 point, 0.0, cell, pcoords, weights
             )
-            idlist = cell.GetPointIds()
-            numpts = cell.GetNumberOfPoints()
-            wet[j] = self.is_part_wet_kernel(i, idlist, numpts)
+            if self.cellindex2d[i] < 0:
+                if self.mask is None:
+                    self.mask = np.full(self.nparts, fill_value=True)
+                self.mask[i] = False
+                self.deactivate_particle(i)
+                wet[j] = False
+            else:
+                idlist = cell.GetPointIds()
+                numpts = cell.GetNumberOfPoints()
+                wet[j] = self.is_part_wet_kernel(i, idlist, numpts)
             j += 1
         return wet
 
@@ -475,12 +491,6 @@ class Particles:
         a = np.zeros((numpts,), dtype=np.int32)
         for i in range(numpts):
             a[i] = idlist.GetId(i)
-        if -1 in a or numpts == 0:
-            if self.mask is None:
-                self.mask = np.full(self.nparts, fill_value=True)
-            self.mask[idx] = False
-            self.deactivate_particle(idx)
-            return False
         for i in range(numpts):
             b = self.mesh.IBC_2D.GetTuple(a[i])[0]
             if b < 1:
