@@ -57,6 +57,111 @@ def get_prng(timer, seed=None):
     return prng
 
 
+def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnparts):
+    """Write xml files and cumulative cell counters.
+
+    Args:
+        output_directory ([type]): [description]
+        river ([type]): [description]
+        particles ([type]): [description]
+        parts_h5 ([type]): [description]
+        n_prints ([type]): [description]
+        globalnparts ([type]): [description]
+    """
+    # Create and open xdmf files
+    cells1d_xmf = open(output_directory + "//cells_onedim.xmf", "w")
+    cells2d_xmf = open(output_directory + "//cells_twodim.xmf", "w")
+    parts_xmf = open(output_directory + "//particles.xmf", "w")
+    river.write_hdf5_xmf_header1d(cells1d_xmf)
+    river.write_hdf5_xmf_header2d(cells2d_xmf)
+    particles.write_hdf5_xmf_header(parts_xmf)
+
+    # Create cells HDF5 file and arrays
+    grpc = parts_h5["coordinates"]
+    grpp = parts_h5["properties"]
+    time = grpc["time"]
+    nsc = river.nsc
+    num2dcells = river.vtksgrid2d.GetNumberOfCells()
+    cells_h5 = river.create_hdf5(n_prints, time, output_directory + "//cells.h5")
+    numpartin2dcell = np.zeros(num2dcells, dtype=np.int64)
+    totpartincell = np.zeros(num2dcells, dtype=np.int64)
+    numpartin1dcell = np.zeros(nsc, dtype=np.int64)
+
+    if river.track3d:
+        num3dcells = river.vtksgrid3d.GetNumberOfCells()
+        cells3d_xmf = open(output_directory + "//cells_threedim.xmf", "w")
+        river.write_hdf5_xmf_header3d(cells3d_xmf)
+        numpartin3dcell = np.zeros(num3dcells, dtype=np.int64)
+
+    # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
+    # write the arrays to the cells HDF5, and write metadata to the XDMF files
+    gen = [t for t in time if not np.isnan(t)]
+    for i in range(len(gen)):
+        t = gen[i].item(0)  # this returns a python scalar, for use in f-strings
+        particles.write_hdf5_xmf(parts_xmf, t, n_prints, globalnparts, i)
+
+        cell2d = grpp["cellidx2d"][i, :]
+        numpartin1dcell[:] = 0
+        numpartin2dcell[:] = 0
+        np.add.at(numpartin1dcell, cell2d[cell2d >= 0] % nsc, 1)
+        np.add.at(totpartincell, cell2d[cell2d >= 0], 1)
+        np.add.at(numpartin2dcell, cell2d[cell2d >= 0], 1)
+        if river.track3d:
+            cell3d = grpp["cellidx3d"][i, :]
+            numpartin3dcell[:] = 0
+            np.add.at(numpartin3dcell, cell3d[cell3d >= 0], 1)
+
+        # dims, name, and attrname must be passed to write_hdf5_xmf as iterable objects
+        # dtypes too, but it is optional (defaults to "Float")
+        name = [[]]
+        attrname = [[]]
+        name[0] = f"/cells1d/fpc{i}"
+        attrname[0] = "FractionalParticleCount"
+        data = numpartin1dcell / globalnparts
+        river.write_hdf5(cells_h5, name[0], data)
+        dims = (river.ns - 1,)
+        river.write_hdf5_xmf(cells1d_xmf, t, dims, name, attrname, center="Node")
+
+        name = [[], []]
+        attrname = [[], []]
+        dtypes = [[], []]
+        name[0] = f"/cells2d/fpc{i}"
+        attrname[0] = "FractionalParticleCount"
+        dtypes[0] = "Float"
+        dims = (river.ns - 1, river.nn - 1)
+        data = (numpartin2dcell / globalnparts).reshape(dims)
+        river.write_hdf5(cells_h5, name[0], data)
+        name[1] = f"/cells2d/tpc{i}"
+        attrname[1] = "TotalParticleCount"
+        dtypes[1] = "Int"
+        dims = (river.ns - 1, river.nn - 1)
+        data = totpartincell.reshape(dims)
+        river.write_hdf5(cells_h5, name[1], data)
+        river.write_hdf5_xmf(cells2d_xmf, t, dims, name, attrname, dtypes)
+
+        if river.track3d:
+            name = [[]]
+            attrname = [[]]
+            name[0] = f"/cells3d/fpc{i}"
+            attrname[0] = "FractionalParticleCount"
+            dims = (river.ns - 1, river.nn - 1, river.nz - 1)
+            data = (numpartin3dcell / globalnparts).reshape(dims)
+            river.write_hdf5(cells_h5, name[0], data)
+            river.write_hdf5_xmf(cells3d_xmf, t, dims, name, attrname)
+
+    # Finalize xmf file writing
+    river.write_hdf5_xmf_footer(cells1d_xmf)
+    river.write_hdf5_xmf_footer(cells2d_xmf)
+    if river.track3d:
+        river.write_hdf5_xmf_footer(cells3d_xmf)
+        cells3d_xmf.close()
+    particles.write_hdf5_xmf_footer(parts_xmf)
+    cells1d_xmf.close()
+    cells2d_xmf.close()
+    parts_xmf.close()
+    cells_h5.close()
+
+
 def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
     """Run the fluvial particle simulation.
 
@@ -107,12 +212,8 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
 
     # Initialize RiverGrid object
     river = RiverGrid(track3d, file_name_2da, file_name_3da)
-    nsc = river.nsc
-    num3dcells = river.vtksgrid3d.GetNumberOfCells()
-    num2dcells = river.vtksgrid2d.GetNumberOfCells()
 
     # Initialize particles with initial location and attach RiverGrid
-    # npart = 300  # number of particles per processor
     npart = settings["NumPart"]
 
     globalnparts = npart * size  # total number of particles across processors
@@ -142,23 +243,19 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
         npart, x, y, z, rng, river, track3d, 0.2, period, min_elev, ttime
     ) """
 
-    particles = FallingParticles(npart, x, y, z, rng, river, radius=0.000001)
+    particles = FallingParticles(npart, x, y, z, rng, river, track3d, radius=0.000001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
+    # Calc simulation and printing times
     times = np.arange(dt, endtime + dt, dt)
     n_times = times.size
-
-    print_inc = np.max(
-        [np.int32(print_inc_time / dt), 1]
-    )  # smallest possible increment = 1
-    print_inc = np.min(
-        [print_inc, n_times]
-    )  # prevent print increments longer than the simulation
+    print_inc = np.max([np.int32(print_inc_time / dt), 1])  # bound below
+    print_inc = np.min([print_inc, n_times])  # bound above
     print_times = times[print_inc - 1 : n_times : print_inc]
     # Add final time to print_times, if necessary
     if print_times[-1] != times[-1]:
         print_times = np.append(print_times, times[-1])
-    n_prints = print_times.size + 1  # plus one so we can write t=0.0 to file
+    n_prints = print_times.size + 1  # plus one so we can write t=0 to file
 
     # Create HDF5 particles dataset; collective in MPI
     fname = output_directory + "//particles.h5"
@@ -231,98 +328,10 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
             flush=True,
         )
 
-    # Write xml files and cumulative cell counters
     if master:
-        # Create and open xdmf files
-        cells1d_xmf = open(output_directory + "//cells_onedim.xmf", "w")
-        cells2d_xmf = open(output_directory + "//cells_twodim.xmf", "w")
-        cells3d_xmf = open(output_directory + "//cells_threedim.xmf", "w")
-        parts_xmf = open(output_directory + "//particles.xmf", "w")
-        river.write_hdf5_xmf_header1d(cells1d_xmf)
-        river.write_hdf5_xmf_header2d(cells2d_xmf)
-        river.write_hdf5_xmf_header3d(cells3d_xmf)
-        particles.write_hdf5_xmf_header(parts_xmf)
-
-        # Create cells HDF5 file
-        grpc = parts_h5["coordinates"]
-        grpp = parts_h5["properties"]
-        time = grpc["time"]
-        cells_h5 = river.create_hdf5(n_prints, time, output_directory + "//cells.h5")
-
-        numpartincell = np.zeros(num2dcells, dtype=np.int64)
-        numpartin3dcell = np.zeros(num3dcells, dtype=np.int64)
-        parttimeincell = np.zeros(num2dcells)
-        totpartincell = np.zeros(num2dcells, dtype=np.int64)
-        partinnscell = np.zeros(nsc, dtype=np.int64)
-
-        # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
-        # write the arrays to the cells HDF5, and write metadata to the XDMF files
-        gen = [t for t in time if not np.isnan(t)]
-        for i in range(len(gen)):
-            t = gen[i]
-            cell2d = grpp["cellidx2d"][i, :]
-            cell3d = grpp["cellidx3d"][i, :]
-            t = t.item(0)  # this returns a python scalar, for use in f-strings
-            particles.write_hdf5_xmf(parts_xmf, t, n_prints, globalnparts, i)
-
-            partinnscell[:] = 0
-            numpartin3dcell[:] = 0
-            numpartincell[:] = 0
-            np.add.at(partinnscell, cell2d % nsc, 1)
-            np.add.at(parttimeincell, cell2d, dt)
-            np.add.at(totpartincell, cell2d, 1)
-            np.add.at(numpartincell, cell2d, 1)
-            np.add.at(numpartin3dcell, cell3d, 1)
-
-            # dims, name, and attrname must be passed to write_hdf5_xmf as iterable objects
-            # dtypes too, but it is optional (defaults to "Float")
-            name = [[]]
-            attrname = [[]]
-            name[0] = f"/cells1d/fpc{i}"
-            attrname[0] = "FractionalParticleCount"
-            data = partinnscell / globalnparts
-            river.write_hdf5(cells_h5, name[0], data)
-            dims = (river.ns - 1,)
-            river.write_hdf5_xmf(cells1d_xmf, t, dims, name, attrname, center="Node")
-
-            name = [[], []]
-            attrname = [[], []]
-            dtypes = [[], []]
-            name[0] = f"/cells2d/fpc{i}"
-            attrname[0] = "FractionalParticleCount"
-            dtypes[0] = "Float"
-            dims = (river.ns - 1, river.nn - 1)
-            data = (numpartincell / globalnparts).reshape(dims)
-            river.write_hdf5(cells_h5, name[0], data)
-            name[1] = f"/cells2d/tpc{i}"
-            attrname[1] = "TotalParticleCount"
-            dtypes[1] = "Int"
-            dims = (river.ns - 1, river.nn - 1)
-            data = totpartincell.reshape(dims)
-            river.write_hdf5(cells_h5, name[1], data)
-            river.write_hdf5_xmf(cells2d_xmf, t, dims, name, attrname, dtypes)
-
-            name = [[]]
-            attrname = [[]]
-            name[0] = f"/cells3d/fpc{i}"
-            attrname[0] = "FractionalParticleCount"
-            dims = (river.ns - 1, river.nn - 1, river.nz - 1)
-            data = (numpartin3dcell / globalnparts).reshape(dims)
-            river.write_hdf5(cells_h5, name[0], data)
-            river.write_hdf5_xmf(cells3d_xmf, t, dims, name, attrname)
-
-        # Finalize xmf file writing
-        river.write_hdf5_xmf_footer(cells1d_xmf)
-        river.write_hdf5_xmf_footer(cells2d_xmf)
-        river.write_hdf5_xmf_footer(cells3d_xmf)
-        particles.write_hdf5_xmf_footer(parts_xmf)
-        cells1d_xmf.close()
-        cells2d_xmf.close()
-        cells3d_xmf.close()
-        parts_xmf.close()
-        cells_h5.close()
-    # end ROOT section
-    # the preceeding section could be done on several processors, split over the first index (time)
+        postprocess(
+            output_directory, river, particles, parts_h5, n_prints, globalnparts
+        )
 
     # COLLECTIVE file close
     parts_h5.close()

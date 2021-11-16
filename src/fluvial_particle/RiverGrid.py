@@ -19,6 +19,7 @@ class RiverGrid:
             filename3d ([type], optional): [description]. Defaults to None.
         """
         self.vtksgrid2d = vtk.vtkStructuredGrid()
+        self.vtksgrid3d = None
         self._fname2d = filename2d
         self._fname3d = filename3d
         self._read_2d_data()
@@ -27,13 +28,15 @@ class RiverGrid:
             self.vtksgrid3d = vtk.vtkStructuredGrid()
             self._read_3d_data()
             self.ns, self.nn, self.nz = self.vtksgrid3d.GetDimensions()
-            self.nsc = self.ns - 1
-            self.nnc = self.nn - 1
         else:
             self.track3d = 0
             self.ns, self.nn, self.nz = self.vtksgrid2d.GetDimensions()
-            self.nsc = self.ns - 1
-            self.nnc = self.nn - 1
+        self.ns = np.max([self.ns, 1])
+        self.nn = np.max([self.nn, 1])
+        self.nz = np.max([self.nz, 1])
+        self.nsc = np.max([self.ns - 1, 1])
+        self.nnc = np.max([self.nn - 1, 1])
+        self.nzc = np.max([self.nz - 1, 1])
         self._load_arrays()
         self._build_locators()
 
@@ -48,7 +51,10 @@ class RiverGrid:
         Returns:
             [type]: [description]
         """
-        vtkcoords = self.vtksgrid3d.GetPoints().GetData()
+        if self.track3d:
+            vtkcoords = self.vtksgrid3d.GetPoints().GetData()
+        else:
+            vtkcoords = self.vtksgrid2d.GetPoints().GetData()
         coords = numpy_support.vtk_to_numpy(vtkcoords)
         x = coords[:, 0]
         y = coords[:, 1]
@@ -57,35 +63,36 @@ class RiverGrid:
         # ordering of the vtk grid points, keep the reshapes this way
         # so that paraview can read it and the cell-centered data
         # coherently; YOU ALREADY TRIED THE OTHER PERMUTATIONS
-        x = x.reshape(self.nz, self.nn, self.ns)
-        y = y.reshape(self.nz, self.nn, self.ns)
-        z = z.reshape(self.nz, self.nn, self.ns)
-        zeros = np.zeros((self.ns - 1,), dtype="f")
-        arr = np.zeros((self.ns - 1, self.nn - 1, self.nz - 1), dtype="f")
+        ns = self.ns
+        nn = self.nn
+        nz = self.nz
+        nsc = self.nsc
+        nnc = self.nnc
+        nzc = self.nzc
+        x = x.reshape(nz, nn, ns)
+        y = y.reshape(nz, nn, ns)
+        z = z.reshape(nz, nn, ns)
+        zeros = np.zeros((nsc,), dtype="f")
+        arr = np.zeros((nsc, nnc, nzc), dtype="f")
         cells_h5 = h5py.File(fname, "w")
         grpg = cells_h5.create_group("grid")
         grp1 = cells_h5.create_group("cells1d")
         grp2 = cells_h5.create_group("cells2d")
-        grp3 = cells_h5.create_group("cells3d")
-        grpg.create_dataset("X", (self.nz, self.nn, self.ns), data=x)
-        grpg.create_dataset("Y", (self.nz, self.nn, self.ns), data=y)
-        grpg.create_dataset("Z", (self.nz, self.nn, self.ns), data=z)
+        if self.track3d:
+            grp3 = cells_h5.create_group("cells3d")
+        grpg.create_dataset("X", (nz, nn, ns), data=x)
+        grpg.create_dataset("Y", (nz, nn, ns), data=y)
+        grpg.create_dataset("Z", (nz, nn, ns), data=z)
         grpg.create_dataset("time", (dimtime, 1), data=time)
-        grpg.create_dataset(
-            "zeros", (self.ns - 1), data=zeros
-        )  # for 1D viz in paraview
+        grpg.create_dataset("zeros", (nsc,), data=zeros)
         for i in np.arange(dimtime):
             dname = f"fpc{i}"
-            grp1.create_dataset(dname, (self.ns - 1), data=arr[:, 0, 0])
-            grp2.create_dataset(dname, (self.ns - 1, self.nn - 1), data=arr[:, :, 0])
-            grp3.create_dataset(
-                dname, (self.ns - 1, self.nn - 1, self.nz - 1), data=arr
-            )
+            grp1.create_dataset(dname, (nsc,), data=arr[:, 0, 0])
+            grp2.create_dataset(dname, (nsc, nnc), data=arr[:, :, 0])
+            if self.track3d:
+                grp3.create_dataset(dname, (nsc, nnc, nzc), data=arr)
             dname = f"tpc{i}"
-            grp2.create_dataset(dname, (self.ns - 1, self.nn - 1), data=arr[:, :, 0])
-            grp3.create_dataset(
-                dname, (self.ns - 1, self.nn - 1, self.nz - 1), data=arr
-            )
+            grp2.create_dataset(dname, (nsc, nnc), data=arr[:, :, 0])
         return cells_h5
 
     def _build_locators(self):
@@ -259,23 +266,22 @@ class RiverGrid:
         # relative to their order in both the input NumPy arrays and in the cell-centered xdmf body; can't
         # figure out why, but this is the only permutation that works.
         # You've tried the other permutations, don't mess with it
-        ns, nn, nz = self.vtksgrid3d.GetDimensions()
         filexmf.write(
             f"""<Xdmf Version="3.0">
             <Domain>
-                <Topology Name="Topo" TopologyType="PolyVertex" NodesPerElement="{self.ns - 1}"/>
+                <Topology Name="Topo" TopologyType="PolyVertex" NodesPerElement="{self.nsc}"/>
                 <Geometry Name="Geo" GeometryType="X_Y">
-                    <DataItem ItemType="Hyperslab" Dimensions="1 1 {self.ns - 1}" Format="XML">
+                    <DataItem ItemType="Hyperslab" Dimensions="1 1 {self.nsc}" Format="XML">
                         <DataItem Dimensions="3 3" Format="XML">
                             0 0 0
                             1 1 1
-                            1 1 {self.ns - 1}
+                            1 1 {self.nsc}
                         </DataItem>
-                        <DataItem Name="X" Dimensions="{nz} {self.nn} {self.ns}" Format="HDF">
+                        <DataItem Name="X" Dimensions="{self.nz} {self.nn} {self.ns}" Format="HDF">
                             cells.h5:/grid/X
                         </DataItem>
                     </DataItem>
-                    <DataItem Name="Y" Dimensions="{self.ns - 1}" Format="HDF">
+                    <DataItem Name="Y" Dimensions="{self.nsc}" Format="HDF">
                         cells.h5:/grid/zeros
                     </DataItem>
                 </Geometry>
