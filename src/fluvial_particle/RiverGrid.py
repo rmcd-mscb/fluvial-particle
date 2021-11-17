@@ -20,23 +20,21 @@ class RiverGrid:
         """
         self.vtksgrid2d = vtk.vtkStructuredGrid()
         self.vtksgrid3d = None
-        self._fname2d = filename2d
-        self._fname3d = filename3d
+        self.fname2d = filename2d
+        self._fname3d = None
         self._read_2d_data()
         if track3d:
             self.track3d = 1
+            self.fname3d = filename3d
             self.vtksgrid3d = vtk.vtkStructuredGrid()
             self._read_3d_data()
             self.ns, self.nn, self.nz = self.vtksgrid3d.GetDimensions()
         else:
             self.track3d = 0
             self.ns, self.nn, self.nz = self.vtksgrid2d.GetDimensions()
-        self.ns = np.max([self.ns, 1])
-        self.nn = np.max([self.nn, 1])
-        self.nz = np.max([self.nz, 1])
-        self.nsc = np.max([self.ns - 1, 1])
-        self.nnc = np.max([self.nn - 1, 1])
-        self.nzc = np.max([self.nz - 1, 1])
+        self.nsc = self.ns - 1
+        self.nnc = self.nn - 1
+        self.nzc = self.nz - 1
         self._load_arrays()
         self._build_locators()
 
@@ -124,13 +122,9 @@ class RiverGrid:
 
     def _read_2d_data(self):
         """Read 2D structured grid data file."""
-        # Check that input file exists
-        inputfile = pathlib.Path(self._fname2d)
-        if not inputfile.exists():
-            raise Exception(f"Cannot find 2D input file {inputfile}")
         # Read 2D grid
         reader2d = vtk.vtkStructuredGridReader()
-        reader2d.SetFileName(self._fname2d)
+        reader2d.SetFileName(self.fname2d)
         reader2d.SetOutput(self.vtksgrid2d)
         reader2d.Update()
         # Check for required field arrays
@@ -138,17 +132,13 @@ class RiverGrid:
         names = [a.GetArrayName(i) for i in range(a.GetNumberOfArrays())]
         missing = [x for x in self.required_keys2d if x not in names]
         if len(missing) > 0:
-            raise ValueError(f"Missing {missing} from the user parameter file")
+            raise ValueError(f"Missing {missing} array from the input 2D grid")
 
     def _read_3d_data(self):
         """Read 3D structured grid data file."""
-        # Check that input file exists
-        inputfile = pathlib.Path(self._fname3d)
-        if not inputfile.exists():
-            raise Exception(f"Cannot find 3D input file {inputfile}")
         # Read 2D grid
         reader3d = vtk.vtkStructuredGridReader()
-        reader3d.SetFileName(self._fname3d)
+        reader3d.SetFileName(self.fname3d)
         reader3d.SetOutput(self.vtksgrid3d)
         reader3d.Update()
         # Check for required field arrays
@@ -156,7 +146,7 @@ class RiverGrid:
         names = [a.GetArrayName(i) for i in range(a.GetNumberOfArrays())]
         missing = [x for x in self.required_keys3d if x not in names]
         if len(missing) > 0:
-            raise ValueError(f"Missing {missing} from the user parameter file")
+            raise ValueError(f"Missing {missing} array from the input 3D grid")
 
     @property
     def required_keys2d(self):
@@ -369,3 +359,214 @@ class RiverGrid:
         </Xdmf>
         """
         )
+
+    # Properties
+
+    @property
+    def fname2d(self):
+        """Get 2d grid input filename.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._fname2d
+
+    @fname2d.setter
+    def fname2d(self, values):
+        """Set 2d grid input filename.
+
+        Args:
+            values ([type]): [description]
+        """
+        # Check that input file exists
+        inputfile = pathlib.Path(values)
+        if not inputfile.exists():
+            raise Exception(f"Cannot find 2D input file {inputfile}")
+        self._fname2d = values
+
+    @property
+    def fname3d(self):
+        """Get 3d grid input filename.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._fname3d
+
+    @fname3d.setter
+    def fname3d(self, values):
+        """Set 3d grid input filename.
+
+        Args:
+            values ([type]): [description]
+        """
+        # Check that input file exists
+        inputfile = pathlib.Path(values)
+        if not inputfile.exists():
+            raise Exception(f"Cannot find 3D input file {inputfile}")
+        self._fname3d = values
+
+    @property
+    def nn(self):
+        """Get nn, number of stream-normal points that define the grids.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._nn
+
+    @nn.setter
+    def nn(self, values):
+        """Set nn, number of stream-normal points that define the grids.
+
+        Args:
+            values ([type]): [description]
+        """
+        # must be basic Python integer type
+        if not isinstance(values, int):
+            raise TypeError("nn.setter wrong type")
+        # for file writing reasons, must be >= 1
+        if values < 1:
+            values = 1
+        self._nn = values
+
+    @property
+    def nnc(self):
+        """Get nnc, number of stream-normal cells defined by the grids.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._nnc
+
+    @nnc.setter
+    def nnc(self, values):
+        """Set nnc, number of stream-normal cells defined by the grids.
+
+        Args:
+            values ([type]): [description]
+        """
+        # must be basic Python integer type
+        if not isinstance(values, int):
+            raise TypeError("nnc.setter wrong type")
+        # for file writing reasons, must be >= 1
+        if values < 1:
+            values = 1
+        self._nnc = values
+
+    @property
+    def ns(self):
+        """Get ns, number of stream-wise points that define the grids.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._ns
+
+    @ns.setter
+    def ns(self, values):
+        """Set ns, number of stream-wise points that define the grids.
+
+        Args:
+            values ([type]): [description]
+        """
+        # must be basic Python integer type
+        if not isinstance(values, int):
+            raise TypeError("ns.setter wrong type")
+        # for file writing reasons, must be >= 1
+        if values < 1:
+            values = 1
+        self._ns = values
+
+    @property
+    def nsc(self):
+        """Get nsc, number of stream-wise cells defined by the grids.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._nsc
+
+    @nsc.setter
+    def nsc(self, values):
+        """Set nsc, number of stream-wise cells defined by the grids.
+
+        Args:
+            values ([type]): [description]
+        """
+        # must be basic Python integer type
+        if not isinstance(values, int):
+            raise TypeError("nsc.setter wrong type")
+        # for file writing reasons, must be >= 1
+        if values < 1:
+            values = 1
+        self._nsc = values
+
+    @property
+    def nz(self):
+        """Get nz, number of vertical points that define the grids.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._nz
+
+    @nz.setter
+    def nz(self, values):
+        """Set nz, number of vertical points that define the grids.
+
+        Args:
+            values ([type]): [description]
+        """
+        # must be basic Python integer type
+        if not isinstance(values, int):
+            raise TypeError("nz.setter wrong type")
+        # for file writing reasons, must be >= 1
+        if values < 1:
+            values = 1
+        self._nz = values
+
+    @property
+    def nzc(self):
+        """Get nzc, number of vertical cells defined by the grids.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._nzc
+
+    @nzc.setter
+    def nzc(self, values):
+        """Set nzc, number of vertical cells defined by the grids.
+
+        Args:
+            values ([type]): [description]
+        """
+        # must be basic Python integer type
+        if not isinstance(values, int):
+            raise TypeError("nzc.setter wrong type")
+        # for file writing reasons, must be >= 1
+        if values < 1:
+            values = 1
+        self._nzc = values
+
+    @property
+    def track3d(self):
+        """Get track3d.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._track3d
+
+    @track3d.setter
+    def track3d(self, values):
+        """Set track3d.
+
+        Args:
+            values ([type]): [description]
+        """
+        # must be basic Python integer type
+        if not isinstance(values, int):
+            raise TypeError("track3d.setter wrong type")
+        self._track3d = values

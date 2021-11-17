@@ -212,6 +212,7 @@ class Particles:
             weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             for i in np.nditer(b, ["zerosize_ok"]):
                 point = [px[i], py[i], 0.0]
+                cell.SetCellTypeToEmptyCell()
                 self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
                     point,
                     0.0,
@@ -261,6 +262,7 @@ class Particles:
             a = self.indices[self.mask]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], self.z[i]]
+            cell.SetCellTypeToEmptyCell()
             self.cellindex3d[i] = self.mesh.CellLocator3D.FindCell(
                 point, 0.0, cell, pcoords, weights
             )
@@ -271,9 +273,9 @@ class Particles:
                 self.vely[i] = uy
                 self.velz[i] = uz
             else:
-                print(
+                """print(
                     f"3d findcell failed particle number: {i}, switching to FindCellsAlongLine()"
-                )
+                )"""
                 idlist = vtk.vtkIdList()
                 pp1 = [point[0], point[1], self.wse[i] + 10]
                 pp2 = [point[0], point[1], self.bedelev[i] - 10]
@@ -332,6 +334,7 @@ class Particles:
             a = self.indices[self.mask]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], 0.0]
+            cell.SetCellTypeToEmptyCell()
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
                 point, 0.0, cell, pcoords, weights
             )
@@ -527,6 +530,7 @@ class Particles:
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [px[i], py[i], 0.0]
+            cell.SetCellTypeToEmptyCell()
             self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
             idlist = cell.GetPointIds()
             numpts = cell.GetNumberOfPoints()
@@ -615,7 +619,7 @@ class Particles:
             py (float NumPy array): new y coordinates of particles
             min_depth (float): minimum allowed depth that particles may enter
         """
-        print("particle entered min_depth")
+        # print("particle entered min_depth")
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -625,6 +629,7 @@ class Particles:
             px[i] = self.x[i]
             py[i] = self.y[i]
             point = [px[i], py[i], 0.0]
+            cell.SetCellTypeToEmptyCell()
             self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
                 point, 0.0, cell, pcoords, weights
             )
