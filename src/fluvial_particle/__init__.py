@@ -243,7 +243,8 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
         npart, x, y, z, rng, river, track3d, 0.2, period, min_elev, ttime
     ) """
 
-    particles = FallingParticles(npart, x, y, z, rng, river, track3d, radius=0.000001)
+    particles = Particles(npart, x, y, z, rng, river, track3d)
+    # particles = FallingParticles(npart, x, y, z, rng, river, track3d, radius=0.000001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
     # Calc simulation and printing times

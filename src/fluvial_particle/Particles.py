@@ -257,9 +257,9 @@ class Particles:
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        a = self.indices
+        a = np.copy(self.indices)
         if self.mask is not None:
-            a = self.indices[self.mask]
+            a = np.copy(self.indices[self.mask])
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], self.z[i]]
             cell.SetCellTypeToEmptyCell()
@@ -329,9 +329,9 @@ class Particles:
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        a = self.indices
+        a = np.copy(self.indices)
         if self.mask is not None:
-            a = self.indices[self.mask]
+            a = np.copy(self.indices[self.mask])
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], 0.0]
             cell.SetCellTypeToEmptyCell()
@@ -515,14 +515,14 @@ class Particles:
         self.perturb_2d(px, py, dt)
 
         # check if new positions are wet
-        a = self.indices
+        a = np.copy(self.indices)
         if self.mask is not None:
             a = a[self.mask]
         wet = self.is_part_wet(px, py, a)
         if np.any(~wet):
             self.handle_dry_parts(px, py, a[~wet], dt)
         if self.mask is not None:
-            a = self.indices[self.mask]
+            a = np.copy(self.indices[self.mask])
 
         # update bed elevation, wse, depth
         cell = vtk.vtkGenericCell()
@@ -575,6 +575,7 @@ class Particles:
         yranwalk = self.yrnum * (2.0 * self.diffy * dt) ** 0.5
         # Move and update positions in-place on each array
         a = self.indices[velmag > 0.0]
+        b = self.indices[velmag == 0.0]
         px[a] += (
             vx[a] * dt
             + ((xranwalk[a] * vx[a]) / velmag[a])
@@ -585,6 +586,8 @@ class Particles:
             + ((xranwalk[a] * vy[a]) / velmag[a])
             + ((yranwalk[a] * vx[a]) / velmag[a])
         )
+        px[b] += xranwalk[b]
+        py[b] += yranwalk[b]
 
     def perturb_random_only_2d(self, px, py, a, dt):
         """Project new particle 2D positions based on random walk only.
@@ -623,7 +626,7 @@ class Particles:
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        a = self.indices[self.depth < min_depth]
+        a = np.copy(self.indices[self.depth < min_depth])
         # update cell indices and interpolations
         for i in np.nditer(a, ["zerosize_ok"]):
             px[i] = self.x[i]

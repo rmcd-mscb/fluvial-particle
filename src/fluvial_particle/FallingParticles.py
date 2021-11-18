@@ -177,6 +177,9 @@ class FallingParticles(Particles):
             raise TypeError(
                 "radius wrong type, must be either float scalar or NumPy float array"
             )
+        if np.any(values <= 0):
+            raise ValueError("radius must be positive number")
+
         self._radius = values
 
     @property
@@ -207,4 +210,7 @@ class FallingParticles(Particles):
             raise TypeError(
                 "rho wrong type, must be either float scalar or NumPy float array"
             )
+        if np.any(values <= 0):
+            raise ValueError("rho must be positive number")
+
         self._rho = values
