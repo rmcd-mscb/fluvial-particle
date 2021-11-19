@@ -38,6 +38,10 @@ class RiverGrid:
         self._load_arrays()
         self._build_locators()
 
+        firstcells = np.arange(0, self.nsc * (self.nnc - 1) + 1, self.nsc)
+        lastcells = np.arange(self.nsc - 1, self.nsc * self.nnc, self.nsc)
+        self.boundarycells = np.union1d(firstcells, lastcells)
+
     def create_hdf5(self, dimtime, time, fname="cells.h5"):
         """Create HDF5 file for cell-centered results.
 

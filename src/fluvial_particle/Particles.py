@@ -167,6 +167,7 @@ class Particles:
         self._diffy[idx] = np.nan
         self._diffz[idx] = np.nan
         self._time[idx] = np.nan
+        self.mask[idx] = False
 
     def gen_rands(self):
         """Generate random numbers drawn from standard normal distribution."""
@@ -464,16 +465,14 @@ class Particles:
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [px[i], py[i], 0.0]
             cell.SetCellTypeToEmptyCell()
-            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
-                point, 0.0, cell, pcoords, weights
-            )
-            if self.cellindex2d[i] < 0:
+            idx = self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
+            if idx < 0 or np.isin(idx, self.mesh.boundarycells, assume_unique=True):
                 if self.mask is None:
                     self.mask = np.full(self.nparts, fill_value=True)
-                self.mask[i] = False
                 self.deactivate_particle(i)
                 wet[j] = False
             else:
+                self.cellindex2d[i] = idx
                 idlist = cell.GetPointIds()
                 numpts = cell.GetNumberOfPoints()
                 wet[j] = self.is_part_wet_kernel(i, idlist, numpts)

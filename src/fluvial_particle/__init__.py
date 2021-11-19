@@ -365,6 +365,17 @@ def track_mpi():
 
     settings_file, output_directory, seed = checkcommandarguments()
 
+    inputfile = pathlib.Path(settings_file)
+    if not inputfile.exists():
+        raise Exception(f"Cannot find settings file {inputfile}")
+    outdir = pathlib.Path(output_directory)
+    if not outdir.is_dir():
+        raise Exception(f"Output directory {outdir} does not exist")
+    if seed is not None:
+        print(
+            "Warning: user-input seed detected, option only available in serial execution."
+        )
+
     options = Settings.read(settings_file)
 
     simulate(options, output_directory, comm=comm, timer=MPI.Wtime)
