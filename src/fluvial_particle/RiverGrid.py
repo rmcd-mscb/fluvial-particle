@@ -38,6 +38,8 @@ class RiverGrid:
         self._load_arrays()
         self._build_locators()
 
+        # On structured grid, always assumes river flows in or out through the i=1, i=imax faces,
+        # not the j=1,j=jmax faces (although this could be added)
         firstcells = np.arange(0, self.nsc * (self.nnc - 1) + 1, self.nsc)
         lastcells = np.arange(self.nsc - 1, self.nsc * self.nnc, self.nsc)
         self.boundarycells = np.union1d(firstcells, lastcells)
@@ -365,6 +367,30 @@ class RiverGrid:
         )
 
     # Properties
+
+    @property
+    def boundarycells(self):
+        """Get inflow/outflow boundary cells.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._boundarycells
+
+    @boundarycells.setter
+    def boundarycells(self, values):
+        """Set inflow/outflow boundary cells.
+
+        Args:
+            values ([type]): [description]
+        """
+        assert isinstance(values, np.ndarray), TypeError(  # noqa:S101
+            "boundarycells.setter: wrong type, must be NumPy ndarray, ndims=1"
+        )
+        assert values.ndim == 1, ValueError(  # noqa: S101
+            "boundarycells.setter: ndims must equal 1 for use in np.sortedsearch()"
+        )
+        self._boundarycells = values
 
     @property
     def fname2d(self):

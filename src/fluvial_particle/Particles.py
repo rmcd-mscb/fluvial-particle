@@ -303,7 +303,7 @@ class Particles:
                         self.velz[i] = tmp3duz
                         self.cellindex3d[i] = idlist.GetId(t)
                 if self.cellindex3d[i] < 0:
-                    print("part still out of 3d grid")
+                    print("particle {i} out of 3d grid")
                     self.velx[i] = 0.0
                     self.vely[i] = 0.0
                     self.velz[i] = 0.0
@@ -357,7 +357,7 @@ class Particles:
             self.shearstress[i] = self.interp_cell_value(
                 weights, idlist, numpts, self.mesh.ShearStress2D
             )
-            if ~self.track3d:
+            if not self.track3d:
                 self.velx[i], self.vely[i] = self.interp_vel2d_value(
                     weights, idlist, numpts
                 )
@@ -460,41 +460,51 @@ class Particles:
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        wet = np.empty(np.size(a), dtype=bool)
-        j = 0
-        for i in np.nditer(a, ["zerosize_ok"]):
+        wet = np.full(np.size(a), dtype=bool, fill_value=False)
+        cellidx = np.full(np.size(a), dtype=np.int64, fill_value=-1)
+        ita = np.nditer(a, flags=["multi_index", "zerosize_ok"])
+        for i in ita:
+            j = ita.multi_index[0]
             point = [px[i], py[i], 0.0]
             cell.SetCellTypeToEmptyCell()
-            idx = self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
-            if idx < 0 or np.isin(idx, self.mesh.boundarycells, assume_unique=True):
-                if self.mask is None:
-                    self.mask = np.full(self.nparts, fill_value=True)
+            cellidx[j] = self.mesh.CellLocator2D.FindCell(
+                point, 0.0, cell, pcoords, weights
+            )
+        idxss = np.searchsorted(self.mesh.boundarycells, cellidx)
+        bndcells = np.equal(self.mesh.boundarycells[idxss], cellidx)
+        outofgrid = np.less(cellidx, 0)
+        outparts = np.logical_or(bndcells, outofgrid)
+        if np.any(outparts):
+            b = a[outparts]
+            if self.mask is None:
+                self.mask = np.full(self.nparts, fill_value=True)
+            for i in np.nditer(b):
                 self.deactivate_particle(i)
-                wet[j] = False
-            else:
-                self.cellindex2d[i] = idx
-                idlist = cell.GetPointIds()
-                numpts = cell.GetNumberOfPoints()
-                wet[j] = self.is_part_wet_kernel(i, idlist, numpts)
-            j += 1
+        c = np.arange(a.size)
+        c = c[~outparts]
+        for j in np.nditer(c, ["zerosize_ok"]):
+            i = a[j]
+            point = [px[i], py[i], 0.0]
+            self.cellindex2d[i] = self.mesh.CellLocator2D.FindCell(
+                point, 0.0, cell, pcoords, weights
+            )
+            idlist = cell.GetPointIds()
+            numpts = cell.GetNumberOfPoints()
+            wet[j] = self.is_part_wet_kernel(idlist, numpts)
         return wet
 
-    def is_part_wet_kernel(self, idx, idlist, numpts):
+    def is_part_wet_kernel(self, idlist, numpts):
         """Interpolate IBC mesh array to a point.
 
         Args:
-            idx ([type]): [description]
             idlist (vtkIdList): list of points that define cell # cellid
             numpts (vtkIdType): number of points in idlist
 
         Returns:
             (bool): returns True if all points defining cell are wet, False otherwise
         """
-        a = np.zeros((numpts,), dtype=np.int32)
         for i in range(numpts):
-            a[i] = idlist.GetId(i)
-        for i in range(numpts):
-            b = self.mesh.IBC_2D.GetTuple(a[i])[0]
+            b = self.mesh.IBC_2D.GetTuple(idlist.GetId(i))[0]
             if b < 1:
                 return False
         return True
