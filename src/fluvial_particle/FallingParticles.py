@@ -1,7 +1,7 @@
 """Falling Particles Class module."""
 import numpy as np
 
-from fluvial_particle.Particles import Particles
+from .Particles import Particles
 
 
 class FallingParticles(Particles):
