@@ -95,10 +95,10 @@ class Particles:
 
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
-        grpc.create_dataset("x", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
-        grpc.create_dataset("y", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
-        grpc.create_dataset("z", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
-        grpc.create_dataset("time", (nprints, 1), dtype="f", fillvalue=np.nan)
+        grpc.create_dataset("x", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan)
+        grpc.create_dataset("y", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan)
+        grpc.create_dataset("z", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan)
+        grpc.create_dataset("time", (nprints, 1), dtype=np.float64, fillvalue=np.nan)
         grpc["x"].attrs["Units"] = "meters"
         grpc["y"].attrs["Units"] = "meters"
         grpc["z"].attrs["Units"] = "meters"
@@ -106,21 +106,21 @@ class Particles:
 
         grpp = parts_h5.create_group("properties")
         grpp.create_dataset(
-            "bedelev", (nprints, globalnparts), dtype="f", fillvalue=np.nan
+            "bedelev", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
         grpp.create_dataset(
-            "cellidx2d", (nprints, globalnparts), dtype="i", fillvalue=-1
+            "cellidx2d", (nprints, globalnparts), dtype=np.int64, fillvalue=-1
         )
         grpp.create_dataset(
-            "cellidx3d", (nprints, globalnparts), dtype="i", fillvalue=-1
+            "cellidx3d", (nprints, globalnparts), dtype=np.int64, fillvalue=-1
         )
         grpp.create_dataset(
-            "htabvbed", (nprints, globalnparts), dtype="f", fillvalue=np.nan
+            "htabvbed", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
         grpp.create_dataset(
-            "velvec", (nprints, globalnparts, 3), dtype="f", fillvalue=np.nan
+            "velvec", (nprints, globalnparts, 3), dtype=np.float64, fillvalue=np.nan
         )
-        grpp.create_dataset("wse", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
+        grpp.create_dataset("wse", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grpp["bedelev"].attrs[
             "Description"
         ] = "Bed elevation at x,y position of particles"

@@ -1,5 +1,5 @@
 """UserDefinedParticles Class module."""
-from fluvial_particle.Particles import Particles
+from .Particles import Particles
 
 
 class UserDefinedParticles(Particles):
