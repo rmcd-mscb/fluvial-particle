@@ -256,7 +256,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         npart, x, y, z, rng, river, track3d, 0.2, period, min_elev, ttime
     ) """
 
-    particles = Particles(npart, x, y, z, rng, river, track3d)
+    particles = Particles(npart, x, y, z, rng, river, track3d, comm=comm)
     # particles = FallingParticles(npart, x, y, z, rng, river, track3d, radius=0.000001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
@@ -311,7 +311,8 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
                 break
 
         # Write to HDF5
-        if np.in1d(times[i], print_times):
+        tidx = np.searchsorted(print_times, times[i])
+        if print_times[tidx] == times[i]:
             particles.write_hdf5(
                 parts_h5, np.int32(i / print_inc) + 1, start, end, times[i], rank
             )
