@@ -33,10 +33,19 @@ def checkcommandarguments():
         default=None,
         help="Specify a single integer to fix the seed of the random number generator. Only used in serial mode.",
     )
+    parser.add_argument("--no-postprocess", action="store_false")
+    # note: argparse will convert to key="no_postprocess"
 
-    args = parser.parse_args()
+    argdict = vars(parser.parse_args())
 
-    return args.settings_file, args.output_directory, args.seed
+    inputfile = pathlib.Path(argdict["settings_file"])
+    if not inputfile.exists():
+        raise Exception(f"Cannot find settings file {inputfile}")
+    outdir = pathlib.Path(argdict["output_directory"])
+    if not outdir.is_dir():
+        raise Exception(f"Output directory {outdir} does not exist")
+
+    return argdict
 
 
 def get_prng(timer, seed=None):
@@ -162,14 +171,13 @@ def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnp
     cells_h5.close()
 
 
-def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
+def simulate(settings, argvars, timer, comm=None):  # noqa
     """Run the fluvial particle simulation.
 
     Args:
         settings (dict subclass): parameter settings for the simulation
-        output_directory (string): path to print output
+        argvars (dict): dictionary holding command line argument variables
         timer (time object): does timing
-        seed (int): for serial runs only, random seed specified from command line
         comm (MPI intracomm object): for parallel runs only, MPI communicator
     """
     t0 = timer()
@@ -185,6 +193,11 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
 
     if master:
         print("Beginning simulation", flush=True)
+
+    # Command-line arguments
+    output_directory = argvars["output_directory"]
+    seed = argvars["seed"]
+    postprocessflg = argvars["no_postprocess"]
 
     # Some Variables
     endtime = settings["SimTime"]
@@ -260,7 +273,7 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
 
     # Create HDF5 particles dataset; collective in MPI
     fname = output_directory + "//particles.h5"
-    parts_h5 = particles.create_hdf(n_prints, globalnparts, fname=fname, comm=comm)
+    parts_h5 = particles.create_hdf5(n_prints, globalnparts, fname=fname, comm=comm)
 
     if comm is not None:
         comm.Barrier()
@@ -298,7 +311,7 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
                 break
 
         # Write to HDF5
-        if times[i] in print_times:
+        if np.in1d(times[i], print_times):
             particles.write_hdf5(
                 parts_h5, np.int32(i / print_inc) + 1, start, end, times[i], rank
             )
@@ -329,7 +342,8 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
             flush=True,
         )
 
-    if master:
+    if master and postprocessflg:
+        print("Post-processing...")
         postprocess(
             output_directory, river, particles, parts_h5, n_prints, globalnparts
         )
@@ -343,18 +357,11 @@ def simulate(settings, output_directory, timer, seed=None, comm=None):  # noqa
 
 def track_serial():
     """Run fluvial particle in serial."""
-    settings_file, output_directory, seed = checkcommandarguments()
-
-    inputfile = pathlib.Path(settings_file)
-    if not inputfile.exists():
-        raise Exception(f"Cannot find settings file {inputfile}")
-    outdir = pathlib.Path(output_directory)
-    if not outdir.is_dir():
-        raise Exception(f"Output directory {outdir} does not exist")
-
+    argdict = checkcommandarguments()
+    settings_file = argdict["settings_file"]
     options = Settings.read(settings_file)
 
-    simulate(options, output_directory, timer=time.time, seed=seed)
+    simulate(options, argdict, timer=time.time)
 
 
 def track_mpi():
@@ -363,19 +370,12 @@ def track_mpi():
 
     comm = MPI.COMM_WORLD
 
-    settings_file, output_directory, seed = checkcommandarguments()
-
-    inputfile = pathlib.Path(settings_file)
-    if not inputfile.exists():
-        raise Exception(f"Cannot find settings file {inputfile}")
-    outdir = pathlib.Path(output_directory)
-    if not outdir.is_dir():
-        raise Exception(f"Output directory {outdir} does not exist")
+    argdict = checkcommandarguments()
+    settings_file = argdict["settings_file"]
+    seed = argdict["seed"]
     if seed is not None:
-        print(
-            "Warning: user-input seed detected, option only available in serial execution."
-        )
-
+        print("Warning: user-input seed ignored in parallel execution mode.")
+        argdict["seed"] = None
     options = Settings.read(settings_file)
 
-    simulate(options, output_directory, comm=comm, timer=MPI.Wtime)
+    simulate(options, argdict, timer=MPI.Wtime, comm=comm)

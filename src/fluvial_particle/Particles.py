@@ -2,6 +2,7 @@
 import h5py
 import numpy as np
 import vtk
+from vtk.util import numpy_support  # type:ignore
 
 
 class Particles:
@@ -49,6 +50,25 @@ class Particles:
         self.yrnum = np.zeros(nparts)
         self.zrnum = np.zeros(nparts)
 
+        # Objects for 3d grid interpolation
+        self.pt_np = np.zeros((self.nparts, 3))  # ordering required by vtk
+        self.pt_np[:, 0] = self.x
+        self.pt_np[:, 1] = self.y
+        self.pt_np[:, 2] = self.z
+        self.pt_vtk = numpy_support.numpy_to_vtk(self.pt_np)
+        self.pt = vtk.vtkPoints()
+        self.pts = vtk.vtkPointSet()
+        self.probe = vtk.vtkProbeFilter()
+        strategy = vtk.vtkCellLocatorStrategy()
+        self.pt.SetData(self.pt_vtk)
+        self.pts.SetPoints(self.pt)
+        self.probe.SetInputData(self.pts)
+        self.probe.SetSourceData(self.mesh.vtksgrid3d)
+        self.probe.SetFindCellStrategy(strategy)
+        """ these tolerance functions seem to have no effect for points right on the edge of the 3d cells
+        self.probe.ComputeToleranceOff()  # disables automated tolerance calculation
+        self.probe.SetTolerance(0.01)  # is this a dimensionless tolerance? how defined?"""
+
     def adjust_z(self, pz, alpha):
         """Check that new particle vertical position is within bounds.
 
@@ -76,7 +96,7 @@ class Particles:
         self.diffy = lev + by * ustarh
         self.diffz = bz * ustarh  # lev + bz * ustarh
 
-    def create_hdf(self, nprints, globalnparts, comm=None, fname="particles.h5"):
+    def create_hdf5(self, nprints, globalnparts, comm=None, fname="particles.h5"):
         """Create an HDF5 file to write incremental particles results.
 
         Args:
@@ -95,10 +115,16 @@ class Particles:
 
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
-        grpc.create_dataset("x", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
-        grpc.create_dataset("y", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
-        grpc.create_dataset("z", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
-        grpc.create_dataset("time", (nprints, 1), dtype="f", fillvalue=np.nan)
+        grpc.create_dataset(
+            "x", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
+        grpc.create_dataset(
+            "y", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
+        grpc.create_dataset(
+            "z", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
+        grpc.create_dataset("time", (nprints, 1), dtype=np.float64, fillvalue=np.nan)
         grpc["x"].attrs["Units"] = "meters"
         grpc["y"].attrs["Units"] = "meters"
         grpc["z"].attrs["Units"] = "meters"
@@ -106,21 +132,23 @@ class Particles:
 
         grpp = parts_h5.create_group("properties")
         grpp.create_dataset(
-            "bedelev", (nprints, globalnparts), dtype="f", fillvalue=np.nan
+            "bedelev", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
         grpp.create_dataset(
-            "cellidx2d", (nprints, globalnparts), dtype="i", fillvalue=-1
+            "cellidx2d", (nprints, globalnparts), dtype=np.int64, fillvalue=-1
         )
         grpp.create_dataset(
-            "cellidx3d", (nprints, globalnparts), dtype="i", fillvalue=-1
+            "cellidx3d", (nprints, globalnparts), dtype=np.int64, fillvalue=-1
         )
         grpp.create_dataset(
-            "htabvbed", (nprints, globalnparts), dtype="f", fillvalue=np.nan
+            "htabvbed", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
         grpp.create_dataset(
-            "velvec", (nprints, globalnparts, 3), dtype="f", fillvalue=np.nan
+            "velvec", (nprints, globalnparts, 3), dtype=np.float64, fillvalue=np.nan
         )
-        grpp.create_dataset("wse", (nprints, globalnparts), dtype="f", fillvalue=np.nan)
+        grpp.create_dataset(
+            "wse", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
         grpp["bedelev"].attrs[
             "Description"
         ] = "Bed elevation at x,y position of particles"
@@ -255,74 +283,57 @@ class Particles:
 
     def interp_field_3d(self):
         """Interpolate 3D velocity field at current particle positions."""
-        cell = vtk.vtkGenericCell()
-        pcoords = [0.0, 0.0, 0.0]
-        weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        a = np.copy(self.indices)
-        if self.mask is not None:
-            a = np.copy(self.indices[self.mask])
-        for i in np.nditer(a, ["zerosize_ok"]):
-            point = [self.x[i], self.y[i], self.z[i]]
-            cell.SetCellTypeToEmptyCell()
-            self.cellindex3d[i] = self.mesh.CellLocator3D.FindCell(
-                point, 0.0, cell, pcoords, weights
+        if self.mask is None:
+            # Update the NumPy position array
+            self.pt_np[:, 0] = self.x
+            self.pt_np[:, 1] = self.y
+            self.pt_np[:, 2] = self.z
+            # Tell downstream VTK objects that the input pipeline has been modified
+            self.pt.Modified()
+        else:
+            a = self.indices[self.mask]
+            if a.size != self.pt.GetNumberOfPoints():
+                # Number of active particles has changed, reconstruct the probe input objects
+                # This assumes: particles are only deactivated, never re-activated
+                self.pt_np = np.zeros((a.size, 3))
+                self.pt_vtk = numpy_support.numpy_to_vtk(self.pt_np)
+                self.pt.Reset()
+                self.pt.SetData(self.pt_vtk)
+                self.pts.Initialize()
+                self.pts.SetPoints(self.pt)
+                self.probe.SetInputData(self.pts)
+            self.pt_np[:, 0] = self.x[a]
+            self.pt_np[:, 1] = self.y[a]
+            self.pt_np[:, 2] = self.z[a]
+        self.probe.Update()
+
+        # Get interpolated point data from the probe filter
+        dataout = self.probe.GetOutput().GetPointData().GetArray("Velocity")
+        vel = numpy_support.vtk_to_numpy(dataout)
+        if self.mask is None:
+            self.velx = vel[:, 0]
+            self.vely = vel[:, 1]
+            self.velz = vel[:, 2]
+        else:
+            self.velx[a] = vel[:, 0]
+            self.vely[a] = vel[:, 1]
+            self.velz[a] = vel[:, 2]
+        # can dataout be added to the pipeline too? that would remove the iterative numpy_support call.
+        # could write in place on vel, which has a view of the data at dataout
+
+        if a.size != self.probe.GetValidPoints().GetNumberOfTuples():
+            print(
+                f"{a.size - self.probe.GetValidPoints().GetNumberOfTuples()} points failed in 3d probe filter"
             )
-            if self.cellindex3d[i] >= 0:
-                idlist = cell.GetPointIds()
-                ux, uy, uz = self.interp_vel3d_value(idlist, weights)
-                self.velx[i] = ux
-                self.vely[i] = uy
-                self.velz[i] = uz
-            else:
-                """print(
-                    f"3d findcell failed particle number: {i}, switching to FindCellsAlongLine()"
-                )"""
-                idlist = vtk.vtkIdList()
-                pp1 = [point[0], point[1], self.wse[i] + 10]
-                pp2 = [point[0], point[1], self.bedelev[i] - 10]
-                self.mesh.CellLocator3D.FindCellsAlongLine(pp1, pp2, 0.0, idlist)
-                maxdist = 1e6
-                for t in range(idlist.GetNumberOfIds()):
-                    (
-                        result,
-                        dist,
-                        tmp3dux,
-                        tmp3duy,
-                        tmp3duz,
-                    ) = self.interp_vel3d_value_alongline(point, idlist.GetId(t))
-                    if result == 1:
-                        self.velx[i] = tmp3dux
-                        self.vely[i] = tmp3duy
-                        self.velz[i] = tmp3duz
-                        self.cellindex3d[i] = idlist.GetId(t)
-                        break
-                    elif dist < maxdist:
-                        maxdist = dist
-                        self.velx[i] = tmp3dux
-                        self.vely[i] = tmp3duy
-                        self.velz[i] = tmp3duz
-                        self.cellindex3d[i] = idlist.GetId(t)
-                if self.cellindex3d[i] < 0:
-                    print("particle {i} out of 3d grid")
-                    self.velx[i] = 0.0
-                    self.vely[i] = 0.0
-                    self.velz[i] = 0.0
-                """print("3d findcell failed, particle number: ", i)
-                print("Particle location: ", point3d_2[i, :])
-                print("Particle fractional depth: ", normdepth[i])
-                print("closest 3D cell, 2Dcell: ", cellid3d[i], cellid[i])
-                vtkcell = vtksgrid2d.GetCell(cellid[i])
-                vtkptlist = vtkcell.GetPointIds()
-                vtkpts = vtkcell.GetPoints()
-                print("2D grid points:")
-                for j in range(vtkcell.GetNumberOfPoints()):
-                print(vtkpts.GetPoint(j))
-                print(Elevation_2D.GetTuple(vtkptlist.GetId(j)))
-                vtkcell = vtksgrid3d.GetCell(cellid3d[i])
-                vtkpts = vtkcell.GetPoints()
-                print("3D grid points:")
-                for j in range(vtkpts.GetNumberOfPoints()):
-                print(vtkpts.GetPoint(j)) """
+            msk = self.probe.GetOutput().GetPointData().GetArray("vtkValidPointMask")
+            msk_np = numpy_support.vtk_to_numpy(msk)
+            badpts = self.indices[msk_np == 0]
+            for i in badpts:
+                print(
+                    f"""particle {i}: (x,y,z)=({self.x[i]},{self.y[i]},{self.z[i]}),
+                     (ux,uy,uz)=({self.velx[i]},{self.vely[i]},{self.velz[i]}),
+                     """
+                )
 
     def interp_fields(self):
         """Interpolate mesh fields at current particle positions."""
@@ -330,9 +341,9 @@ class Particles:
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        a = np.copy(self.indices)
+        a = self.indices
         if self.mask is not None:
-            a = np.copy(self.indices[self.mask])
+            a = self.indices[self.mask]
         for i in np.nditer(a, ["zerosize_ok"]):
             point = [self.x[i], self.y[i], 0.0]
             cell.SetCellTypeToEmptyCell()
@@ -524,14 +535,14 @@ class Particles:
         self.perturb_2d(px, py, dt)
 
         # check if new positions are wet
-        a = np.copy(self.indices)
+        a = self.indices
         if self.mask is not None:
             a = a[self.mask]
         wet = self.is_part_wet(px, py, a)
         if np.any(~wet):
             self.handle_dry_parts(px, py, a[~wet], dt)
         if self.mask is not None:
-            a = np.copy(self.indices[self.mask])
+            a = self.indices[self.mask]
 
         # update bed elevation, wse, depth
         cell = vtk.vtkGenericCell()
@@ -635,7 +646,7 @@ class Particles:
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
         weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        a = np.copy(self.indices[self.depth < min_depth])
+        a = self.indices[self.depth < min_depth]
         # update cell indices and interpolations
         for i in np.nditer(a, ["zerosize_ok"]):
             px[i] = self.x[i]
@@ -659,7 +670,7 @@ class Particles:
         """Write particle positions and interpolated quantities to file.
 
         Args:
-            obj (h5py file): open h5py file object created with self.create_hdf()
+            obj (h5py file): open h5py file object created with self.create_hdf5()
             tidx (int): time slice index
             start (int): starting index of this processors assigned write space
             end (int): ending index (non-inclusive)
