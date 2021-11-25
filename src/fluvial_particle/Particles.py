@@ -303,13 +303,19 @@ class Particles:
 
         return interpval
 
-    def interp_field_3d(self):
+    def interp_field_3d(self, px=None, py=None, pz=None):
         """Interpolate 3D velocity field at current particle positions."""
+        if px is None:
+            px = self.x
+        if py is None:
+            py = self.y
+        if pz is None:
+            pz = self.z
         if self.mask is None:
             # Update the NumPy position array
-            self.pt3d_np[:, 0] = self.x
-            self.pt3d_np[:, 1] = self.y
-            self.pt3d_np[:, 2] = self.z
+            self.pt3d_np[:, 0] = px
+            self.pt3d_np[:, 1] = py
+            self.pt3d_np[:, 2] = pz
         else:
             a = self.indices[self.mask]
             if a.size != self.pt3d.GetNumberOfPoints():
@@ -322,9 +328,9 @@ class Particles:
                 self.pts3d.Initialize()
                 self.pts3d.SetPoints(self.pt3d)
                 self.probe3d.SetInputData(self.pts3d)
-            self.pt3d_np[:, 0] = self.x[a]
-            self.pt3d_np[:, 1] = self.y[a]
-            self.pt3d_np[:, 2] = self.z[a]
+            self.pt3d_np[:, 0] = px[a]
+            self.pt3d_np[:, 1] = py[a]
+            self.pt3d_np[:, 2] = pz[a]
         # Tell downstream VTK objects that the input pipeline has been modified
         self.pt3d.Modified()
         self.probe3d.Update()
@@ -357,58 +363,60 @@ class Particles:
                      """
                 )
 
-    def interp_fields(self):
+    def interp_fields(self, px=None, py=None, pz=None, twod=True, threed=True):
         """Interpolate mesh fields at current particle positions."""
+        if px is None:
+            px = self.x
+        if py is None:
+            py = self.y
         # Find current location in 2D grid and interpolate 2D fields
-        if self.mask is None:
-            self.pt2d_np[:, 0] = self.x
-            self.pt2d_np[:, 1] = self.y
-        else:
-            a = self.indices[self.mask]
-            if a.size != self.pt2d.GetNumberOfPoints():
-                # Number of active particles has changed, reconstruct the probe input objects
-                # This assumes: particles are only deactivated, never re-activated
-                self.pt2d_np = np.zeros((a.size, 3))
-                self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
-                self.pt2d.Reset()
-                self.pt2d.SetData(self.pt2d_vtk)
-                self.ptset2d.Initialize()
-                self.ptset2d.SetPoints(self.pt2d)
-                self.probe2d.SetInputData(self.ptset2d)
-            self.pt2d_np[:, 0] = self.x[a]
-            self.pt2d_np[:, 1] = self.y[a]
-        self.pt2d.Modified()
-        self.probe2d.Update()
+        if twod:
+            if self.mask is None:
+                self.pt2d_np[:, 0] = px
+                self.pt2d_np[:, 1] = py
+            else:
+                a = self.indices[self.mask]
+                if a.size != self.pt2d.GetNumberOfPoints():
+                    # Number of active particles has changed, reconstruct the probe input objects
+                    # This assumes: particles are only deactivated, never re-activated
+                    self.pt2d_np = np.zeros((a.size, 3))
+                    self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
+                    self.pt2d.Reset()
+                    self.pt2d.SetData(self.pt2d_vtk)
+                    self.ptset2d.Initialize()
+                    self.ptset2d.SetPoints(self.pt2d)
+                    self.probe2d.SetInputData(self.ptset2d)
+                self.pt2d_np[:, 0] = px[a]
+                self.pt2d_np[:, 1] = py[a]
+            self.pt2d.Modified()
+            self.probe2d.Update()
 
-        elev = self.probe2d.GetOutput().GetPointData().GetArray("Elevation")
-        wse = self.probe2d.GetOutput().GetPointData().GetArray("WaterSurfaceElevation")
-        shear = (
-            self.probe2d.GetOutput().GetPointData().GetArray("ShearStress (magnitude)")
-        )
-        if self.mask is None:
-            self.bedelev = numpy_support.vtk_to_numpy(
-                elev
-            )  # requires that elev is not garbage collected; deep copy?
-            self.wse = numpy_support.vtk_to_numpy(wse)
-            self.shearstress = numpy_support.vtk_to_numpy(shear)
-        else:
-            self.bedelev[a] = numpy_support.vtk_to_numpy(elev)
-            self.wse[a] = numpy_support.vtk_to_numpy(wse)
-            self.shearstress[a] = numpy_support.vtk_to_numpy(shear)
-        if not self.track3d:
-            vel = self.probe2d.GetOutput().GetPointData().GetArray("Velocity")
-            vel_np = numpy_support.vtk_to_numpy(vel)
-            self.velx = vel_np[:, 0]
-            self.vely = vel_np[:, 1]
-        self.depth = self.wse - self.bedelev
-        # check shear stress (without error print statements)
-        self.shearstress = np.where(self.shearstress < 0.0, 0.0, self.shearstress)
-        self.ustar = (self.shearstress / 1000.0) ** 0.5
+            ptsout = self.probe2d.GetOutput().GetPointData()
+            elev = ptsout.GetArray("Elevation")
+            wse = ptsout.GetArray("WaterSurfaceElevation")
+            shear = ptsout.GetArray("ShearStress (magnitude)")
+            if self.mask is None:
+                self.bedelev = numpy_support.vtk_to_numpy(elev)
+                self.wse = numpy_support.vtk_to_numpy(wse)
+                self.shearstress = numpy_support.vtk_to_numpy(shear)
+            else:
+                self.bedelev[a] = numpy_support.vtk_to_numpy(elev)
+                self.wse[a] = numpy_support.vtk_to_numpy(wse)
+                self.shearstress[a] = numpy_support.vtk_to_numpy(shear)
+            if not self.track3d:
+                vel = self.probe2d.GetOutput().GetPointData().GetArray("Velocity")
+                vel_np = numpy_support.vtk_to_numpy(vel)
+                self.velx = vel_np[:, 0]
+                self.vely = vel_np[:, 1]
+            self.depth = self.wse - self.bedelev
+            # check shear stress (without error print statements)
+            self.shearstress = np.where(self.shearstress < 0.0, 0.0, self.shearstress)
+            self.ustar = (self.shearstress / 1000.0) ** 0.5
 
-        if self.track3d:
+        if self.track3d and threed:
             self.normdepth = (self.z - self.bedelev) / self.depth
             # Get 3D Velocity Components
-            self.interp_field_3d()
+            self.interp_field_3d(px, py, pz)
 
     def interp_vel2d_value(self, weights, idlist, numpts):
         """Interpolate 2D velocity vector at a point.
@@ -519,6 +527,8 @@ class Particles:
                 self.mask = np.full(self.nparts, fill_value=True)
             for i in np.nditer(b):
                 self.deactivate_particle(i)
+
+        # Edit the below to use probe filter
         c = np.arange(a.size)
         c = c[~outparts]
         for j in np.nditer(c, ["zerosize_ok"]):
@@ -573,22 +583,7 @@ class Particles:
             a = self.indices[self.mask]
 
         # update bed elevation, wse, depth
-        cell = vtk.vtkGenericCell()
-        pcoords = [0.0, 0.0, 0.0]
-        weights = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        for i in np.nditer(a, ["zerosize_ok"]):
-            point = [px[i], py[i], 0.0]
-            cell.SetCellTypeToEmptyCell()
-            self.mesh.CellLocator2D.FindCell(point, 0.0, cell, pcoords, weights)
-            idlist = cell.GetPointIds()
-            numpts = cell.GetNumberOfPoints()
-            self.bedelev[i] = self.interp_cell_value(
-                weights, idlist, numpts, self.mesh.Elevation_2D
-            )
-            self.wse[i] = self.interp_cell_value(
-                weights, idlist, numpts, self.mesh.WSE_2D
-            )
-        self.depth = self.wse - self.bedelev
+        self.interp_fields(px, py, threed=False)
 
         # Prevent particles from entering cells where depth < min_depth
         if np.any(self.depth < min_depth):
