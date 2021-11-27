@@ -126,6 +126,19 @@ class RiverGrid:
         if self.track3d:
             self.VelocityVec3D = self.vtksgrid3d.GetPointData().GetScalars("Velocity")
 
+        ibcfp = vtk.vtkFloatArray()
+        ibcfp.ShallowCopy(self.vtksgrid2d.GetPointData().GetArray("IBC"))
+        ibcfp.SetName("IBCfp")
+        self.vtksgrid2d.GetPointData().AddArray(ibcfp)
+
+        cidx = vtk.vtkIntArray()
+        cidx.SetNumberOfComponents(1)
+        cidx.SetNumberOfTuples(self.vtksgrid2d.GetNumberOfCells())
+        cidx.SetName("CellIndex")
+        for i in range(self.vtksgrid2d.GetNumberOfCells()):
+            cidx.SetTuple(i, [i])
+        self.vtksgrid2d.GetCellData().AddArray(cidx)
+
     def _read_2d_data(self):
         """Read 2D structured grid data file."""
         # Read 2D grid

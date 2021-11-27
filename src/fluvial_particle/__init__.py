@@ -33,7 +33,7 @@ def checkcommandarguments():
         default=None,
         help="Specify a single integer to fix the seed of the random number generator. Only used in serial mode.",
     )
-    parser.add_argument("--no-postprocess", action="store_false")
+    parser.add_argument("--no-postprocess", "--no_postprocess", action="store_false")
     # note: argparse will convert to key="no_postprocess"
 
     argdict = vars(parser.parse_args())
