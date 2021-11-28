@@ -193,11 +193,11 @@ class Particles:
         grpp["wse"].attrs["Units"] = "meters"
         return parts_h5
 
-    def deactivate_particle(self, idx):
+    def deactivate_particles(self, idx):
         """Turn off particles that have left the river domain.
 
         Args:
-            idx (int): index of particle to turn off
+            idx (int ndarray): index or indices of particle(s) to turn off
         """
         self._x[idx] = np.nan
         self._y[idx] = np.nan
@@ -217,7 +217,30 @@ class Particles:
         self._diffy[idx] = np.nan
         self._diffz[idx] = np.nan
         self._time[idx] = np.nan
+        if self.mask is None:
+            self.mask = np.full(self.nparts, fill_value=True)
         self.mask[idx] = False
+
+        idxx = self.indices[self.mask]
+        if idxx.size > 0:
+            # Reconstruct VTK filter pipeline objects
+            # => ASSUME particles are only ever deactivated, never re-activated
+            # => with better tracking, reactivation could be possible, but why do it?
+            self.pt2d_np = np.zeros((idxx.size, 3))
+            self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
+            self.pt2d.Reset()
+            self.pt2d.SetData(self.pt2d_vtk)
+            self.ptset2d.Initialize()
+            self.ptset2d.SetPoints(self.pt2d)
+            self.probe2d.SetInputData(self.ptset2d)
+
+            self.pt3d_np = np.zeros((idxx.size, 3))
+            self.pt3d_vtk = numpy_support.numpy_to_vtk(self.pt3d_np)
+            self.pt3d.Reset()
+            self.pt3d.SetData(self.pt3d_vtk)
+            self.pts3d.Initialize()
+            self.pts3d.SetPoints(self.pt3d)
+            self.probe3d.SetInputData(self.pts3d)
 
     def gen_rands(self):
         """Generate random numbers drawn from standard normal distribution."""
@@ -247,19 +270,16 @@ class Particles:
             py (float NumPy array): new y coordinates of particles
             dt (float): time step
         """
-        idx = self.indices
-        if self.mask is not None:
-            idx = idx[self.mask]
-        wet = self.is_part_wet(px, py, idx)
-        if np.any(~wet):
-            a = idx[~wet]
+        wet = self.is_part_wet(px, py)
+        if ~wet.all():
+            a = self.indices[~wet]
             # Move dry particles with only 2d random motion
             self.perturb_random_only_2d(px, py, a, dt)
             # Run is_part_wet again
-            wet = self.is_part_wet(px, py, a)
-            if np.any(~wet):
-                b = a[~wet]
-                # Any still dry particles will have no positional update this step
+            wet = self.is_part_wet(px, py)
+            if ~wet.all():
+                b = self.indices[~wet]
+                # Still dry particles will have no positional update this step
                 px[b] = self.x[b]
                 py[b] = self.y[b]
                 # update cell indices
@@ -323,21 +343,14 @@ class Particles:
             self.pt3d_np[:, 2] = pz
         else:
             idx = self.indices[self.mask]
-            if idx.size != self.pt3d.GetNumberOfPoints():
-                # Number of active particles has changed, reconstruct the probe pipeline objects
-                # assumes particles are only deactivated, never re-activated (at least simultaneously)
-                self.pt3d_np = np.zeros((idx.size, 3))
-                self.pt3d_vtk = numpy_support.numpy_to_vtk(self.pt3d_np)
-                self.pt3d.Reset()
-                self.pt3d.SetData(self.pt3d_vtk)
-                self.pts3d.Initialize()
-                self.pts3d.SetPoints(self.pt3d)
-                self.probe3d.SetInputData(self.pts3d)
+            if idx.size == 0:
+                return
             self.pt3d_np[:, 0] = px[idx]
             self.pt3d_np[:, 1] = py[idx]
             self.pt3d_np[:, 2] = pz[idx]
-        # Tell downstream VTK objects that the input pipeline has been modified
         self.pt3d.Modified()
+
+        # Do the interpolation
         self.probe3d.Update()
 
         # Get interpolated point data from the probe filter
@@ -367,7 +380,15 @@ class Particles:
         """
 
     def interp_fields(self, px=None, py=None, pz=None, twod=True, threed=True):
-        """Interpolate mesh fields at current particle positions."""
+        """Interpolate mesh fields at current particle positions.
+
+        Args:
+            px ([type], optional): Particle position coordinates. Defaults to self.x.
+            py ([type], optional): Particle position coordinates. Defaults to self.y.
+            pz ([type], optional): Particle position coordinates. Defaults to self.z.
+            twod (bool, optional): Flag to interpolate 2D field arrays. Defaults to True.
+            threed (bool, optional): Flag to interpolate 3D field arrays. Defaults to True.
+        """
         if px is None:
             px = self.x
         if py is None:
@@ -379,21 +400,13 @@ class Particles:
                 self.pt2d_np[:, 1] = py
             else:
                 idx = self.indices[self.mask]
-                if idx.size != self.pt2d.GetNumberOfPoints():
-                    # MOVE INTO DEACTIVATE PARTICLE -- then probe2d will always be update when we get here
-                    # => assume particles are only ever deactivated, never re-activated (possible with better tracking)
-
-                    # Number of active particles has changed, reconstruct the probe pipeline objects
-                    self.pt2d_np = np.zeros((idx.size, 3))
-                    self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
-                    self.pt2d.Reset()
-                    self.pt2d.SetData(self.pt2d_vtk)
-                    self.ptset2d.Initialize()
-                    self.ptset2d.SetPoints(self.pt2d)
-                    self.probe2d.SetInputData(self.ptset2d)
+                if idx.size == 0:
+                    return
                 self.pt2d_np[:, 0] = px[idx]
                 self.pt2d_np[:, 1] = py[idx]
             self.pt2d.Modified()
+
+            # Do the interpolation
             self.probe2d.Update()
 
             ptsout = self.probe2d.GetOutput().GetPointData()
@@ -414,7 +427,6 @@ class Particles:
                 self.velx = vel_np[:, 0]
                 self.vely = vel_np[:, 1]
             self.depth = self.wse - self.bedelev
-            # check shear stress (without error print statements)
             self.shearstress = np.where(self.shearstress < 0.0, 0.0, self.shearstress)
             self.ustar = (self.shearstress / 1000.0) ** 0.5
 
@@ -498,67 +510,54 @@ class Particles:
             interpzval += weights[i] * a[2]
         return result, vtkid, interpxval, interpyval, interpzval
 
-    def is_part_wet(self, px, py, idx):
+    def is_part_wet(self, px, py):
         """Determine if particle's new positions are wet.
 
         Args:
             px (float NumPy array): new x coordinates of particles
             py (float NumPy array): new y coordinates of particles
-            idx (int NumPy array): indices of particles to check
 
         Returns:
             wet (boolean NumPy array): True indices mean wet, False means dry
         """
-        # Move this section through deactivate_particle to new function
-        wet = np.full(np.size(idx), dtype=bool, fill_value=True)
+        if self.mask is None:
+            idx = self.indices
+            self.pt2d_np[:, 0] = px
+            self.pt2d_np[:, 1] = py
+        else:
+            idx = self.indices[self.mask]
+            self.pt2d_np[:, 0] = px[idx]
+            self.pt2d_np[:, 1] = py[idx]
+        self.pt2d.Modified()
         self.probe2d.Update()
-        cidx = self.probe2d.GetOutput().GetPointData().GetArray("CellIndex")
-        cellidx = numpy_support.vtk_to_numpy(cidx)
-        """ cellidx = np.full(np.size(idx), dtype=np.int64, fill_value=-1)
-        ita = np.nditer(idx, flags=["multi_index", "zerosize_ok"])
-        for i in ita:
-            j = ita.multi_index[0]
-            point = [px[i], py[i], 0.0]
-            cell.SetCellTypeToEmptyCell()
-            cellidx[j] = self.mesh.CellLocator2D.FindCell(
-                point, 0.0, cell, pcoords, weights
-            ) """
+
+        cellidxvtk = self.probe2d.GetOutput().GetPointData().GetArray("CellIndex")
+        cellidx = numpy_support.vtk_to_numpy(cellidxvtk)
         idxss = np.searchsorted(self.mesh.boundarycells, cellidx)
-        bndcells = np.equal(self.mesh.boundarycells[idxss], cellidx)
+        bndrycells = np.equal(self.mesh.boundarycells[idxss], cellidx)
+        # MUST fix below; output of probe2d for points outside the grid is CellIndex=0, NOT -1
+        # Instead, use the vtkValidPointMask() array in the output vtkPointSet()
         outofgrid = np.less(cellidx, 0)
-        outparts = np.logical_or(bndcells, outofgrid)
+        outparts = np.logical_or(bndrycells, outofgrid)
         if outparts.any():
-            b = idx[outparts]
-            if self.mask is None:
-                self.mask = np.full(self.nparts, fill_value=True)
-            for i in np.nditer(b):
-                self.deactivate_particle(i)
+            self.deactivate_particles(idx[outparts])
+            idx = self.indices[self.mask]
+            cellidx = cellidx[~outparts]
+            if idx.size > 0:
+                self.pt2d_np[:, 0] = px[idx]
+                self.pt2d_np[:, 1] = py[idx]
+                self.pt2d.Modified()
+                self.probe2d.Update()
+        self.cellindex2d[idx] = cellidx
 
-        # Edit the below to use probe filter
-
-        # NOT WORKING YET
-        c = np.arange(idx.size)
-        c = c[~outparts[idx]]
-        """ ppx = px[idx[c]]
-        ppy = py[idx[c]]
-        pt_np = np.zeros((c.size, 3))
-        pt_np[:, 0] = ppx
-        pt_np[:, 1] = ppy
-        pt_vtk = numpy_support.numpy_to_vtk(pt_np)
-        pt = vtk.vtkPoints()
-        ptset = vtk.vtkPointSet()
-        probe = vtk.vtkProbeFilter()
-        strategy = vtk.vtkCellLocatorStrategy()
-        pt.SetData(pt_vtk)
-        ptset.SetPoints(pt)
-        probe.SetInputData(ptset)
-        probe.SetSourceData(self.mesh.vtksgrid2d)
-        probe.SetFindCellStrategy(strategy)
-        probe.Update()
-        ibcvtk = probe.GetOutput().GetPointData().GetArray("IBCfp")
+        wet = np.full((self.nparts,), dtype=bool, fill_value=True)
+        ibcvtk = self.probe2d.GetOutput().GetPointData().GetArray("IBCfp")
         ibc = numpy_support.vtk_to_numpy(ibcvtk)
-        wetflgs = ibc < 0.99999
-        wet[c] = wetflgs """
+        wet[idx] = ibc >= 1.0
+
+        """ c = np.arange(idx.size)
+        c = c[~outparts[idx]]
+
 
         cell = vtk.vtkGenericCell()
         pcoords = [0.0, 0.0, 0.0]
@@ -571,7 +570,7 @@ class Particles:
             )
             idlist = cell.GetPointIds()
             numpts = cell.GetNumberOfPoints()
-            wet[j] = self.is_part_wet_kernel(idlist, numpts)
+            wet[j] = self.is_part_wet_kernel(idlist, numpts) """
         return wet
 
     def is_part_wet_kernel(self, idlist, numpts):
@@ -606,6 +605,9 @@ class Particles:
         self.perturb_2d(px, py, dt)
 
         # check if new positions are wet or dry
+        # ONCE cellindex2d is no longer used inside simulation,
+        # can delete remaining calls to FindCell()
+        # MAKE a new function callable for the writes to HDF5 out file
         self.handle_dry_parts(px, py, dt)
 
         # update bed elevation, wse, depth
@@ -973,6 +975,9 @@ class Particles:
         """
         assert np.size(values) == self.nparts, ValueError(  # noqa: S101
             "depth.setter wrong size"
+        )
+        assert isinstance(values, np.ndarray), TypeError(  # noqa:S101
+            "depth.setter: wrong type, must be NumPy ndarray"
         )
         self._depth = values
 
