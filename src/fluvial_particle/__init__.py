@@ -11,6 +11,7 @@ import pathlib
 import time
 import numpy as np
 import argparse
+import h5py
 from .Settings import Settings
 from .FallingParticles import FallingParticles  # noqa
 from .LarvalParticles import LarvalParticles  # noqa
@@ -337,6 +338,9 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     if comm is not None:
         comm.Barrier()
 
+    # COLLECTIVE file close
+    parts_h5.close()
+
     if master:
         print(
             f"Finished simulation in {str(timedelta(seconds=timer() - t0))} h:m:s",
@@ -345,12 +349,14 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
 
     if master and postprocessflg:
         print("Post-processing...")
+        parts_h5 = h5py.File(fname, "r")
         postprocess(
             output_directory, river, particles, parts_h5, n_prints, globalnparts
         )
+        parts_h5.close()
 
-    # COLLECTIVE file close
-    parts_h5.close()
+    if comm is not None:
+        comm.Barrier()
 
     if master:
         print(f"Finished in {str(timedelta(seconds=timer()-t0))} h:m:s", flush=True)
