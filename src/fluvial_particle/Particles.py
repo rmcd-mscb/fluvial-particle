@@ -8,7 +8,19 @@ from vtk.util import numpy_support  # type:ignore
 class Particles:
     """A class of particles, each with a velocity, size, and mass."""
 
-    def __init__(self, nparts, x, y, z, rng, mesh, track3d=1, comm=None):
+    def __init__(
+        self,
+        nparts,
+        x,
+        y,
+        z,
+        rng,
+        mesh,
+        track3d=1,
+        lev=0.0,
+        beta=(0.067, 0.067, 0.067),
+        comm=None,
+    ):
         """Initialize instance of class Particles.
 
         Args:
@@ -19,6 +31,8 @@ class Particles:
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
             track3d (bool): 1 if 3D model run, 0 if 2D model run
+            lev (float): lateral eddy viscosity
+            beta (float): list of length 3, coefficients that scale diffusion
             comm (mpi4py object): MPI communicator used in parallel execution
         """
         self.nparts = nparts
@@ -28,6 +42,8 @@ class Particles:
         self.rng = rng
         self.mesh = mesh
         self.track3d = track3d
+        self.lev = lev
+        self.beta = beta
 
         self._bedelev = np.zeros(nparts)
         self._wse = np.zeros(nparts)
@@ -92,32 +108,12 @@ class Particles:
             self.probe.ComputeToleranceOff()  # disables automated tolerance calculation
             self.probe.SetTolerance(0.01)  # is this a dimensionless tolerance? how defined?"""
 
-    def adjust_z(self, pz, alpha):
-        """Check that new particle vertical position is within bounds.
-
-        Args:
-            pz (float NumPy array): new elevation array
-            alpha (float): bounds particle in fractional water column to [alpha, 1-alpha]
-        """
-        # check on alpha? only makes sense for alpha<=0.5
-        a = self.indices[pz > self.wse - alpha * self.depth]
-        b = self.indices[pz < self.bedelev + alpha * self.depth]
-        pz[a] = self.wse[a] - alpha * self.depth[a]
-        pz[b] = self.bedelev[b] + alpha * self.depth[b]
-
-    def calc_diffusion_coefs(self, lev, bx, by, bz):
-        """Calculate diffusion coefficients, McDonald & Nelson (2021).
-
-        Args:
-            lev ([type]): lateral eddy viscosity
-            bx ([type]): coefficient scales x diffusion
-            by ([type]): coefficient scales y diffusion
-            bz ([type]): coefficient scales z diffusion
-        """
+    def calc_diffusion_coefs(self):
+        """Calculate diffusion coefficients, McDonald & Nelson (2021)."""
         ustarh = self.depth * self.ustar
-        self.diffx = lev + bx * ustarh
-        self.diffy = lev + by * ustarh
-        self.diffz = bz * ustarh  # lev + bz * ustarh
+        self.diffx = self.lev + self.beta[0] * ustarh
+        self.diffy = self.lev + self.beta[1] * ustarh
+        self.diffz = self.beta[2] * ustarh
 
     def create_hdf5(self, nprints, globalnparts, comm=None, fname="particles.h5"):
         """Create an HDF5 file to write incremental particles results.
@@ -285,7 +281,6 @@ class Particles:
                 b = self.indices[~wet]
                 px[b] = self.x[b]
                 py[b] = self.y[b]
-                # self.update_2d_pipeline(px, py)
 
     def initialize_location(self, frac):
         """Initialize position in water column and interpolate mesh arrays.
@@ -299,14 +294,23 @@ class Particles:
             assert self.mask.any(), ValueError(  # noqa: S101
                 "No initial points in the 2D grid; check starting location(s)"
             )
-            print("Warning, some initial locations (x, y) are not in the 2D grid.")
-        self.interp_fields()
+            inactive = self.nparts - self.probe2d.GetValidPoints().GetNumberOfTuples()
+            print(f"Warning, {inactive} initial points (x, y) are not in the 2D grid.")
+
+        self.time.fill(0.0)
+        # Get 2D field values
+        self.interp_fields(threed=False)
         self.z = self.bedelev + frac * self.depth
         self.htabvbed = self.z - self.bedelev
-        self.time.fill(0.0)
+        # Get 3D velocity field
+        self.interp_fields(twod=False)
 
     def interp_3d_field(self, px=None, py=None, pz=None):
         """Interpolate 3D velocity field at current particle positions."""
+        if self.mask is not None:
+            if ~self.mask.any():
+                return
+
         if px is None:
             px = self.x
         if py is None:
@@ -334,14 +338,18 @@ class Particles:
         # Get interpolated point data from the probe filter
         dataout = self.probe3d.GetOutput().GetPointData().GetArray("Velocity")
         vel = numpy_support.vtk_to_numpy(dataout)
+        cellidxvtk = self.probe3d.GetOutput().GetPointData().GetArray("CellIndex")
+        cellidx = numpy_support.vtk_to_numpy(cellidxvtk)
         if self.mask is None:
             self.velx = vel[:, 0]
             self.vely = vel[:, 1]
             self.velz = vel[:, 2]
+            self.cellindex3d = cellidx
         else:
             self.velx[idx] = vel[:, 0]
             self.vely[idx] = vel[:, 1]
             self.velz[idx] = vel[:, 2]
+            self.cellindex3d[idx] = cellidx
 
     def interp_fields(self, px=None, py=None, pz=None, twod=True, threed=True):
         """Interpolate mesh fields at current particle positions.
@@ -416,32 +424,41 @@ class Particles:
 
         return wet
 
-    def move_all(self, alpha, min_depth, time, dt):
+    def move(self, alpha, min_depth, time, dt):
         """Update particle positions.
 
         Args:
-            alpha (float): bounding scalar for adjust_z
+            alpha (float): bounding scalar for validate_z
             min_depth (float): minimum depth scalar that particles can enter
             time (float): the new time at end of position update
             dt (float): time step
         """
+        # It is assumed that at the start of every loop, particle points have been validated and
+        # interpolated fields have been updated.
+
+        # Use temporary arrays for next update validation
         px = np.copy(self.x)
         py = np.copy(self.y)
 
-        # first perturb 2d only
+        # Generate new random numbers
+        self.gen_rands()
+
+        # Calculate turbulent diffusion coefficients
+        self.calc_diffusion_coefs()
+
+        # Perturb 2D positions (and validate w.r.t. grid)
         self.perturb_2d(px, py, dt)
 
-        # check if new positions are wet or dry (and fix, if needed)
+        # Check if new positions are wet or dry (and fix, if needed)
         self.handle_dry_parts(px, py, dt)
 
-        # update 2D fields
+        # Update 2D fields
         self.interp_fields(px, py, threed=False)
 
-        # Prevent particles from entering positions where depth < min_depth
+        # Prevent particles from entering positions where new_depth < min_depth
         self.prevent_mindepth(px, py, min_depth)
 
-        # Perturb vertical, random wiggle by default
-        # subclasses can update perturb_z for an active drift
+        # Perturb (and validate) vertical, random wiggle by default
         pz = self.perturb_z(alpha, dt)
 
         # Move particles
@@ -449,7 +466,10 @@ class Particles:
         self.y = py
         self.z = pz
 
-        # Update some info (move to interp_fields? and/or call interp_fields here instead)
+        # Interpolate all field data at new particle positions
+        self.interp_fields()
+
+        # Update height above bed and time
         self.htabvbed = self.z - self.bedelev
         self.time.fill(time)
 
@@ -508,7 +528,8 @@ class Particles:
         """
         zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
         pz = self.bedelev + (self.normdepth * self.depth) + self.velz * dt + zranwalk
-        self.adjust_z(pz, alpha)
+        # Important: verify new positions are within water column tolerance
+        self.validate_z(pz, alpha)
         return pz
 
     def prevent_mindepth(self, px, py, min_depth):
@@ -584,6 +605,19 @@ class Particles:
             idx = self.indices[self.mask]
             if idx.size > 0:
                 self.update_2d_pipeline(px, py)
+
+    def validate_z(self, pz, alpha):
+        """Check that new particle vertical position is within bounds.
+
+        Args:
+            pz (float NumPy array): new elevation array
+            alpha (float): bounds particle in fractional water column to [alpha, 1-alpha]
+        """
+        # check on alpha? only makes sense for alpha<=0.5
+        a = self.indices[pz > self.wse - alpha * self.depth]
+        b = self.indices[pz < self.bedelev + alpha * self.depth]
+        pz[a] = self.wse[a] - alpha * self.depth[a]
+        pz[b] = self.bedelev[b] + alpha * self.depth[b]
 
     def write_hdf5(self, obj, tidx, start, end, time, rank):
         """Write particle positions and interpolated quantities to file.
@@ -784,6 +818,26 @@ class Particles:
         self._bedelev = values
 
     @property
+    def beta(self):
+        """Get beta.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._beta
+
+    @beta.setter
+    def beta(self, values):
+        """Set beta. Accepts input as either a scalar, or a list/numpy array of size 3.
+
+        Args:
+            values ([type]): [description]
+        """
+        temp = np.zeros((3,), dtype=np.float64())
+        temp[:] = values
+        self._beta = temp
+
+    @property
     def cellindex2d(self):
         """Get cellindex2d.
 
@@ -932,6 +986,27 @@ class Particles:
             "htabvbed.setter wrong size"
         )
         self._htabvbed = values
+
+    @property
+    def lev(self):
+        """Get lev.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._lev
+
+    @lev.setter
+    def lev(self, value):
+        """Set lev.
+
+        Args:
+            value ([type]): [description]
+        """
+        if isinstance(value, int):
+            value = np.float64(value)
+        assert isinstance(value, float), TypeError("lev must be a scalar")  # noqa: S101
+        self._lev = value
 
     @property
     def mask(self):

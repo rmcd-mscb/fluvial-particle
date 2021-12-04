@@ -139,6 +139,15 @@ class RiverGrid:
             cidx.SetTuple(i, [i])
         self.vtksgrid2d.GetCellData().AddArray(cidx)
 
+        if self.track3d:
+            cidx3 = vtk.vtkIntArray()
+            cidx3.SetNumberOfComponents(1)
+            cidx3.SetNumberOfTuples(self.vtksgrid3d.GetNumberOfCells())
+            cidx3.SetName("CellIndex")
+            for i in range(self.vtksgrid3d.GetNumberOfCells()):
+                cidx3.SetTuple(i, [i])
+            self.vtksgrid3d.GetCellData().AddArray(cidx3)
+
     def _read_2d_data(self):
         """Read 2D structured grid data file."""
         # Read 2D grid

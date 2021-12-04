@@ -210,6 +210,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     beta_x = settings["beta_x"]
     beta_y = settings["beta_y"]
     beta_z = settings["beta_z"]
+    beta = [beta_x, beta_y, beta_z]
 
     # 2D or 3D particle tracking
     track3d = settings["Track3D"]
@@ -257,7 +258,9 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         npart, x, y, z, rng, river, track3d, 0.2, period, min_elev, ttime
     ) """
 
-    particles = Particles(npart, x, y, z, rng, river, track3d, comm=comm)
+    particles = Particles(
+        npart, x, y, z, rng, river, track3d, lev=lev, beta=beta, comm=comm
+    )
     # particles = FallingParticles(npart, x, y, z, rng, river, track3d, radius=0.000001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
@@ -288,14 +291,9 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     t0 = timer()
 
     for i in range(n_times):  # noqa C901
-        # Generate new random numbers
-        particles.gen_rands()
-        # Interpolate RiverGrid field data to particles
-        particles.interp_fields()
-        # Calculate dispersion terms
-        particles.calc_diffusion_coefs(lev, beta_x, beta_y, beta_z)
-        # Move particles (checks on new position done internally)
-        particles.move_all(alpha, min_depth, times[i], dt)
+        # Move particles
+        particles.move(alpha, min_depth, times[i], dt)
+
         # Check that there are still active particles
         if particles.mask is not None:
             if ~np.any(particles.mask):
