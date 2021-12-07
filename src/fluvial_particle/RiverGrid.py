@@ -22,12 +22,12 @@ class RiverGrid:
         self.vtksgrid3d = None
         self.fname2d = filename2d
         self._fname3d = None
-        self._read_2d_data()
+        self.read_2d_data()
         if track3d:
             self.track3d = 1
             self.fname3d = filename3d
             self.vtksgrid3d = vtk.vtkStructuredGrid()
-            self._read_3d_data()
+            self.read_3d_data()
             self.ns, self.nn, self.nz = self.vtksgrid3d.GetDimensions()
         else:
             self.track3d = 0
@@ -35,14 +35,55 @@ class RiverGrid:
         self.nsc = self.ns - 1
         self.nnc = self.nn - 1
         self.nzc = self.nz - 1
-        self._load_arrays()
-        self._build_locators()
+        self.process_arrays()
 
         # On structured grid, always assumes river flows in or out through the i=1, i=imax faces,
         # not the j=1,j=jmax faces (although this could be added)
         firstcells = np.arange(0, self.nsc * (self.nnc - 1) + 1, self.nsc)
         lastcells = np.arange(self.nsc - 1, self.nsc * self.nnc, self.nsc)
         self.boundarycells = np.union1d(firstcells, lastcells)
+
+    def build_probe_filter(self, nparts, comm=None):
+        """Build pipeline for probe filters (i.e. interpolation).
+
+        Args:
+            nparts ([type]): [description]
+            comm ([type]): [description]
+        """
+        # Objects for 2d grid interpolation
+        self.pt2d_np = np.zeros((nparts, 3))  # ordering required by vtk
+        self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
+        self.pt2d = vtk.vtkPoints()
+        self.ptset2d = vtk.vtkPointSet()  # vtkPointSet() REQUIRES vtk>=9.1
+        if comm is None:
+            self.probe2d = vtk.vtkProbeFilter()
+        else:
+            self.probe2d = vtk.vtkPProbeFilter()  # parallel version
+        self.strategy2d = vtk.vtkCellLocatorStrategy()  # requires vtk>=9.0
+        self.pt2d.SetData(self.pt2d_vtk)
+        self.ptset2d.SetPoints(self.pt2d)
+        self.probe2d.SetInputData(self.ptset2d)
+        self.probe2d.SetSourceData(self.vtksgrid2d)
+        self.probe2d.SetFindCellStrategy(self.strategy2d)
+        # Objects for 3d grid interpolation
+        if self.track3d:
+            self.pt3d_np = np.zeros((nparts, 3))
+            self.pt3d_vtk = numpy_support.numpy_to_vtk(self.pt3d_np)
+            self.pt3d = vtk.vtkPoints()
+            self.pts3d = vtk.vtkPointSet()
+            if comm is None:
+                self.probe3d = vtk.vtkProbeFilter()
+            else:
+                self.probe3d = vtk.vtkPProbeFilter()
+            strategy3d = vtk.vtkCellLocatorStrategy()
+            self.pt3d.SetData(self.pt3d_vtk)
+            self.pts3d.SetPoints(self.pt3d)
+            self.probe3d.SetInputData(self.pts3d)
+            self.probe3d.SetSourceData(self.vtksgrid3d)
+            self.probe3d.SetFindCellStrategy(strategy3d)
+            """ these tolerance functions seem to have no effect for points right on the edge of the 3d cells
+            self.probe.ComputeToleranceOff()  # disables automated tolerance calculation
+            self.probe.SetTolerance(0.01)  # is this a dimensionless tolerance? how defined?"""
 
     def create_hdf5(self, dimtime, time, fname="cells.h5"):
         """Create HDF5 file for cell-centered results.
@@ -99,82 +140,137 @@ class RiverGrid:
             grp2.create_dataset(dname, (nsc, nnc), data=arr[:, :, 0])
         return cells_h5
 
-    def _build_locators(self):
-        """Build Static Cell Locators (thread-safe)."""
-        self.CellLocator2D = vtk.vtkStaticCellLocator()
-        self.CellLocator2D.SetDataSet(self.vtksgrid2d)
-        self.CellLocator2D.BuildLocator()
-        # CellLocator2D.SetNumberOfCellsPerBucket(5)
-        if self.track3d:
-            self.CellLocator3D = vtk.vtkStaticCellLocator()
-            self.CellLocator3D.SetDataSet(self.vtksgrid3d)
-            # CellLocator3D.SetNumberOfCellsPerBucket(5);
-            # CellLocator3D.SetTolerance(0.000000001)
-            self.CellLocator3D.BuildLocator()
+    def out_of_grid(self, px, py, idx=None):
+        """Check if any points in the probe filter pipeline are out of the 2D domain.
 
-    def _load_arrays(self):
-        """Load 2D and 3D structured grid arrays."""
-        self.WSE_2D = self.vtksgrid2d.GetPointData().GetScalars("WaterSurfaceElevation")
-        self.Depth_2D = self.vtksgrid2d.GetPointData().GetScalars("Depth")
-        self.Elevation_2D = self.vtksgrid2d.GetPointData().GetScalars("Elevation")
-        self.IBC_2D = self.vtksgrid2d.GetPointData().GetScalars("IBC")
-        self.VelocityVec2D = self.vtksgrid2d.GetPointData().GetVectors("Velocity")
-        self.ShearStress2D = self.vtksgrid2d.GetPointData().GetScalars(
-            "ShearStress (magnitude)"
-        )
-        # Get Velocity from 3D
-        if self.track3d:
-            self.VelocityVec3D = self.vtksgrid3d.GetPointData().GetScalars("Velocity")
+        Args:
+            px ([type]): [description]
+            py ([type]): [description]
+            idx ([type], optional): [description]. Defaults to None.
 
+        Returns:
+            (NumPy nd-array): dtype=bool, True for indices of points out of the domain, else False
+        """
+        self.update_2d_pipeline(px, py, idx)
+        out = self.probe2d.GetOutput()
+
+        # Interpolation on cell-centered ordered integer array gives cell index number
+        cellidxvtk = out.GetPointData().GetArray("CellIndex")
+        cellidx = numpy_support.vtk_to_numpy(cellidxvtk)
+
+        # Points in river boundary cells are considered out of the domain
+        idxss = np.searchsorted(self.boundarycells, cellidx)
+        bndrycells = np.equal(self.boundarycells[idxss], cellidx)
+
+        # Points that have wandered outside the 2D grid are out of domain
+        valid = self.probe2d.GetValidPoints()
+        outofgrid = np.full(bndrycells.shape, fill_value=False)
+        if out.GetNumberOfPoints() != valid.GetNumberOfTuples():
+            name = self.probe2d.GetValidPointMaskArrayName()
+            msk = out.GetPointData().GetArray(name)
+            msk_np = numpy_support.vtk_to_numpy(msk)
+            outofgrid[msk_np < 1] = True
+
+        # Return True for points that satisfy either condition
+        outparts = np.logical_or(bndrycells, outofgrid)
+
+        return outparts
+
+    def process_arrays(self):
+        """Add required / delete unneeded arrays from 2D and 3D structured grids."""
+        # Remove unneeded point data arrays from 2D grid
+        ptdata = self.vtksgrid2d.GetPointData()
+        names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
+        reqd = self.required_keys2d
+        for x in names:
+            if x not in reqd:
+                ptdata.RemoveArray(x)
+        # Add floating point IBC array, delete integer IBC array
         ibcfp = vtk.vtkFloatArray()
-        ibcfp.ShallowCopy(self.vtksgrid2d.GetPointData().GetArray("IBC"))
+        ibcfp.ShallowCopy(ptdata.GetArray("IBC"))
         ibcfp.SetName("IBCfp")
-        self.vtksgrid2d.GetPointData().AddArray(ibcfp)
+        ptdata.AddArray(ibcfp)
+        ptdata.RemoveArray("IBC")
 
+        # Add cell-centered index array to 2D grid
+        numcells = self.vtksgrid2d.GetNumberOfCells()
         cidx = vtk.vtkIntArray()
         cidx.SetNumberOfComponents(1)
-        cidx.SetNumberOfTuples(self.vtksgrid2d.GetNumberOfCells())
+        cidx.SetNumberOfTuples(numcells)
         cidx.SetName("CellIndex")
-        for i in range(self.vtksgrid2d.GetNumberOfCells()):
+        for i in range(numcells):
             cidx.SetTuple(i, [i])
         self.vtksgrid2d.GetCellData().AddArray(cidx)
 
         if self.track3d:
+            # Remove unneeded point data arrays from 3D grid
+            ptdata = self.vtksgrid3d.GetPointData()
+            names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
+            reqd = self.required_keys3d
+            for x in names:
+                if x not in reqd:
+                    ptdata.RemoveArray(x)
+            # Add cell-centered index array to 3D grid
+            numcells = self.vtksgrid3d.GetNumberOfCells()
             cidx3 = vtk.vtkIntArray()
             cidx3.SetNumberOfComponents(1)
-            cidx3.SetNumberOfTuples(self.vtksgrid3d.GetNumberOfCells())
+            cidx3.SetNumberOfTuples(numcells)
             cidx3.SetName("CellIndex")
-            for i in range(self.vtksgrid3d.GetNumberOfCells()):
+            for i in range(numcells):
                 cidx3.SetTuple(i, [i])
             self.vtksgrid3d.GetCellData().AddArray(cidx3)
 
-    def _read_2d_data(self):
+    def read_2d_data(self):
         """Read 2D structured grid data file."""
         # Read 2D grid
         reader2d = vtk.vtkStructuredGridReader()
         reader2d.SetFileName(self.fname2d)
         reader2d.SetOutput(self.vtksgrid2d)
         reader2d.Update()
-        # Check for required field arrays
-        a = self.vtksgrid2d.GetAttributesAsFieldData(0)  # 0 for point data
-        names = [a.GetArrayName(i) for i in range(a.GetNumberOfArrays())]
+        # Check for required field arrays defined at the grid points
+        ptdata = self.vtksgrid2d.GetPointData()
+        names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
         missing = [x for x in self.required_keys2d if x not in names]
         if len(missing) > 0:
-            raise ValueError(f"Missing {missing} array from the input 2D grid")
+            raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
 
-    def _read_3d_data(self):
+    def read_3d_data(self):
         """Read 3D structured grid data file."""
         # Read 2D grid
         reader3d = vtk.vtkStructuredGridReader()
         reader3d.SetFileName(self.fname3d)
         reader3d.SetOutput(self.vtksgrid3d)
         reader3d.Update()
-        # Check for required field arrays
-        a = self.vtksgrid3d.GetAttributesAsFieldData(0)  # 0 for point data
-        names = [a.GetArrayName(i) for i in range(a.GetNumberOfArrays())]
+        # Check for required field arrays defined at the grid points
+        ptdata = self.vtksgrid3d.GetPointData()
+        names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
         missing = [x for x in self.required_keys3d if x not in names]
         if len(missing) > 0:
             raise ValueError(f"Missing {missing} array from the input 3D grid")
+
+    def reconstruct_filter_pipeline(self, nparts):
+        """Reconstruct VTK probe filter pipeline objects.
+
+        Args:
+            nparts ([type]): [description]
+        """
+        # => ASSUMES particles are only ever deactivated, never re-activated
+        # => with better tracking, reactivation could be possible; but why do it?
+        self.pt2d_np = np.zeros((nparts, 3))
+        self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
+        self.pt2d.Reset()
+        self.pt2d.SetData(self.pt2d_vtk)
+        self.ptset2d.Initialize()
+        self.ptset2d.SetPoints(self.pt2d)
+        self.probe2d.SetInputData(self.ptset2d)
+        if self.track3d:
+            self.pt3d_np = np.zeros((nparts, 3))
+            self.pt3d_vtk = numpy_support.numpy_to_vtk(self.pt3d_np)
+            self.pt3d.Reset()
+            self.pt3d.SetData(self.pt3d_vtk)
+            self.pts3d.Initialize()
+            self.pts3d.SetPoints(self.pt3d)
+            self.probe3d.SetInputData(self.pts3d)
 
     @property
     def required_keys2d(self):
@@ -199,6 +295,43 @@ class RiverGrid:
             tuple
         """
         return ("Velocity",)
+
+    def update_2d_pipeline(self, px, py, idx=None):
+        """Update the 2D VTK probe filter pipeline and cell indexes.
+
+        Args:
+            px ([type]): [description]
+            py ([type]): [description]
+            idx ([type], optional): [description]. Defaults to None.
+        """
+        if idx is None:
+            self.pt2d_np[:, 0] = px
+            self.pt2d_np[:, 1] = py
+        else:
+            self.pt2d_np[:, 0] = px[idx]
+            self.pt2d_np[:, 1] = py[idx]
+        self.pt2d.Modified()
+        self.probe2d.Update()
+
+    def update_3d_pipeline(self, px, py, pz, idx=None):
+        """Update the 3D VTK probe filter pipeline and cell indexes.
+
+        Args:
+            px ([type]): [description]
+            py ([type]): [description]
+            pz ([type]): [description]
+            idx ([type], optional): [description]. Defaults to None.
+        """
+        if idx is None:
+            self.pt3d_np[:, 0] = px
+            self.pt3d_np[:, 1] = py
+            self.pt3d_np[:, 2] = pz
+        else:
+            self.pt3d_np[:, 0] = px[idx]
+            self.pt3d_np[:, 1] = py[idx]
+            self.pt3d_np[:, 2] = pz[idx]
+        self.pt3d.Modified()
+        self.probe3d.Update()
 
     def update_velocity_fields(self, tidx):
         """Updates time-dependent velocity vtk arrays.

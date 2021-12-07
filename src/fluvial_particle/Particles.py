@@ -1,7 +1,6 @@
 """Particles Class module."""
 import h5py
 import numpy as np
-import vtk
 from vtk.util import numpy_support  # type:ignore
 
 
@@ -17,8 +16,9 @@ class Particles:
         rng,
         mesh,
         track3d=1,
-        lev=0.0,
+        lev=0.25,
         beta=(0.067, 0.067, 0.067),
+        min_depth=0.02,
         comm=None,
     ):
         """Initialize instance of class Particles.
@@ -32,7 +32,8 @@ class Particles:
             mesh (RiverGrid): class instance of the river hydrodynamic data
             track3d (bool): 1 if 3D model run, 0 if 2D model run
             lev (float): lateral eddy viscosity
-            beta (float): list of length 3, coefficients that scale diffusion
+            beta (float): coefficients that scale diffusion, either a scalar or a tuple/list/numpy array of length 3
+            min_depth (float): minimum allowed depth that particles may enter
             comm (mpi4py object): MPI communicator used in parallel execution
         """
         self.nparts = nparts
@@ -44,6 +45,7 @@ class Particles:
         self.track3d = track3d
         self.lev = lev
         self.beta = beta
+        self.min_depth = min_depth
 
         self._bedelev = np.zeros(nparts)
         self._wse = np.zeros(nparts)
@@ -67,46 +69,8 @@ class Particles:
         self.yrnum = np.zeros(nparts)
         self.zrnum = np.zeros(nparts)
 
-        # MOVE grid related pipeline objects (e.g. pt2d, ptset2d, etc.) to RiverGrid.py
-        # Objects for 2d grid interpolation
-        self.pt2d_np = np.zeros((self.nparts, 3))  # ordering required by vtk
-        self.pt2d_np[:, 0] = self.x
-        self.pt2d_np[:, 1] = self.y
-        self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
-        self.pt2d = vtk.vtkPoints()
-        self.ptset2d = vtk.vtkPointSet()  # vtkPointSet() REQUIRES vtk>=9.1
-        if comm is None:
-            self.probe2d = vtk.vtkProbeFilter()
-        else:
-            self.probe2d = vtk.vtkPProbeFilter()  # parallel version
-        self.strategy2d = vtk.vtkCellLocatorStrategy()  # requires vtk>=9.0
-        self.pt2d.SetData(self.pt2d_vtk)
-        self.ptset2d.SetPoints(self.pt2d)
-        self.probe2d.SetInputData(self.ptset2d)
-        self.probe2d.SetSourceData(self.mesh.vtksgrid2d)
-        self.probe2d.SetFindCellStrategy(self.strategy2d)
-        # Objects for 3d grid interpolation
-        if self.track3d:
-            self.pt3d_np = np.zeros((self.nparts, 3))
-            self.pt3d_np[:, 0] = self.x
-            self.pt3d_np[:, 1] = self.y
-            self.pt3d_np[:, 2] = self.z
-            self.pt3d_vtk = numpy_support.numpy_to_vtk(self.pt3d_np)
-            self.pt3d = vtk.vtkPoints()
-            self.pts3d = vtk.vtkPointSet()
-            if comm is None:
-                self.probe3d = vtk.vtkProbeFilter()
-            else:
-                self.probe3d = vtk.vtkPProbeFilter()
-            strategy3d = vtk.vtkCellLocatorStrategy()
-            self.pt3d.SetData(self.pt3d_vtk)
-            self.pts3d.SetPoints(self.pt3d)
-            self.probe3d.SetInputData(self.pts3d)
-            self.probe3d.SetSourceData(self.mesh.vtksgrid3d)
-            self.probe3d.SetFindCellStrategy(strategy3d)
-            """ these tolerance functions seem to have no effect for points right on the edge of the 3d cells
-            self.probe.ComputeToleranceOff()  # disables automated tolerance calculation
-            self.probe.SetTolerance(0.01)  # is this a dimensionless tolerance? how defined?"""
+        # Construct pipeline objects for VTK probe filter (does the grid interpolations)
+        self.mesh.build_probe_filter(self.nparts, comm)
 
     def calc_diffusion_coefs(self):
         """Calculate diffusion coefficients, McDonald & Nelson (2021)."""
@@ -150,6 +114,7 @@ class Particles:
         grpc["time"].attrs["Units"] = "seconds"
 
         grpp = parts_h5.create_group("properties")
+        grpp.attrs["Description"] = "Properties of particles at printing time steps"
         grpp.create_dataset(
             "bedelev", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
@@ -220,25 +185,8 @@ class Particles:
 
         idxx = self.indices[self.mask]
         if idxx.size > 0:
-            # Reconstruct VTK filter pipeline objects
-            # => ASSUME particles are only ever deactivated, never re-activated
-            # => with better tracking, reactivation could be possible, but why do it?
-            self.pt2d_np = np.zeros((idxx.size, 3))
-            self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
-            self.pt2d.Reset()
-            self.pt2d.SetData(self.pt2d_vtk)
-            self.ptset2d.Initialize()
-            self.ptset2d.SetPoints(self.pt2d)
-            self.probe2d.SetInputData(self.ptset2d)
-
-            if self.track3d:
-                self.pt3d_np = np.zeros((idxx.size, 3))
-                self.pt3d_vtk = numpy_support.numpy_to_vtk(self.pt3d_np)
-                self.pt3d.Reset()
-                self.pt3d.SetData(self.pt3d_vtk)
-                self.pts3d.Initialize()
-                self.pts3d.SetPoints(self.pt3d)
-                self.probe3d.SetInputData(self.pts3d)
+            # Reconstruct VTK probe filter pipeline objects
+            self.mesh.reconstruct_filter_pipeline(idxx.size)
 
     def gen_rands(self):
         """Generate random numbers drawn from standard normal distribution."""
@@ -294,10 +242,11 @@ class Particles:
             assert self.mask.any(), ValueError(  # noqa: S101
                 "No initial points in the 2D grid; check starting location(s)"
             )
-            inactive = self.nparts - self.probe2d.GetValidPoints().GetNumberOfTuples()
+            inactive = (
+                self.nparts - self.mesh.probe2d.GetValidPoints().GetNumberOfTuples()
+            )
             print(f"Warning, {inactive} initial points (x, y) are not in the 2D grid.")
 
-        self.time.fill(0.0)
         # Get 2D field values
         self.interp_fields(threed=False)
         self.z = self.bedelev + frac * self.depth
@@ -305,11 +254,15 @@ class Particles:
         # Get 3D velocity field
         self.interp_fields(twod=False)
 
+        self.time.fill(0.0)
+
     def interp_3d_field(self, px=None, py=None, pz=None):
         """Interpolate 3D velocity field at current particle positions."""
+        idx = None
         if self.mask is not None:
             if ~self.mask.any():
                 return
+            idx = self.indices[self.mask]
 
         if px is None:
             px = self.x
@@ -319,28 +272,19 @@ class Particles:
             pz = self.z
 
         # Update 3D probe filter pipeline
-        if self.mask is None:
-            self.pt3d_np[:, 0] = px
-            self.pt3d_np[:, 1] = py
-            self.pt3d_np[:, 2] = pz
+        if idx is None:
+            self.mesh.update_3d_pipeline(px, py, pz)
         else:
-            idx = self.indices[self.mask]
-            if idx.size == 0:
-                return
-            self.pt3d_np[:, 0] = px[idx]
-            self.pt3d_np[:, 1] = py[idx]
-            self.pt3d_np[:, 2] = pz[idx]
-        self.pt3d.Modified()
-
-        # Do the interpolation
-        self.probe3d.Update()
+            self.mesh.update_3d_pipeline(px, py, pz, idx)
 
         # Get interpolated point data from the probe filter
-        dataout = self.probe3d.GetOutput().GetPointData().GetArray("Velocity")
+        ptsout = self.mesh.probe3d.GetOutput().GetPointData()
+        dataout = ptsout.GetArray("Velocity")
         vel = numpy_support.vtk_to_numpy(dataout)
-        cellidxvtk = self.probe3d.GetOutput().GetPointData().GetArray("CellIndex")
+        # Interpolation on cell-centered ordered integer array gives cell index number
+        cellidxvtk = ptsout.GetArray("CellIndex")
         cellidx = numpy_support.vtk_to_numpy(cellidxvtk)
-        if self.mask is None:
+        if idx is None:
             self.velx = vel[:, 0]
             self.vely = vel[:, 1]
             self.velz = vel[:, 2]
@@ -361,36 +305,40 @@ class Particles:
             twod (bool, optional): Flag to interpolate 2D field arrays. Defaults to True.
             threed (bool, optional): Flag to interpolate 3D field arrays. Defaults to True.
         """
+        idx = None
         if self.mask is not None:
             if ~self.mask.any():
                 return
+            idx = self.indices[self.mask]
         if px is None:
             px = self.x
         if py is None:
             py = self.y
 
         if twod:
-            # Find current location in 2D grid and interpolate 2D fields
-            self.update_2d_pipeline(px, py)
-
-            ptsout = self.probe2d.GetOutput().GetPointData()
+            # Update 2D filter and interpolate 2D fields
+            self.mesh.update_2d_pipeline(px, py, idx)
+            ptsout = self.mesh.probe2d.GetOutput().GetPointData()
             elev = ptsout.GetArray("Elevation")
             wse = ptsout.GetArray("WaterSurfaceElevation")
             shear = ptsout.GetArray("ShearStress (magnitude)")
-            if self.mask is None:
+            # Interpolation on cell-centered ordered integer array gives cell index number
+            cellidx = ptsout.GetArray("CellIndex")
+            if idx is None:
                 self.bedelev = numpy_support.vtk_to_numpy(elev)
                 self.wse = numpy_support.vtk_to_numpy(wse)
                 self.shearstress = numpy_support.vtk_to_numpy(shear)
+                self.cellindex2d = numpy_support.vtk_to_numpy(cellidx)
             else:
-                idx = self.indices[self.mask]
                 self.bedelev[idx] = numpy_support.vtk_to_numpy(elev)
                 self.wse[idx] = numpy_support.vtk_to_numpy(wse)
                 self.shearstress[idx] = numpy_support.vtk_to_numpy(shear)
+                self.cellindex2d[idx] = numpy_support.vtk_to_numpy(cellidx)
             if not self.track3d:
                 # Get 2D Velocity components
-                vel = self.probe2d.GetOutput().GetPointData().GetArray("Velocity")
+                vel = ptsout.GetArray("Velocity")
                 vel_np = numpy_support.vtk_to_numpy(vel)
-                if self.mask is None:
+                if idx is None:
                     self.velx = vel_np[:, 0]
                     self.vely = vel_np[:, 1]
                 else:
@@ -414,7 +362,7 @@ class Particles:
         """
         # Pre-fill with True so that deactivated particles are ignored
         wet = np.full((self.nparts,), dtype=bool, fill_value=True)
-        ibcvtk = self.probe2d.GetOutput().GetPointData().GetArray("IBCfp")
+        ibcvtk = self.mesh.probe2d.GetOutput().GetPointData().GetArray("IBCfp")
         ibc = numpy_support.vtk_to_numpy(ibcvtk)
         if self.mask is None:
             wet = ibc >= 1.0 - 1e-07
@@ -424,12 +372,11 @@ class Particles:
 
         return wet
 
-    def move(self, alpha, min_depth, time, dt):
+    def move(self, alpha, time, dt):
         """Update particle positions.
 
         Args:
             alpha (float): bounding scalar for validate_z
-            min_depth (float): minimum depth scalar that particles can enter
             time (float): the new time at end of position update
             dt (float): time step
         """
@@ -455,10 +402,10 @@ class Particles:
         # Update 2D fields
         self.interp_fields(px, py, threed=False)
 
-        # Prevent particles from entering positions where new_depth < min_depth
-        self.prevent_mindepth(px, py, min_depth)
+        # Prevent particles from entering 2D positions where new_depth < min_depth
+        self.prevent_mindepth(px, py)
 
-        # Perturb (and validate) vertical, random wiggle by default
+        # Perturb vertical and validate
         pz = self.perturb_z(alpha, dt)
 
         # Move particles
@@ -517,7 +464,7 @@ class Particles:
         self.validate_2d_pos(px, py)
 
     def perturb_z(self, alpha, dt):
-        """Project particles' vertical trajectories, random wiggle.
+        """Project particles' vertical trajectories and validate.
 
         Args:
             alpha (float): bounds particle in fractional water column to [alpha, 1-alpha]
@@ -526,85 +473,58 @@ class Particles:
         Returns:
             pz (float NumPy array): new elevation array
         """
+        # Perturbations are assumed to start from the same fractional depth as last time
+        z0 = self.bedelev + self.normdepth * self.depth
+        zadv = self.velz * dt
         zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
-        pz = self.bedelev + (self.normdepth * self.depth) + self.velz * dt + zranwalk
-        # Important: verify new positions are within water column tolerance
+        pz = z0 + zadv + zranwalk
         self.validate_z(pz, alpha)
         return pz
 
-    def prevent_mindepth(self, px, py, min_depth):
+    def prevent_mindepth(self, px, py):
         """Prevent particles from entering a position with depth < min_depth.
 
         Args:
             px (float NumPy array): new x coordinates of particles
             py (float NumPy array): new y coordinates of particles
-            min_depth (float): minimum allowed depth that particles may enter
         """
-        idx = self.indices[self.depth < min_depth]
+        idx = self.indices[self.depth < self.min_depth]
         if idx.size > 0:
             px[idx] = self.x[idx]
             py[idx] = self.y[idx]
-            # Update cell indices and interpolations
+            # Update 2D fields
             self.interp_fields(px, py, threed=False)
 
-    def update_2d_pipeline(self, px, py):
-        """Update the 2D VTK probe filter pipeline and cell indexes.
-
-        Args:
-            px ([type]): [description]
-            py ([type]): [description]
-        """
-        # Update pipeline input points and probe filter
-        if self.mask is None:
-            self.pt2d_np[:, 0] = px
-            self.pt2d_np[:, 1] = py
-        else:
-            idx = self.indices[self.mask]
-            self.pt2d_np[:, 0] = px[idx]
-            self.pt2d_np[:, 1] = py[idx]
-        self.pt2d.Modified()
-        self.probe2d.Update()
-
     def validate_2d_pos(self, px, py):
-        """Update 2D VTK pipeline, check positions, and deactivate particles leaving the 2D grid.
+        """Check that positions are inside the 2D grid and deactivate particles leaving it.
 
         Args:
             px ([type]): [description]
             py ([type]): [description]
         """
-        self.update_2d_pipeline(px, py)
-        out = self.probe2d.GetOutput()
-        cellidxvtk = out.GetPointData().GetArray("CellIndex")
-        cellidx = numpy_support.vtk_to_numpy(cellidxvtk)
         if self.mask is None:
-            self.cellindex2d = cellidx
+            idx = None
         else:
+            if ~self.mask.any():
+                return
             idx = self.indices[self.mask]
-            self.cellindex2d[idx] = cellidx
-        idxss = np.searchsorted(self.mesh.boundarycells, cellidx)
-        bndrycells = np.equal(self.mesh.boundarycells[idxss], cellidx)
 
-        # Check for points that have wandered outside the 2D grid
-        out = self.probe2d.GetOutput()
-        valid = self.probe2d.GetValidPoints()
-        outofgrid = np.full(bndrycells.shape, fill_value=False)
-        if out.GetNumberOfPoints() != valid.GetNumberOfTuples():
-            name = self.probe2d.GetValidPointMaskArrayName()
-            msk = out.GetPointData().GetArray(name)
-            msk_np = numpy_support.vtk_to_numpy(msk)
-            outofgrid[msk_np < 1] = True
+        # Find particles leaving the grid
+        outparts = self.mesh.out_of_grid(px, py, idx)
 
-        # Deactivate particles that satisfy either condition
-        outparts = np.logical_or(bndrycells, outofgrid)
+        # Deactivate particles
         if outparts.any():
-            if self.mask is None:
+            if idx is None:
                 self.deactivate_particles(outparts)
+                px[outparts] = np.nan
+                py[outparts] = np.nan
             else:
-                idx = self.indices[self.mask]
                 self.deactivate_particles(idx[outparts])
+                px[idx[outparts]] = np.nan
+                py[idx[outparts]] = np.nan
             idx = self.indices[self.mask]
             if idx.size > 0:
-                self.update_2d_pipeline(px, py)
+                self.mesh.update_2d_pipeline(px, py, idx)
 
     def validate_z(self, pz, alpha):
         """Check that new particle vertical position is within bounds.
@@ -623,10 +543,10 @@ class Particles:
         """Write particle positions and interpolated quantities to file.
 
         Args:
-            obj (h5py file): open h5py file object created with self.create_hdf5()
-            tidx (int): time slice index
-            start (int): starting index of this processors assigned write space
-            end (int): ending index (non-inclusive)
+            obj (h5py object): open HDF5 file object created with self.create_hdf5()
+            tidx (int): current time slice index
+            start (int): starting index of this processor's assigned write space
+            end (int): ending write index (non-inclusive)
             time (float): current simulation time
             rank (int): processor rank if run in MPI (0 in serial)
         """
@@ -647,7 +567,7 @@ class Particles:
         grpp["cellidx3d"][tidx, start:end] = self.cellindex3d
 
     def write_hdf5_xmf(self, filexmf, time, nprints, nparts, tidx):
-        """Write the particles xmf file for visualizations in Paraview.
+        """Write the body of the particles XDMF file for visualizations in Paraview.
 
         Args:
             filexmf (file): open file to write
@@ -668,7 +588,7 @@ class Particles:
                             1 1
                             1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
                             particles.h5:/coordinates/x
                         </DataItem>
                     </DataItem>
@@ -678,7 +598,7 @@ class Particles:
                             1 1
                             1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
                             particles.h5:/coordinates/y
                         </DataItem>
                     </DataItem>
@@ -688,7 +608,7 @@ class Particles:
                             1 1
                             1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
                             particles.h5:/coordinates/z
                         </DataItem>
                     </DataItem>
@@ -700,7 +620,7 @@ class Particles:
                         1 1
                         1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
                             particles.h5:/properties/bedelev
                         </DataItem>
                     </DataItem>
@@ -712,7 +632,7 @@ class Particles:
                         1 1
                         1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
                             particles.h5:/properties/cellidx2d
                         </DataItem>
                     </DataItem>
@@ -724,7 +644,7 @@ class Particles:
                         1 1
                         1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
                             particles.h5:/properties/cellidx3d
                         </DataItem>
                     </DataItem>
@@ -736,7 +656,7 @@ class Particles:
                         1 1
                         1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
                             particles.h5:/properties/htabvbed
                         </DataItem>
                     </DataItem>
@@ -748,7 +668,7 @@ class Particles:
                         1 1
                         1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
                             particles.h5:/properties/wse
                         </DataItem>
                     </DataItem>
@@ -760,7 +680,7 @@ class Particles:
                         1 1 1
                         1 {nparts} 3
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts} 3" Format="HDF">
+                        <DataItem Dimensions="{nprints} {nparts} 3" Format="HDF" Precision="8">
                             particles.h5:/properties/velvec
                         </DataItem>
                     </DataItem>
@@ -828,7 +748,7 @@ class Particles:
 
     @beta.setter
     def beta(self, values):
-        """Set beta. Accepts input as either a scalar, or a list/numpy array of size 3.
+        """Set beta. Accepts input as either a scalar, or a tuple/list/numpy array of size 3.
 
         Args:
             values ([type]): [description]
@@ -1049,6 +969,29 @@ class Particles:
             values ([type]): [description]
         """
         self._mesh = values
+
+    @property
+    def min_depth(self):
+        """Get min_depth.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._min_depth
+
+    @min_depth.setter
+    def min_depth(self, value):
+        """Set min_depth.
+
+        Args:
+            value ([type]): [description]
+        """
+        if isinstance(value, int):
+            value = np.float64(value)
+        assert isinstance(value, float), TypeError(  # noqa: S101
+            "min_depth must be a scalar"
+        )
+        self._min_depth = value
 
     @property
     def normdepth(self):

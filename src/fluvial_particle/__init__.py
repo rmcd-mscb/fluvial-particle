@@ -203,14 +203,15 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     # Some Variables
     endtime = settings["SimTime"]
     dt = settings["dt"]
+    """
+    # min_depth, lev, beta are now optional
     min_depth = settings["min_depth"]
-
     lev = settings["LEV"]  # lateral eddy viscosity
 
     beta_x = settings["beta_x"]
     beta_y = settings["beta_y"]
     beta_z = settings["beta_z"]
-    beta = [beta_x, beta_y, beta_z]
+    beta = [beta_x, beta_y, beta_z] """
 
     # 2D or 3D particle tracking
     track3d = settings["Track3D"]
@@ -258,9 +259,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         npart, x, y, z, rng, river, track3d, 0.2, period, min_elev, ttime
     ) """
 
-    particles = Particles(
-        npart, x, y, z, rng, river, track3d, lev=lev, beta=beta, comm=comm
-    )
+    particles = Particles(npart, x, y, z, rng, river, track3d, comm=comm)
     # particles = FallingParticles(npart, x, y, z, rng, river, track3d, radius=0.000001)
     particles.initialize_location(0.5)  # 0.5 is midpoint of water column
 
@@ -292,7 +291,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
 
     for i in range(n_times):  # noqa C901
         # Move particles
-        particles.move(alpha, min_depth, times[i], dt)
+        particles.move(alpha, times[i], dt)
 
         # Check that there are still active particles
         if particles.mask is not None:
