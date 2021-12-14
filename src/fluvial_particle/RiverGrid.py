@@ -4,8 +4,9 @@ import pathlib
 import h5py
 import numpy as np
 import vtk
-from numba import jit
 from vtk.util import numpy_support  # type:ignore
+
+# from numba import jit
 
 
 class RiverGrid:
@@ -768,7 +769,7 @@ class RiverGrid:
         self._track3d = values
 
 
-@jit(nopython=True)
+# @jit(nopython=True)
 def is_sorted(arr):
     """Using Numba, an efficient check that a 1D NumPy array is sorted in increasing order.
 
