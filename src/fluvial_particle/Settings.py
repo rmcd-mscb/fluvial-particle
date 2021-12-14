@@ -29,9 +29,6 @@ class Settings(dict):
             "file_name_3da",
             "NumPart",
             "StartLoc",
-            "amplitude",
-            "period",
-            "min_elev",
         )
 
     @classmethod

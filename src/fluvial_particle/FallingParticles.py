@@ -16,6 +16,11 @@ class FallingParticles(Particles):
         rng,
         mesh,
         track3d=1,
+        lev=0.25,
+        beta=(0.067, 0.067, 0.067),
+        min_depth=0.02,
+        vertbound=0.01,
+        comm=None,
         radius=0.0005,
         rho=2650.0,
         c1=20.0,
@@ -30,17 +35,62 @@ class FallingParticles(Particles):
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            track3d (bool): 1 if 3D model run, 0 else
-            radius (float): radius of the particles [m]
-            rho (float): density of the particles [kg/m^3]
-            c1 (float): dimensionless viscous drag coefficient
-            c2 (float): dimensionless turbulent wake drag coefficient
+            track3d (int): 1 if 3D model run, 0 else, optional
+            lev (float): lateral eddy viscosity, scalar, optional
+            beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
+            min_depth (float): minimum allowed depth that particles may enter, scalar, optional
+            vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar, optional
+            comm (mpi4py object): MPI communicator used in parallel execution, optional
+            radius (float): radius of the particles [m], scalar or NumPy array of length nparts, optional
+            rho (float): density of the particles [kg/m^3], scalar or NumPy array of length nparts, optional
+            c1 (float): viscous drag coefficient [-], scalar or NumPy array of length nparts, optional
+            c2 (float): turbulent wake drag coefficient [-], scalar or NumPy array of length nparts, optional
         """
-        super().__init__(nparts, x, y, z, rng, mesh, track3d)
+        super().__init__(
+            nparts, x, y, z, rng, mesh, track3d, lev, beta, min_depth, vertbound, comm
+        )
         self.c1 = c1
         self.c2 = c2
         self.radius = radius
         self.rho = rho
+
+    def create_hdf5(self, nprints, globalnparts, comm=None, fname="particles.h5"):
+        """Create an HDF5 file to write incremental particles results.
+
+        Subclass override method creates additional datasets in the HDF5 file.
+
+        Args:
+            nprints (int): size of first dimension, indexes printing time slices
+            globalnparts (int): global number of particles, distributed across processors
+            comm (MPI communicator): only for parallel runs
+            fname (string): name of the HDF5 file
+
+        Returns:
+            parts_h5: new open HDF5 file object
+        """
+        parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
+        grp = parts_h5["properties"]
+        grp.create_dataset(
+            "c1", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
+        grp["c1"].attrs["Description"] = "Viscous drag coefficient"
+        grp["c1"].attrs["Units"] = "None"
+        grp.create_dataset(
+            "c2", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
+        grp["c2"].attrs["Description"] = "Turbulent wake drag coefficient"
+        grp["c2"].attrs["Units"] = "None"
+        grp.create_dataset(
+            "radius", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
+        grp["radius"].attrs["Description"] = "Particle radii"
+        grp["radius"].attrs["Units"] = "meters"
+        grp.create_dataset(
+            "rho", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
+        grp["rho"].attrs["Description"] = "Particle density"
+        grp["rho"].attrs["Units"] = "kilograms per cubic meter"
+        return parts_h5
 
     def deactivate_particle(self, idx):
         """Turn off particles that have left the river domain.
@@ -62,11 +112,12 @@ class FallingParticles(Particles):
         """Project particles' vertical trajectories, random wiggle + gravitational acceleration.
 
         Args:
-            dt ([type]): [description]
+            dt (float): time step
 
         Returns:
-            [type]: [description]
+            pz (float NumPy array): new elevation array
         """
+        z0 = self.bedelev + self.normdepth * self.depth
         zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
 
         g = 9.81  # magnitude of gravitational acceleration [m^2/s]
@@ -83,9 +134,203 @@ class FallingParticles(Particles):
             uz[a] = -ws[a]
         else:
             uz[a] = -ws
+        zadv = uz * dt
 
-        pz = self.bedelev + (self.normdepth * self.depth) + uz * dt + zranwalk
+        pz = z0 + zadv + zranwalk
+        self.validate_z(pz)
         return pz
+
+    def write_hdf5(self, obj, tidx, start, end, time, rank):
+        """Write particle positions and interpolated quantities to file.
+
+        Subclass override method writes additional arrays to output HDF5 file.
+
+        Args:
+            obj (h5py object): open HDF5 file object created with self.create_hdf5()
+            tidx (int): current time slice index
+            start (int): starting index of this processor's assigned write space
+            end (int): ending write index (non-inclusive)
+            time (float): current simulation time
+            rank (int): processor rank if run in MPI (0 in serial)
+        """
+        super().write_hdf5(obj, tidx, start, end, time, rank)
+        grp = obj["properties"]
+        grp["c1"][tidx, start:end] = self.c1
+        grp["c2"][tidx, start:end] = self.c2
+        grp["radius"][tidx, start:end] = self.radius
+        grp["rho"][tidx, start:end] = self.rho
+
+    def write_hdf5_xmf(self, filexmf, time, nprints, nparts, tidx):
+        """Write the body of the particles XDMF file for visualizations in Paraview.
+
+        Subclass override method writes additional attributes.
+
+        Args:
+            filexmf (file): open file to write
+            time (float): current simulation time
+            nprints (int): total number of printing steps
+            nparts (int): global number of particles summed across processors
+            tidx (int): time slice index corresponding to time
+        """
+        filexmf.write(
+            f"""
+            <Grid GridType="Uniform">
+                <Time Value="{time}"/>
+                <Topology NodesPerElement="{nparts}" TopologyType="Polyvertex"/>
+                <Geometry GeometryType="X_Y_Z" Name="particles">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                            {tidx} 0
+                            1 1
+                            1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/coordinates/x
+                        </DataItem>
+                    </DataItem>
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                            {tidx} 0
+                            1 1
+                            1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/coordinates/y
+                        </DataItem>
+                    </DataItem>
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                            {tidx} 0
+                            1 1
+                            1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/coordinates/z
+                        </DataItem>
+                    </DataItem>
+                </Geometry>
+                <Attribute Name="BedElevation" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/bedelev
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="CellIndex2D" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/cellidx2d
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="CellIndex3D" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/cellidx3d
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="HeightAboveBed" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/htabvbed
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="WaterSurfaceElevation" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/wse
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="VelocityVector" AttributeType="Vector" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts} 3" Format="XML">
+                        <DataItem Dimensions="3 3" Format="XML">
+                        {tidx} 0 0
+                        1 1 1
+                        1 {nparts} 3
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts} 3" Format="HDF" Precision="8">
+                            particles.h5:/properties/velvec
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="c1" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/c1
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="c2" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/c2
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="Radius" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/radius
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+                <Attribute Name="Density" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/rho
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
+            </Grid>"""
+        )
 
     # Properties
 
@@ -105,7 +350,9 @@ class FallingParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, float):
+        if isinstance(values, int):
+            values = np.float64(values)
+        elif isinstance(values, float):
             pass
         elif (
             isinstance(values, np.ndarray)
@@ -115,7 +362,7 @@ class FallingParticles(Particles):
             pass
         else:
             raise TypeError(
-                "c1 wrong type, must be either float scalar or NumPy float array"
+                "c1.setter wrong type, must be either float scalar or NumPy float array"
             )
         self._c1 = values
 
@@ -135,7 +382,9 @@ class FallingParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, float):
+        if isinstance(values, int):
+            values = np.float64(values)
+        elif isinstance(values, float):
             pass
         elif (
             isinstance(values, np.ndarray)
@@ -145,7 +394,7 @@ class FallingParticles(Particles):
             pass
         else:
             raise TypeError(
-                "c2 wrong type, must be either float scalar or NumPy float array"
+                "c2.setter wrong type, must be either float scalar or NumPy float array"
             )
         self._c2 = values
 
@@ -165,7 +414,9 @@ class FallingParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, float):
+        if isinstance(values, int):
+            values = np.float64(values)
+        elif isinstance(values, float):
             pass
         elif (
             isinstance(values, np.ndarray)
@@ -175,10 +426,10 @@ class FallingParticles(Particles):
             pass
         else:
             raise TypeError(
-                "radius wrong type, must be either float scalar or NumPy float array"
+                "radius.setter wrong type, must be either float scalar or NumPy float array"
             )
         if np.any(values <= 0):
-            raise ValueError("radius must be positive number")
+            raise ValueError("radius.setter must be positive number")
 
         self._radius = values
 
@@ -198,7 +449,9 @@ class FallingParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, float):
+        if isinstance(values, int):
+            values = np.float64(values)
+        elif isinstance(values, float):
             pass
         elif (
             isinstance(values, np.ndarray)
@@ -208,9 +461,9 @@ class FallingParticles(Particles):
             pass
         else:
             raise TypeError(
-                "rho wrong type, must be either float scalar or NumPy float array"
+                "rho.setter wrong type, must be either float scalar or NumPy float array"
             )
         if np.any(values <= 0):
-            raise ValueError("rho must be positive number")
+            raise ValueError("rho.setter must be positive number")
 
         self._rho = values

@@ -5,7 +5,11 @@ from vtk.util import numpy_support  # type:ignore
 
 
 class Particles:
-    """A class of particles, each with a velocity, size, and mass."""
+    """A class of particles, each with a velocity, size, and mass.
+
+    Models passive particles, i.e. no active drift component.
+    A superclass for particles with active drift.
+    """
 
     def __init__(
         self,
@@ -19,6 +23,7 @@ class Particles:
         lev=0.25,
         beta=(0.067, 0.067, 0.067),
         min_depth=0.02,
+        vertbound=0.01,
         comm=None,
     ):
         """Initialize instance of class Particles.
@@ -30,11 +35,12 @@ class Particles:
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            track3d (bool): 1 if 3D model run, 0 if 2D model run
-            lev (float): lateral eddy viscosity
-            beta (float): coefficients that scale diffusion, either a scalar or a tuple/list/numpy array of length 3
-            min_depth (float): minimum allowed depth that particles may enter
-            comm (mpi4py object): MPI communicator used in parallel execution
+            track3d (int): 1 if 3D model run, 0 else, optional
+            lev (float): lateral eddy viscosity, scalar, optional
+            beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
+            min_depth (float): minimum allowed depth that particles may enter, scalar, optional
+            vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar, optional
+            comm (mpi4py object): MPI communicator used in parallel execution, optional
         """
         self.nparts = nparts
         self.x = np.copy(x)
@@ -46,6 +52,7 @@ class Particles:
         self.lev = lev
         self.beta = beta
         self.min_depth = min_depth
+        self.vertbound = vertbound
 
         self._bedelev = np.zeros(nparts)
         self._wse = np.zeros(nparts)
@@ -96,6 +103,9 @@ class Particles:
         else:
             parts_h5 = h5py.File(fname, "w", driver="mpio", comm=comm)  # MPI version
 
+        parts_h5.attrs[
+            "Description"
+        ] = f"Output of the fluvial particle model simulated with the {type(self).__name__} class."
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
         grpc.create_dataset(
@@ -125,6 +135,9 @@ class Particles:
             "cellidx3d", (nprints, globalnparts), dtype=np.int64, fillvalue=-1
         )
         grpp.create_dataset(
+            "depth", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+        )
+        grpp.create_dataset(
             "htabvbed", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
         grpp.create_dataset(
@@ -135,21 +148,29 @@ class Particles:
         )
         grpp["bedelev"].attrs[
             "Description"
-        ] = "Bed elevation at x,y position of particles"
+        ] = "Bed elevation, interpolated at particle positions (x,y)"
         grpp["cellidx2d"].attrs[
             "Description"
         ] = "Index of 2D grid cell containing each particle"
         grpp["cellidx3d"].attrs[
             "Description"
         ] = "Index of 3D grid cell containing each particle"
-        grpp["htabvbed"].attrs["Description"] = "Height of particle above bed elevation"
-        grpp["velvec"].attrs["Description"] = "Velocity vector (u,v,w) of particles"
+        grpp["depth"].attrs[
+            "Description"
+        ] = "Depth of water column, interpolated at particle positions (x,y)"
+        grpp["htabvbed"].attrs[
+            "Description"
+        ] = "Height of particle above bed, interpolated at particle positions (x,y)"
+        grpp["velvec"].attrs[
+            "Description"
+        ] = "Velocity vector (u,v,w), interpolated at particle positions (x,y,z) or (x,y)"
         grpp["wse"].attrs[
             "Description"
-        ] = "Water surface elevation at x,y position of particles"
+        ] = "Water surface elevation, interpolated at particle positions (x,y)"
         grpp["bedelev"].attrs["Units"] = "meters"
         grpp["cellidx2d"].attrs["Units"] = "None"
         grpp["cellidx3d"].attrs["Units"] = "None"
+        grpp["depth"].attrs["Units"] = "meters"
         grpp["htabvbed"].attrs["Units"] = "meters"
         grpp["velvec"].attrs["Units"] = "meters per second"
         grpp["wse"].attrs["Units"] = "meters"
@@ -161,6 +182,8 @@ class Particles:
         Args:
             idx (int ndarray): index or indices of particle(s) to turn off
         """
+        # Currently, particles are only ever deactivated, never re-activated
+        # with better tracking, reactivation could be possible; but why do it?
         self._x[idx] = np.nan
         self._y[idx] = np.nan
         self._z[idx] = np.nan
@@ -230,26 +253,27 @@ class Particles:
                 px[b] = self.x[b]
                 py[b] = self.y[b]
 
-    def initialize_location(self, frac):
-        """Initialize position in water column and interpolate mesh arrays.
+    def initial_validation(self, frac=None):
+        """Validate initial 2D positions, set vertical postitions (optional), and interpolate mesh arrays.
 
         Args:
-            frac (float): starting position of particles within water column (scalar or NumPy array)
+            frac (float): starting position of particles within water column (scalar or NumPy array), optional
         """
-        # ASSERT check that frac in (epsilon, 1-epsilon)
         self.validate_2d_pos(self.x, self.y)
         if self.mask is not None:
-            assert self.mask.any(), ValueError(  # noqa: S101
-                "No initial points in the 2D grid; check starting location(s)"
-            )
-            inactive = (
-                self.nparts - self.mesh.probe2d.GetValidPoints().GetNumberOfTuples()
-            )
+            if ~self.mask.any():
+                raise Exception(
+                    "No initial points in the 2D grid; check starting location(s)"
+                )
+            numvalidpts = self.mesh.probe2d.GetValidPoints().GetNumberOfTuples()
+            inactive = self.nparts - numvalidpts
             print(f"Warning, {inactive} initial points (x, y) are not in the 2D grid.")
 
         # Get 2D field values
         self.interp_fields(threed=False)
-        self.z = self.bedelev + frac * self.depth
+        if frac is not None:
+            self.z = self.bedelev + frac * self.depth
+        self.validate_z(self.z)
         self.htabvbed = self.z - self.bedelev
         # Get 3D velocity field
         self.interp_fields(twod=False)
@@ -372,18 +396,13 @@ class Particles:
 
         return wet
 
-    def move(self, alpha, time, dt):
+    def move(self, time, dt):
         """Update particle positions.
 
         Args:
-            alpha (float): bounding scalar for validate_z
             time (float): the new time at end of position update
             dt (float): time step
         """
-        # It is assumed that at the start of every loop, particle points have been validated and
-        # interpolated fields have been updated.
-
-        # Use temporary arrays for next update validation
         px = np.copy(self.x)
         py = np.copy(self.y)
 
@@ -406,7 +425,7 @@ class Particles:
         self.prevent_mindepth(px, py)
 
         # Perturb vertical and validate
-        pz = self.perturb_z(alpha, dt)
+        pz = self.perturb_z(dt)
 
         # Move particles
         self.x = px
@@ -463,11 +482,10 @@ class Particles:
         py[idx] = self.y[idx] + self.yrnum[idx] * (2.0 * self.diffy[idx] * dt) ** 0.5
         self.validate_2d_pos(px, py)
 
-    def perturb_z(self, alpha, dt):
+    def perturb_z(self, dt):
         """Project particles' vertical trajectories and validate.
 
         Args:
-            alpha (float): bounds particle in fractional water column to [alpha, 1-alpha]
             dt (float): time step
 
         Returns:
@@ -478,7 +496,7 @@ class Particles:
         zadv = self.velz * dt
         zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
         pz = z0 + zadv + zranwalk
-        self.validate_z(pz, alpha)
+        self.validate_z(pz)
         return pz
 
     def prevent_mindepth(self, px, py):
@@ -526,18 +544,16 @@ class Particles:
             if idx.size > 0:
                 self.mesh.update_2d_pipeline(px, py, idx)
 
-    def validate_z(self, pz, alpha):
+    def validate_z(self, pz):
         """Check that new particle vertical position is within bounds.
 
         Args:
             pz (float NumPy array): new elevation array
-            alpha (float): bounds particle in fractional water column to [alpha, 1-alpha]
         """
-        # check on alpha? only makes sense for alpha<=0.5
-        a = self.indices[pz > self.wse - alpha * self.depth]
-        b = self.indices[pz < self.bedelev + alpha * self.depth]
-        pz[a] = self.wse[a] - alpha * self.depth[a]
-        pz[b] = self.bedelev[b] + alpha * self.depth[b]
+        a = self.indices[pz > self.wse - self.vertbound * self.depth]
+        b = self.indices[pz < self.bedelev + self.vertbound * self.depth]
+        pz[a] = self.wse[a] - self.vertbound * self.depth[a]
+        pz[b] = self.bedelev[b] + self.vertbound * self.depth[b]
 
     def write_hdf5(self, obj, tidx, start, end, time, rank):
         """Write particle positions and interpolated quantities to file.
@@ -558,6 +574,7 @@ class Particles:
         if rank == 0:
             grpc["time"][tidx] = time
         grpp["bedelev"][tidx, start:end] = self.bedelev
+        grpp["depth"][tidx, start:end] = self.depth
         grpp["htabvbed"][tidx, start:end] = self.htabvbed
         grpp["wse"][tidx, start:end] = self.wse
         grpp["velvec"][tidx, start:end, :] = np.vstack(
@@ -649,6 +666,18 @@ class Particles:
                         </DataItem>
                     </DataItem>
                 </Attribute>
+                <Attribute Name="Depth" AttributeType="Scalar" Center="Node">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                        <DataItem Dimensions="3 2" Format="XML">
+                        {tidx} 0
+                        1 1
+                        1 {nparts}
+                        </DataItem>
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                            particles.h5:/properties/depth
+                        </DataItem>
+                    </DataItem>
+                </Attribute>
                 <Attribute Name="HeightAboveBed" AttributeType="Scalar" Center="Node">
                     <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
                         <DataItem Dimensions="3 2" Format="XML">
@@ -732,9 +761,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "bedelev.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("bedelev.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"bedelev.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._bedelev = values
 
     @property
@@ -753,7 +785,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        temp = np.zeros((3,), dtype=np.float64())
+        acceptable = (float, tuple, list, np.ndarray)
+        if not isinstance(values, acceptable):
+            raise TypeError(
+                "beta.setter must be either a float scalar or tuple/list/numpy array of size 3"
+            )
+        temp = np.zeros((3,), dtype=np.float64)
         temp[:] = values
         self._beta = temp
 
@@ -773,9 +810,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "cellindex2d.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("cellindex2d.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"cellindex2d.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._cellindex2d = values
 
     @property
@@ -794,9 +834,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "cellindex3d.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("cellindex3d.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"cellindex3d.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._cellindex3d = values
 
     @property
@@ -815,12 +858,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "depth.setter wrong size"
-        )
-        assert isinstance(values, np.ndarray), TypeError(  # noqa:S101
-            "depth.setter: wrong type, must be NumPy ndarray"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("depth.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"depth.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._depth = values
 
     @property
@@ -839,9 +882,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "diffx.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("diffx.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"diffx.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._diffx = values
 
     @property
@@ -860,9 +906,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "diffy.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("diffy.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"diffy.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._diffy = values
 
     @property
@@ -881,9 +930,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "diffz.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("diffz.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"diffz.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._diffz = values
 
     @property
@@ -902,9 +954,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "htabvbed.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("htabvbed.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"htabvbed.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._htabvbed = values
 
     @property
@@ -917,16 +972,17 @@ class Particles:
         return self._lev
 
     @lev.setter
-    def lev(self, value):
+    def lev(self, values):
         """Set lev.
 
         Args:
-            value ([type]): [description]
+            values ([type]): [description]
         """
-        if isinstance(value, int):
-            value = np.float64(value)
-        assert isinstance(value, float), TypeError("lev must be a scalar")  # noqa: S101
-        self._lev = value
+        if isinstance(values, int):
+            values = np.float64(values)
+        if not isinstance(values, float):
+            raise TypeError("lev.setter must be a scalar")
+        self._lev = values
 
     @property
     def mask(self):
@@ -944,12 +1000,14 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.issubdtype(values.dtype, "bool"), ValueError(  # noqa: S101
-            "mask.setter: mask must be of 'bool' data type"
-        )
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "mask.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("mask.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"mask.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
+        if not np.issubdtype(values.dtype, "bool"):
+            raise TypeError("mask.setter: mask must be of 'bool' data type")
         self._mask = values
 
     @property
@@ -980,18 +1038,17 @@ class Particles:
         return self._min_depth
 
     @min_depth.setter
-    def min_depth(self, value):
+    def min_depth(self, values):
         """Set min_depth.
 
         Args:
-            value ([type]): [description]
+            values ([type]): [description]
         """
-        if isinstance(value, int):
-            value = np.float64(value)
-        assert isinstance(value, float), TypeError(  # noqa: S101
-            "min_depth must be a scalar"
-        )
-        self._min_depth = value
+        if isinstance(values, int):
+            values = np.float64(values)
+        if not isinstance(values, float):
+            raise TypeError("min_depth must be a scalar")
+        self._min_depth = values
 
     @property
     def normdepth(self):
@@ -1009,9 +1066,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "normdepth.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("normdepth.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"normdepth.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._normdepth = values
 
     @property
@@ -1024,15 +1084,17 @@ class Particles:
         return self._nparts
 
     @nparts.setter
-    def nparts(self, value):
+    def nparts(self, values):
         """Set nparts.
 
         Args:
-            value ([type]): [description]
+            values ([type]): [description]
         """
-        assert value > 0, ValueError("# particles < 1")  # noqa: S101
-        assert isinstance(value, int), TypeError("nparts must be int")  # noqa: S101
-        self._nparts = value
+        if not isinstance(values, int):
+            raise TypeError("nparts.setter must be int")
+        if values < 1:
+            raise ValueError("nparts.setter number of particles must be greater than 0")
+        self._nparts = values
 
     @property
     def rng(self):
@@ -1068,9 +1130,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "shearstress.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("shearstress.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"shearstress.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._shearstress = values
 
     @property
@@ -1089,9 +1154,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "time.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("time.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"time.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._time = values
 
     @property
@@ -1104,17 +1172,17 @@ class Particles:
         return self._track3d
 
     @track3d.setter
-    def track3d(self, value):
+    def track3d(self, values):
         """Set track3d.
 
         Args:
-            value ([type]): [description]
+            values ([type]): [description]
         """
-        assert isinstance(value, int), TypeError("track3d must be int")  # noqa: S101
-        assert value >= 0 and value < 2, ValueError(  # noqa: S101
-            "track3d must be 0 or 1"
-        )
-        self._track3d = value
+        if not isinstance(values, int):
+            raise TypeError("track3d.setter must be int")
+        if values < 0 or values > 1:
+            raise ValueError("track3d.setter must be 0 or 1")
+        self._track3d = values
 
     @property
     def ustar(self):
@@ -1132,9 +1200,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "ustar.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("ustar.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"ustar.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._ustar = values
 
     @property
@@ -1153,9 +1224,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "velx.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("velx.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"velx.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._velx = values
 
     @property
@@ -1174,9 +1248,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "vely.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("vely.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"vely.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._vely = values
 
     @property
@@ -1195,10 +1272,48 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "velz.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("velz.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"velz.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._velz = values
+
+    @property
+    def vertbound(self):
+        """Get vertbound.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._vertbound
+
+    @vertbound.setter
+    def vertbound(self, values):
+        """Set vertbound.
+
+        Args:
+            values ([type]): [description]
+        """
+        if isinstance(values, int) or isinstance(values, float):
+            values = np.float64(values)
+        if not isinstance(values, np.float64):
+            raise TypeError("vertbound.setter must be a scalar")
+        if not self.track3d:
+            # 2D runs have fixed position halfway up water column
+            values = 0.5
+        elif values >= 0.0 and values <= 0.5:
+            pass
+        elif values < 0.0:
+            values = 0.0
+            print("vertbound.setter bounded below by 0, values set to 0")
+        elif values > 0.5:
+            values = 0.5
+            print("vertbound.setter bounded above by 0.5, values set to 0.5")
+        else:
+            raise ValueError("values of vertbound.setter unknown; possibly NaN?")
+        self._vertbound = values
 
     @property
     def wse(self):
@@ -1216,9 +1331,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "wse.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("wse.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"wse.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._wse = values
 
     @property
@@ -1237,9 +1355,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "x.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("x.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"x.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._x = values
 
     @property
@@ -1258,9 +1379,12 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "y.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("y.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"y.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._y = values
 
     @property
@@ -1279,7 +1403,10 @@ class Particles:
         Args:
             values ([type]): [description]
         """
-        assert np.size(values) == self.nparts, ValueError(  # noqa: S101
-            "z.setter wrong size"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("z.setter requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"z.setter wrong size {values.shape}; expected ({self.nparts},)"
+            )
         self._z = values

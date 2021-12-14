@@ -14,7 +14,7 @@ import argparse
 import h5py
 from .Settings import Settings
 from .FallingParticles import FallingParticles  # noqa
-from .LarvalParticles import LarvalParticles  # noqa
+from .LarvalParticles import LarvalBotParticles, LarvalTopParticles  # noqa
 from .Particles import Particles  # noqa
 from .RiverGrid import RiverGrid
 
@@ -172,6 +172,50 @@ def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnp
     cells_h5.close()
 
 
+def load_checkpoint(fname, nparts, tidx, start, end, comm=None):
+    """Load initial positions from a checkpoint HDF5 file.
+
+    Args:
+        fname ([type]): [description]
+        nparts ([type]): [description]
+        tidx ([type]): [description]
+        start ([type]): [description]
+        end ([type]): [description]
+        comm ([type], optional): [description]. Defaults to None.
+
+    Raises:
+        Exception: [description]
+        ValueError: [description]
+
+    Returns:
+        [type]: [description]
+    """
+    if comm is None or comm.Get_rank() == 0:
+        print("Loading initial particle positions from a checkpoint HDF5 file")
+    inputfile = pathlib.Path(fname)
+    if not inputfile.exists():
+        raise Exception(f"Cannot find load_checkpoint HDF5 file: {fname}")
+    if comm is None:
+        h5file = h5py.File(fname, "r")
+    else:
+        h5file = h5py.File(fname, "r", driver="mpio", comm=comm)
+
+    grp = h5file["coordinates"]
+    x = grp["x"][tidx, start:end]
+    y = grp["y"][tidx, start:end]
+    z = grp["z"][tidx, start:end]
+    t = grp["time"][tidx].item(0)  # returns t as a Python basic float
+
+    h5file.close()
+
+    if x.size != y.size or x.size != z.size or x.size != nparts:
+        raise ValueError(
+            "Initial location coordinates and the number of particles not self-consistent"
+        )
+
+    return x, y, z, t
+
+
 def simulate(settings, argvars, timer, comm=None):  # noqa
     """Run the fluvial particle simulation.
 
@@ -201,6 +245,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     postprocessflg = argvars["no_postprocess"]
 
     # Some Variables
+    starttime = 0.0
     endtime = settings["SimTime"]
     dt = settings["dt"]
     """
@@ -211,16 +256,13 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     beta_x = settings["beta_x"]
     beta_y = settings["beta_y"]
     beta_z = settings["beta_z"]
-    beta = [beta_x, beta_y, beta_z] """
+    beta = [beta_x, beta_y, beta_z]
+    vertbound = settings["VerticalBound"]
+    """
 
     # 2D or 3D particle tracking
     track3d = settings["Track3D"]
     print_inc_time = settings["PrintAtTick"]
-
-    # Fractional depth that bounds vertical particle positions from bed and WSE
-    alpha = 0.5
-    if track3d:
-        alpha = 0.01
 
     # The source file
     file_name_2da = settings["file_name_2da"]
@@ -236,41 +278,45 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     start = rank * npart  # slice starting index for HDF5 file
     end = start + npart  # slice ending index (non-inclusive) for HDF5 file
 
-    if master:
-        if size > 1:
-            s = "Simulating {} particles, {} on each rank".format(globalnparts, npart)
-        else:
-            s = "Simulating {} particles".format(globalnparts)
-        print(s, flush=True)
-
+    """ # Initial particle positions all at one point
     xstart, ystart, zstart = settings["StartLoc"]
     x = np.full(npart, fill_value=xstart, dtype=np.float64)
     y = np.full(npart, fill_value=ystart, dtype=np.float64)
-    z = np.full(npart, fill_value=zstart, dtype=np.float64)
+    z = np.full(npart, fill_value=zstart, dtype=np.float64) """
 
+    # Initial particle positions loaded from an HDF5 file
+    tidx = -1
+    x, y, z, starttime = load_checkpoint(
+        "tests/test/particles2.h5", npart, tidx, 0, npart, comm
+    )
+    if starttime >= endtime:
+        raise Exception(
+            f"Simulation start time must be less than end time; current values: {starttime}, {endtime}"
+        )
     rng = get_prng(timer, seed)
 
     """ # Sinusoid properties for larval drift subclass
     amplitude = settings["amplitude"]
     period = settings["period"]
-    min_elev = settings["min_elev"]
     ttime = rng.uniform(0.0, period, npart)
-    particles = LarvalParticles(
-        npart, x, y, z, rng, river, track3d, 0.2, period, min_elev, ttime
+    particles = LarvalTopParticles(
+        npart, x, y, z, rng, river, track3d, amp=amplitude, period=period, ttime=ttime
     ) """
 
     particles = Particles(npart, x, y, z, rng, river, track3d, comm=comm)
-    # particles = FallingParticles(npart, x, y, z, rng, river, track3d, radius=0.000001)
-    particles.initialize_location(0.5)  # 0.5 is midpoint of water column
+    """ radius = np.logspace(-4, -1, npart)
+    rho = 2650.0
+    particles = FallingParticles(npart, x, y, z, rng, river, track3d, rho=rho, radius=radius) """
+    particles.initial_validation()
 
     # Calc simulation and printing times
-    times = np.arange(dt, endtime + dt, dt)
+    times = np.arange(starttime + dt, endtime + dt, dt)
     n_times = times.size
     print_inc = np.max([np.int32(print_inc_time / dt), 1])  # bound below
     print_inc = np.min([print_inc, n_times])  # bound above
     print_times = times[print_inc - 1 : n_times : print_inc]
-    # Add final time to print_times, if necessary
     if print_times[-1] != times[-1]:
+        # add final time to print_times if not already
         print_times = np.append(print_times, times[-1])
     n_prints = print_times.size + 1  # plus one so we can write t=0 to file
 
@@ -287,11 +333,26 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     if comm is not None:
         comm.Barrier()
 
+    if master:
+        if size > 1:
+            s = f"Simulating {globalnparts} particles, {npart} on each rank"
+        else:
+            s = f"Simulating {globalnparts} particles"
+        print(s, flush=True)
+        print(f"Particle class: {type(particles).__name__}", flush=True)
+        if track3d:
+            print("Velocity field will be interpolated from 3D grid", flush=True)
+        else:
+            print("Velocity field will be interpolated from 2D grid", flush=True)
+        print(
+            f"Simulation start time is {starttime}, maximum end time is {endtime}, using timesteps of {dt} seconds",
+            flush=True,
+        )
+
     t0 = timer()
 
-    for i in range(n_times):  # noqa C901
-        # Move particles
-        particles.move(alpha, times[i], dt)
+    for i in range(n_times):
+        particles.move(times[i], dt)
 
         # Check that there are still active particles
         if particles.mask is not None:

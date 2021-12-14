@@ -4,19 +4,20 @@ import pathlib
 import h5py
 import numpy as np
 import vtk
+from numba import jit
 from vtk.util import numpy_support  # type:ignore
 
 
 class RiverGrid:
-    """A class of hydrodynamic data on a structured VTK grid."""
+    """A class of hydrodynamic data and tools defined on VTK structured grids."""
 
     def __init__(self, track3d, filename2d, filename3d=None):
         """Initialize instance of class RiverGrid.
 
         Args:
-            track3d ([type]): [description]
-            filename2d ([type]): [description]
-            filename3d ([type], optional): [description]. Defaults to None.
+            track3d (int): 1 if 3D model run, 0 else
+            filename2d (string): path to the input 2D VTK structured grid
+            filename3d (string, optional): path to the input 2D VTK structured grid. Required for 3D simulations
         """
         self.vtksgrid2d = vtk.vtkStructuredGrid()
         self.vtksgrid3d = None
@@ -24,6 +25,10 @@ class RiverGrid:
         self._fname3d = None
         self.read_2d_data()
         if track3d:
+            if filename3d is None:
+                raise Exception(
+                    "track3d is 1 but no filename provided for input 3D grid"
+                )
             self.track3d = 1
             self.fname3d = filename3d
             self.vtksgrid3d = vtk.vtkStructuredGrid()
@@ -37,18 +42,12 @@ class RiverGrid:
         self.nzc = self.nz - 1
         self.process_arrays()
 
-        # On structured grid, always assumes river flows in or out through the i=1, i=imax faces,
-        # not the j=1,j=jmax faces (although this could be added)
-        firstcells = np.arange(0, self.nsc * (self.nnc - 1) + 1, self.nsc)
-        lastcells = np.arange(self.nsc - 1, self.nsc * self.nnc, self.nsc)
-        self.boundarycells = np.union1d(firstcells, lastcells)
-
     def build_probe_filter(self, nparts, comm=None):
         """Build pipeline for probe filters (i.e. interpolation).
 
         Args:
-            nparts ([type]): [description]
-            comm ([type]): [description]
+            nparts (int): the number of input points to be probed
+            comm (mpi4py object): MPI communicator, for parallel runs only
         """
         # Objects for 2d grid interpolation
         self.pt2d_np = np.zeros((nparts, 3))  # ordering required by vtk
@@ -191,7 +190,6 @@ class RiverGrid:
         ibcfp.SetName("IBCfp")
         ptdata.AddArray(ibcfp)
         ptdata.RemoveArray("IBC")
-
         # Add cell-centered index array to 2D grid
         numcells = self.vtksgrid2d.GetNumberOfCells()
         cidx = vtk.vtkIntArray()
@@ -202,6 +200,13 @@ class RiverGrid:
             cidx.SetTuple(i, [i])
         self.vtksgrid2d.GetCellData().AddArray(cidx)
 
+        # Set boundarycells array, particles that enter these cells will be deactivated
+        # On structured grid, always assumes river flows in or out through the i=1, i=imax faces, and
+        # not the j=1,j=jmax faces (although this could be easily added)
+        firstcells = np.arange(0, self.nsc * (self.nnc - 1) + 1, self.nsc)
+        lastcells = np.arange(self.nsc - 1, self.nsc * self.nnc, self.nsc)
+        self.boundarycells = np.union1d(firstcells, lastcells)
+
         if self.track3d:
             # Remove unneeded point data arrays from 3D grid
             ptdata = self.vtksgrid3d.GetPointData()
@@ -210,6 +215,8 @@ class RiverGrid:
             for x in names:
                 if x not in reqd:
                     ptdata.RemoveArray(x)
+            # Remove velocity vector data from 2D grid, won't be using it
+            self.vtksgrid2d.GetPointData().RemoveArray("Velocity")
             # Add cell-centered index array to 3D grid
             numcells = self.vtksgrid3d.GetNumberOfCells()
             cidx3 = vtk.vtkIntArray()
@@ -252,10 +259,8 @@ class RiverGrid:
         """Reconstruct VTK probe filter pipeline objects.
 
         Args:
-            nparts ([type]): [description]
+            nparts (int): the number of input points to be probed
         """
-        # => ASSUMES particles are only ever deactivated, never re-activated
-        # => with better tracking, reactivation could be possible; but why do it?
         self.pt2d_np = np.zeros((nparts, 3))
         self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
         self.pt2d.Reset()
@@ -297,12 +302,12 @@ class RiverGrid:
         return ("Velocity",)
 
     def update_2d_pipeline(self, px, py, idx=None):
-        """Update the 2D VTK probe filter pipeline and cell indexes.
+        """Update the 2D VTK probe filter pipeline.
 
         Args:
-            px ([type]): [description]
-            py ([type]): [description]
-            idx ([type], optional): [description]. Defaults to None.
+            px (float): x coordinates of new points, NumPy array of length equal to probe input size
+            py (float): y coordinates of new points, NumPy array of length equal to probe input size
+            idx (int, optional): NumPy array of active indices in px & py. Defaults to None.
         """
         if idx is None:
             self.pt2d_np[:, 0] = px
@@ -314,13 +319,13 @@ class RiverGrid:
         self.probe2d.Update()
 
     def update_3d_pipeline(self, px, py, pz, idx=None):
-        """Update the 3D VTK probe filter pipeline and cell indexes.
+        """Update the 3D VTK probe filter pipeline.
 
         Args:
-            px ([type]): [description]
-            py ([type]): [description]
-            pz ([type]): [description]
-            idx ([type], optional): [description]. Defaults to None.
+            px (float): x coordinates of new points, NumPy array of length equal to probe input size
+            py (float): y coordinates of new points, NumPy array of length equal to probe input size
+            pz (float): z coordinates of new points, NumPy array of length equal to probe input size
+            idx (int, optional): NumPy array of active indices in px, py & pz. Defaults to None.
         """
         if idx is None:
             self.pt3d_np[:, 0] = px
@@ -334,7 +339,7 @@ class RiverGrid:
         self.probe3d.Update()
 
     def update_velocity_fields(self, tidx):
-        """Updates time-dependent velocity vtk arrays.
+        """Updates time-dependent field arrays on VTK structured grids.
 
         Args:
             tidx ([type]): [description]
@@ -539,12 +544,17 @@ class RiverGrid:
         Args:
             values ([type]): [description]
         """
-        assert isinstance(values, np.ndarray), TypeError(  # noqa:S101
-            "boundarycells.setter: wrong type, must be NumPy ndarray, ndims=1"
-        )
-        assert values.ndim == 1, ValueError(  # noqa: S101
-            "boundarycells.setter: ndims must equal 1 for use in np.sortedsearch()"
-        )
+        if not isinstance(values, np.ndarray):
+            raise TypeError("boundarycells.setter: wrong type, must be NumPy ndarray")
+        if values.ndim != 1:
+            raise ValueError(
+                "boundarycells.setter: ndims must equal 1 for use in np.sortedsearch()"
+            )
+        if not is_sorted(values):
+            print(
+                "RiverGrid: boundarycells.setter array must be sorted to use binary search; sorting in-place"
+            )
+            values.sort()
         self._boundarycells = values
 
     @property
@@ -609,7 +619,7 @@ class RiverGrid:
         """
         # must be basic Python integer type
         if not isinstance(values, int):
-            raise TypeError("nn.setter wrong type")
+            raise TypeError("nn.setter must be int")
         # for file writing reasons, must be >= 1
         if values < 1:
             values = 1
@@ -633,7 +643,7 @@ class RiverGrid:
         """
         # must be basic Python integer type
         if not isinstance(values, int):
-            raise TypeError("nnc.setter wrong type")
+            raise TypeError("nnc.setter must be int")
         # for file writing reasons, must be >= 1
         if values < 1:
             values = 1
@@ -657,7 +667,7 @@ class RiverGrid:
         """
         # must be basic Python integer type
         if not isinstance(values, int):
-            raise TypeError("ns.setter wrong type")
+            raise TypeError("ns.setter must be int")
         # for file writing reasons, must be >= 1
         if values < 1:
             values = 1
@@ -681,7 +691,7 @@ class RiverGrid:
         """
         # must be basic Python integer type
         if not isinstance(values, int):
-            raise TypeError("nsc.setter wrong type")
+            raise TypeError("nsc.setter must be int")
         # for file writing reasons, must be >= 1
         if values < 1:
             values = 1
@@ -705,7 +715,7 @@ class RiverGrid:
         """
         # must be basic Python integer type
         if not isinstance(values, int):
-            raise TypeError("nz.setter wrong type")
+            raise TypeError("nz.setter must be int")
         # for file writing reasons, must be >= 1
         if values < 1:
             values = 1
@@ -729,7 +739,7 @@ class RiverGrid:
         """
         # must be basic Python integer type
         if not isinstance(values, int):
-            raise TypeError("nzc.setter wrong type")
+            raise TypeError("nzc.setter must be int")
         # for file writing reasons, must be >= 1
         if values < 1:
             values = 1
@@ -751,7 +761,26 @@ class RiverGrid:
         Args:
             values ([type]): [description]
         """
-        # must be basic Python integer type
         if not isinstance(values, int):
-            raise TypeError("track3d.setter wrong type")
+            raise TypeError("track3d.setter must be int")
+        if values < 0 or values > 1:
+            raise ValueError("track3d.setter must be 0 or 1")
         self._track3d = values
+
+
+@jit(nopython=True)
+def is_sorted(arr):
+    """Using Numba, an efficient check that a 1D NumPy array is sorted in increasing order.
+
+    https://stackoverflow.com/questions/47004506/check-if-a-numpy-array-is-sorted
+
+    Args:
+        arr ([type]): [description]
+
+    Returns:
+        [type]: [description]
+    """
+    for i in range(arr.size - 1):
+        if arr[i + 1] < arr[i]:
+            return False
+    return True

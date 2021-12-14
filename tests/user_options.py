@@ -19,11 +19,6 @@ NumPart = 10000
 # Print every PrintAtTick seconds
 PrintAtTick = 800.0
 
-# yo-yo paramters
-amplitude = 1.0
-period = 60.0
-min_elev = 0.01
-
 # Start Locations
 StartLoc = (490.0, -4965.0, 530.0)
 # StartLoc = (6.14, 9.09, 10.3)
