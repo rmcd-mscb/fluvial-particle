@@ -278,17 +278,17 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     start = rank * npart  # slice starting index for HDF5 file
     end = start + npart  # slice ending index (non-inclusive) for HDF5 file
 
-    """ # Initial particle positions all at one point
+    # Initial particle positions all at one point
     xstart, ystart, zstart = settings["StartLoc"]
     x = np.full(npart, fill_value=xstart, dtype=np.float64)
     y = np.full(npart, fill_value=ystart, dtype=np.float64)
-    z = np.full(npart, fill_value=zstart, dtype=np.float64) """
+    z = np.full(npart, fill_value=zstart, dtype=np.float64)
 
     # Initial particle positions loaded from an HDF5 file
-    tidx = -1
+    """ tidx = -1
     x, y, z, starttime = load_checkpoint(
         "tests/test/particles2.h5", npart, tidx, 0, npart, comm
-    )
+    ) """
     if starttime >= endtime:
         raise Exception(
             f"Simulation start time must be less than end time; current values: {starttime}, {endtime}"
@@ -307,7 +307,8 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     """ radius = np.logspace(-4, -1, npart)
     rho = 2650.0
     particles = FallingParticles(npart, x, y, z, rng, river, track3d, rho=rho, radius=radius) """
-    particles.initial_validation()
+
+    particles.initial_validation(0.5)
 
     # Calc simulation and printing times
     times = np.arange(starttime + dt, endtime + dt, dt)
