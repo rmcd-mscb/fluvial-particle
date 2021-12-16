@@ -265,11 +265,11 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     print_inc_time = settings["PrintAtTick"]
 
     # The source file
-    file_name_2da = settings["file_name_2da"]
-    file_name_3da = settings["file_name_3da"]
+    file_name_2d = settings["file_name_2d"]
+    file_name_3d = settings["file_name_3d"]
 
     # Initialize RiverGrid object
-    river = RiverGrid(track3d, file_name_2da, file_name_3da)
+    river = RiverGrid(track3d, file_name_2d, file_name_3d)
 
     # Initialize particles with initial location and attach RiverGrid
     npart = settings["NumPart"]

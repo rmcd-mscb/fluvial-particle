@@ -109,13 +109,25 @@ class Particles:
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
         grpc.create_dataset(
-            "x", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "x",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=(1, self.nparts),
         )
         grpc.create_dataset(
-            "y", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "y",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=(1, self.nparts),
         )
         grpc.create_dataset(
-            "z", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "z",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=(1, self.nparts),
         )
         grpc.create_dataset("time", (nprints, 1), dtype=np.float64, fillvalue=np.nan)
         grpc["x"].attrs["Units"] = "meters"
@@ -126,25 +138,53 @@ class Particles:
         grpp = parts_h5.create_group("properties")
         grpp.attrs["Description"] = "Properties of particles at printing time steps"
         grpp.create_dataset(
-            "bedelev", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "bedelev",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=(1, self.nparts),
         )
         grpp.create_dataset(
-            "cellidx2d", (nprints, globalnparts), dtype=np.int64, fillvalue=-1
+            "cellidx2d",
+            (nprints, globalnparts),
+            dtype=np.int64,
+            fillvalue=-1,
+            chunks=(1, self.nparts),
         )
         grpp.create_dataset(
-            "cellidx3d", (nprints, globalnparts), dtype=np.int64, fillvalue=-1
+            "cellidx3d",
+            (nprints, globalnparts),
+            dtype=np.int64,
+            fillvalue=-1,
+            chunks=(1, self.nparts),
         )
         grpp.create_dataset(
-            "depth", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "depth",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=(1, self.nparts),
         )
         grpp.create_dataset(
-            "htabvbed", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "htabvbed",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=(1, self.nparts),
         )
         grpp.create_dataset(
-            "velvec", (nprints, globalnparts, 3), dtype=np.float64, fillvalue=np.nan
+            "velvec",
+            (nprints, globalnparts, 3),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=(1, self.nparts, 3),
         )
         grpp.create_dataset(
-            "wse", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "wse",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=(1, self.nparts),
         )
         grpp["bedelev"].attrs[
             "Description"

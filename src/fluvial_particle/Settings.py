@@ -25,8 +25,8 @@ class Settings(dict):
             "beta_z",
             "Track3D",
             "PrintAtTick",
-            "file_name_2da",
-            "file_name_3da",
+            "file_name_2d",
+            "file_name_3d",
             "NumPart",
             "StartLoc",
         )
