@@ -108,27 +108,27 @@ class Particles:
         ] = f"Output of the fluvial particle model simulated with the {type(self).__name__} class."
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
-        chnksz1 = 125
+        # chnksz1 = 125
         grpc.create_dataset(
             "x",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpc.create_dataset(
             "y",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpc.create_dataset(
             "z",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpc.create_dataset("time", (nprints, 1), dtype=np.float64, fillvalue=np.nan)
         grpc["x"].attrs["Units"] = "meters"
@@ -143,49 +143,49 @@ class Particles:
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpp.create_dataset(
             "cellidx2d",
             (nprints, globalnparts),
             dtype=np.int64,
             fillvalue=-1,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpp.create_dataset(
             "cellidx3d",
             (nprints, globalnparts),
             dtype=np.int64,
             fillvalue=-1,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpp.create_dataset(
             "depth",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpp.create_dataset(
             "htabvbed",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpp.create_dataset(
             "velvec",
             (nprints, globalnparts, 3),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts, 3),
+            chunks=True,
         )
         grpp.create_dataset(
             "wse",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=True,
         )
         grpp["bedelev"].attrs[
             "Description"
