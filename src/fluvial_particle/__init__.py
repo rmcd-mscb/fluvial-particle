@@ -303,10 +303,12 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         npart, x, y, z, rng, river, track3d, amp=amplitude, period=period, ttime=ttime
     ) """
 
-    particles = Particles(npart, x, y, z, rng, river, track3d, comm=comm)
-    """ radius = np.logspace(-4, -1, npart)
+    """ particles = Particles(npart, x, y, z, rng, river, track3d, comm=comm)"""
+    radius = np.logspace(-10, -1, npart)
     rho = 2650.0
-    particles = FallingParticles(npart, x, y, z, rng, river, track3d, rho=rho, radius=radius) """
+    particles = FallingParticles(
+        npart, x, y, z, rng, river, track3d, rho=rho, radius=radius
+    )
 
     particles.initial_validation(0.5)
 
