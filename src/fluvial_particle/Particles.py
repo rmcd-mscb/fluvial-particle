@@ -108,7 +108,9 @@ class Particles:
         ] = f"Output of the fluvial particle model simulated with the {type(self).__name__} class."
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
-        chnksz1 = 125
+        chnksz1 = np.min([60, nprints])
+        if comm is None or comm.Get_rank() == 0:
+            print(fname + f" HDF5 file chunk size = ({chnksz1}, {self.nparts})")
         grpc.create_dataset(
             "x",
             (nprints, globalnparts),
