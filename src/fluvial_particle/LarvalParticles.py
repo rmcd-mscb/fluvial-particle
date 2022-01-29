@@ -52,10 +52,11 @@ class LarvalParticles(Particles):
         )
         self.amp = amp
         self.period = period
-        self.ttime = ttime
         # Build ndarray ttime if necessary
         if ttime is None:
             self.ttime = self.rng.uniform(0.0, self.period, self.nparts)
+        else:
+            self.ttime = ttime
 
     def create_hdf5(self, nprints, globalnparts, comm=None, fname="particles.h5"):
         """Create an HDF5 file to write incremental particles results.

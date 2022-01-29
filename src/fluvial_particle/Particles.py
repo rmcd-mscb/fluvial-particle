@@ -108,7 +108,7 @@ class Particles:
         ] = f"Output of the fluvial particle model simulated with the {type(self).__name__} class."
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
-        chnksz1 = np.min([60, nprints])
+        chnksz1 = np.min([125, nprints])
         if comm is None or comm.Get_rank() == 0:
             print(fname + f" HDF5 file chunk size = ({chnksz1}, {self.nparts})")
         grpc.create_dataset(
@@ -428,14 +428,15 @@ class Particles:
             wet (boolean NumPy array): True indices mean wet, False means dry
         """
         # Pre-fill with True so that deactivated particles are ignored
-        wet = np.full((self.nparts,), dtype=bool, fill_value=True)
-        ibcvtk = self.mesh.probe2d.GetOutput().GetPointData().GetArray("IBCfp")
+        # check cell centered values instead
+        ibcvtk = self.mesh.probe2d.GetOutput().GetPointData().GetArray("CellIBC")
         ibc = numpy_support.vtk_to_numpy(ibcvtk)
         if self.mask is None:
-            wet = ibc >= 1.0 - 1e-07
+            wet = np.asarray(ibc, dtype=bool)
         else:
+            wet = np.full((self.nparts,), dtype=bool, fill_value=True)
             idx = self.indices[self.mask]
-            wet[idx] = ibc >= 1.0 - 1e-07
+            wet[idx] = ibc
 
         return wet
 
@@ -492,7 +493,7 @@ class Particles:
         """
         vx = self.velx
         vy = self.vely
-        velmag = (vx ** 2 + vy ** 2) ** 0.5
+        velmag = (vx**2 + vy**2) ** 0.5
         xranwalk = self.xrnum * (2.0 * self.diffx * dt) ** 0.5
         yranwalk = self.yrnum * (2.0 * self.diffy * dt) ** 0.5
         # Move and update positions in-place on each array

@@ -2,6 +2,8 @@ output/
 data/
 tests/test/
 tests/120/
+tests/960/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

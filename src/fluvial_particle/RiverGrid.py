@@ -55,10 +55,7 @@ class RiverGrid:
         self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
         self.pt2d = vtk.vtkPoints()
         self.ptset2d = vtk.vtkPointSet()  # vtkPointSet() REQUIRES vtk>=9.1
-        if comm is None:
-            self.probe2d = vtk.vtkProbeFilter()
-        else:
-            self.probe2d = vtk.vtkPProbeFilter()  # parallel version
+        self.probe2d = vtk.vtkProbeFilter()
         self.strategy2d = vtk.vtkCellLocatorStrategy()  # requires vtk>=9.0
         self.pt2d.SetData(self.pt2d_vtk)
         self.ptset2d.SetPoints(self.pt2d)
@@ -185,21 +182,32 @@ class RiverGrid:
         for x in names:
             if x not in reqd:
                 ptdata.RemoveArray(x)
-        # Add floating point IBC array, delete integer IBC array
-        ibcfp = vtk.vtkFloatArray()
-        ibcfp.ShallowCopy(ptdata.GetArray("IBC"))
-        ibcfp.SetName("IBCfp")
-        ptdata.AddArray(ibcfp)
-        ptdata.RemoveArray("IBC")
-        # Add cell-centered index array to 2D grid
+
+        # Add two cell-centered int arrays to 2D grid; index array and IBC array for checking particle wetness
         numcells = self.vtksgrid2d.GetNumberOfCells()
         cidx = vtk.vtkIntArray()
         cidx.SetNumberOfComponents(1)
         cidx.SetNumberOfTuples(numcells)
         cidx.SetName("CellIndex")
-        for i in range(numcells):
-            cidx.SetTuple(i, [i])
+        cibc = vtk.vtkIntArray()
+        cibc.SetNumberOfComponents(1)
+        cibc.SetNumberOfTuples(numcells)
+        cibc.Fill(1)  # Set all cells to wet by default
+        cibc.SetName("CellIBC")
+        ibc = ptdata.GetArray("IBC")
+        for cellidx in range(numcells):
+            cidx.SetValue(cellidx, cellidx)  # Set cell index
+            # Check wetness cell-by-cell
+            cell = self.vtksgrid2d.GetCell(cellidx)
+            cellpts = cell.GetPointIds()
+            for ptidx in range(cellpts.GetNumberOfIds()):
+                # If any pts bounding cell have IBC < 1, then set to dry
+                if ibc.GetTuple(cellpts.GetId(ptidx))[0] < 1:
+                    cibc.SetValue(cellidx, 0)
+                    break
+        self.vtksgrid2d.GetCellData().AddArray(cibc)
         self.vtksgrid2d.GetCellData().AddArray(cidx)
+        ptdata.RemoveArray("IBC")  # no longer needed
 
         # Set boundarycells array, particles that enter these cells will be deactivated
         # On structured grid, always assumes river flows in or out through the i=1, i=imax faces, and
