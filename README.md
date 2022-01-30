@@ -51,12 +51,18 @@ per Cliff Hills setup description: https://code.usgs.gov/wma/nhgf/pygeoapi-plugi
 
 To set up your development environment do the following.
 
-``` {.sourceCode .console}
-$ conda env create -f environment.yml
-$ conda develop -n {{cookiecutter.project_name}} src
-$ conda activate {{cookiecutter.project_name}}
-$ pip install -r requirements.dev
-```
+* fork the reposistory
+* git clone <your repository fork>
+    * for example::
+        git clone git@code.usgs.gov:rmcd/fluvparticle.git fluvial-partile-fork # to remind yourself your working on a fork :)
+
+
+Setup Development Environment::
+    $ conda env create -f environment.yml
+    $ conda develop -n {{cookiecutter.project_name}} src
+    $ conda activate {{cookiecutter.project_name}}
+    $ pip install -r requirements.dev
+
 It is important to get [preccommit](https://pre-commit.com/) enabled on
 the project, to ensure that certain standards are always met on a git
 commit. With several of these, it might fail if files are changed, but
