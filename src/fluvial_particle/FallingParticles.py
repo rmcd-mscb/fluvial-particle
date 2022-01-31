@@ -69,24 +69,41 @@ class FallingParticles(Particles):
             parts_h5: new open HDF5 file object
         """
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
+        chk1darrays = self.calc_hdf5_chunksizes(nprints)[0]
         grp = parts_h5["properties"]
         grp.create_dataset(
-            "c1", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "c1",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=chk1darrays,
         )
         grp["c1"].attrs["Description"] = "Viscous drag coefficient"
         grp["c1"].attrs["Units"] = "None"
         grp.create_dataset(
-            "c2", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "c2",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=chk1darrays,
         )
         grp["c2"].attrs["Description"] = "Turbulent wake drag coefficient"
         grp["c2"].attrs["Units"] = "None"
         grp.create_dataset(
-            "radius", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "radius",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=chk1darrays,
         )
         grp["radius"].attrs["Description"] = "Particle radii"
         grp["radius"].attrs["Units"] = "meters"
         grp.create_dataset(
-            "rho", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "rho",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=chk1darrays,
         )
         grp["rho"].attrs["Description"] = "Particle density"
         grp["rho"].attrs["Units"] = "kilograms per cubic meter"

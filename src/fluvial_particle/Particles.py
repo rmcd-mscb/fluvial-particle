@@ -86,6 +86,54 @@ class Particles:
         self.diffy = self.lev + self.beta[1] * ustarh
         self.diffz = self.beta[2] * ustarh
 
+    def calc_hdf5_chunksizes(self, nprints):
+        """Calculate chunksizes for datasets in particles HDF5 output.
+
+        Designed to create chunks on order of ~1 MB for 8 byte numbers (1e6)
+        HDF5 org recommends chunks of size between 10 KB - 1 MB
+
+        Args:
+            nprints (int): total number of printing time steps
+
+        Returns:
+            chk1darrays (tuple): chunk size of datasets for 1D arrays
+            chkvelarray (tuple): chunk size of datasets for 2D velocity arrays
+        """
+        # Do the 1D particles arrays first, total write dimensions are (nprints, nparts)
+        # 8 bytes per number means 1.25e5 numbers = 1 MB = 1e6 bytes
+        # 6.25e4 is our threshold for doing chksz1 > 1
+        if self.nparts <= 6.25e4:
+            # First handle the case where the number of particles is less than or equal to half of 1 MB, i.e. 1.25e5 64 bit floats
+            chksz1 = np.int64(1.25e5 / self.nparts)
+            chksz1 = np.min([chksz1, nprints])
+            chksz2 = self.nparts
+        else:
+            # If there are >= 6.25e4 particles, chunk sizes are (1, nparts) or a subset
+            chksz1 = 1
+            if self.nparts >= 2.5e5:
+                # decrease second dim if self.nparts is more than 2 * 1 MB
+                chksz2 = np.int64(self.nparts / 1.25e5)
+            else:
+                chksz2 = self.nparts
+        chk1darrays = (chksz1, chksz2)
+
+        # Now do the 2D velocity array, dimensions are (nprints, nparts, 3)
+        if self.nparts <= 6.25e4 / 3:
+            chksz1 = np.int64(1.25e5 / self.nparts / 3)
+            chksz1 = np.min([chksz1, nprints])
+            chksz2 = self.nparts
+        else:
+            chksz1 = 1
+            chksz2 = self.nparts
+            if self.nparts >= 2.5e5 / 3:
+                chksz2 = np.int64(self.nparts / 1.25e5 / 3)
+            else:
+                chksz2 = self.nparts
+        chksz3 = 3
+        chkvelarray = (chksz1, chksz2, chksz3)
+
+        return chk1darrays, chkvelarray
+
     def create_hdf5(self, nprints, globalnparts, comm=None, fname="particles.h5"):
         """Create an HDF5 file to write incremental particles results.
 
@@ -105,32 +153,34 @@ class Particles:
 
         parts_h5.attrs[
             "Description"
-        ] = f"Output of the fluvial particle model simulated with the {type(self).__name__} class."
+        ] = f"Output of the fluvial particle tracking model simulated with the {type(self).__name__} class."
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
-        chnksz1 = np.min([125, nprints])
-        if comm is None or comm.Get_rank() == 0:
-            print(fname + f" HDF5 file chunk size = ({chnksz1}, {self.nparts})")
+
+        # Get chunk sizes
+        chk1darrays, chkvelarray = self.calc_hdf5_chunksizes(nprints)
+        print("Particles HDF5 chunk sizes:", chk1darrays, ", ", chkvelarray)
+
         grpc.create_dataset(
             "x",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpc.create_dataset(
             "y",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpc.create_dataset(
             "z",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpc.create_dataset("time", (nprints, 1), dtype=np.float64, fillvalue=np.nan)
         grpc["x"].attrs["Units"] = "meters"
@@ -145,49 +195,49 @@ class Particles:
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpp.create_dataset(
             "cellidx2d",
             (nprints, globalnparts),
             dtype=np.int64,
             fillvalue=-1,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpp.create_dataset(
             "cellidx3d",
             (nprints, globalnparts),
             dtype=np.int64,
             fillvalue=-1,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpp.create_dataset(
             "depth",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpp.create_dataset(
             "htabvbed",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpp.create_dataset(
             "velvec",
             (nprints, globalnparts, 3),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts, 3),
+            chunks=chkvelarray,
         )
         grpp.create_dataset(
             "wse",
             (nprints, globalnparts),
             dtype=np.float64,
             fillvalue=np.nan,
-            chunks=(chnksz1, self.nparts),
+            chunks=chk1darrays,
         )
         grpp["bedelev"].attrs[
             "Description"

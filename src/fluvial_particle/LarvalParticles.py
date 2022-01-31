@@ -73,21 +73,34 @@ class LarvalParticles(Particles):
             parts_h5: new open HDF5 file object
         """
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
+        chk1darrays = self.calc_hdf5_chunksizes(nprints)[0]
         grp = parts_h5["properties"]
         grp.create_dataset(
-            "amp", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "amp",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=chk1darrays,
         )
         grp["amp"].attrs[
             "Description"
         ] = "amplitude of sinusoidal swimming, as fraction of depth"
         grp["amp"].attrs["Units"] = "None"
         grp.create_dataset(
-            "period", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "period",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=chk1darrays,
         )
         grp["period"].attrs["Description"] = "period of swimming, to compute ttime"
         grp["period"].attrs["Units"] = "seconds"
         grp.create_dataset(
-            "ttime", (nprints, globalnparts), dtype=np.float64, fillvalue=np.nan
+            "ttime",
+            (nprints, globalnparts),
+            dtype=np.float64,
+            fillvalue=np.nan,
+            chunks=chk1darrays,
         )
         grp["ttime"].attrs[
             "Description"
