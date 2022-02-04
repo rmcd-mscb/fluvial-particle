@@ -244,39 +244,30 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     seed = argvars["seed"]
     postprocessflg = argvars["no_postprocess"]
 
-    # Some Variables
+    # Time Variables
     starttime = 0.0
     endtime = settings["SimTime"]
     dt = settings["dt"]
-    """
-    # min_depth, lev, beta are now optional
-    min_depth = settings["min_depth"]
-    lev = settings["LEV"]  # lateral eddy viscosity
-
-    beta_x = settings["beta_x"]
-    beta_y = settings["beta_y"]
-    beta_z = settings["beta_z"]
-    beta = [beta_x, beta_y, beta_z]
-    vertbound = settings["VerticalBound"]
-    """
 
     # 2D or 3D particle tracking
     track3d = settings["Track3D"]
     print_inc_time = settings["PrintAtTick"]
 
-    # The source file
+    # The grid source files
     file_name_2d = settings["file_name_2d"]
     file_name_3d = settings["file_name_3d"]
 
-    # Initialize RiverGrid object
-    river = RiverGrid(track3d, file_name_2d, file_name_3d)
-
-    # Initialize particles with initial location and attach RiverGrid
+    # Number of particles to simulate
     npart = settings["NumPart"]
-
     globalnparts = npart * size  # total number of particles across processors
     start = rank * npart  # slice starting index for HDF5 file
     end = start + npart  # slice ending index (non-inclusive) for HDF5 file
+
+    # Type of Particles class or subclass to simulate
+    particles = settings["ParticleType"]
+
+    # Initialize RiverGrid object
+    river = RiverGrid(track3d, file_name_2d, file_name_3d)
 
     # Initial particle positions all at one point
     xstart, ystart, zstart = settings["StartLoc"]
@@ -293,31 +284,12 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         raise Exception(
             f"Simulation start time must be less than end time; current values: {starttime}, {endtime}"
         )
+
+    # Get NumPy random state
     rng = get_prng(timer, seed)
 
-    particles = Particles
-    if settings["ParticleType"] == "LarvalTopParticles":
-        particles = LarvalTopParticles
-    elif settings["ParticleType"] == "LarvalBotParticles":
-        particles = LarvalBotParticles
-    elif settings["ParticleType"] == "FallingParticles":
-        particles = FallingParticles
-
-    particles = particles(npart, x, y, z, rng, river, track3d)  # , **settings)
-    """ # Sinusoid properties for larval drift subclass
-    amplitude = settings["amplitude"]
-    period = settings["period"]
-    ttime = rng.uniform(0.0, period, npart)
-    particles = LarvalTopParticles(
-        npart, x, y, z, rng, river, track3d, amp=amplitude, period=period, ttime=ttime
-    ) """
-
-    """ particles = Particles(npart, x, y, z, rng, river, track3d, comm=comm)"""
-    """ radius = np.logspace(-2.6990, -1, npart)
-    rho = 2650.0
-    particles = FallingParticles(
-        npart, x, y, z, rng, river, track3d, rho=rho, radius=radius
-    ) """
+    # Initialize class of particles instance
+    particles = particles(npart, x, y, z, rng, river, **settings)
 
     particles.initial_validation(0.5)
 

@@ -5,30 +5,10 @@ from .Particles import Particles
 
 
 class LarvalParticles(Particles):
-    """A larval fish subclass of Particles.
+    """A larval fish subclass of Particles, a helper superclass for bottom- or top-swimmers."""
 
-    A superclass for bottom-swimming larvae (LarvalBotParticles) & top-swimming larvae (LarvalTopParticles).
-    """
-
-    def __init__(
-        self,
-        nparts,
-        x,
-        y,
-        z,
-        rng,
-        mesh,
-        track3d=1,
-        lev=0.25,
-        beta=(0.067, 0.067, 0.067),
-        min_depth=0.02,
-        vertbound=0.01,
-        comm=None,
-        amp=0.2,
-        period=60.0,
-        ttime=None,
-    ):
-        """Initialize instance of class LarvalTopParticles.
+    def __init__(self, nparts, x, y, z, rng, mesh, **kwargs):
+        """Initialize instance of class LarvalParticles.
 
         Args:
             nparts (int): number of particles in this instance
@@ -37,26 +17,18 @@ class LarvalParticles(Particles):
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            track3d (int): 1 if 3D model run, 0 if 2D model run, optional
-            lev (float): lateral eddy viscosity, scalar, optional
-            beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
-            min_depth (float): minimum allowed depth that particles may enter, scalar, optional
-            vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar, optional
-            comm (mpi4py object): MPI communicator used in parallel execution, optional
+            **kwargs (dict): additional keyword arguments  # noqa
+
+        Optional keyword arguments:
             amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts, optional
             period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts, optional
             ttime (float): phase of swimmers, numpy array of length nparts, optional
         """
-        super().__init__(
-            nparts, x, y, z, rng, mesh, track3d, lev, beta, min_depth, vertbound, comm
-        )
-        self.amp = amp
-        self.period = period
-        # Build ndarray ttime if necessary
-        if ttime is None:
-            self.ttime = self.rng.uniform(0.0, self.period, self.nparts)
-        else:
-            self.ttime = ttime
+        super().__init__(nparts, x, y, z, rng, mesh, **kwargs)
+        self.amp = kwargs.get("amp", 0.2)
+        self.period = kwargs.get("period", 60.0)
+        # Build ndarray ttime, uniformly distributed phase in [0, period]
+        self.ttime = self.rng.uniform(0.0, self.period, self.nparts)
 
     def create_hdf5(self, nprints, globalnparts, comm=None, fname="particles.h5"):
         """Create an HDF5 file to write incremental particles results.
@@ -75,6 +47,7 @@ class LarvalParticles(Particles):
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
         chk1darrays = self.calc_hdf5_chunksizes(nprints)[0]
         grp = parts_h5["properties"]
+        # these only need to be written once
         grp.create_dataset(
             "amp",
             (nprints, globalnparts),
@@ -108,13 +81,13 @@ class LarvalParticles(Particles):
         grp["ttime"].attrs["Units"] = "None"
         return parts_h5
 
-    def deactivate_particle(self, idx):
+    def deactivate_particles(self, idx):
         """Turn off particles that have left the river domain.
 
         Args:
             idx (int): index of particle to turn off
         """
-        super().deactivate_particle(idx)
+        super().deactivate_particles(idx)
         if isinstance(self.amp, np.ndarray):
             self._amp[idx] = np.nan
         if isinstance(self.period, np.ndarray):
@@ -329,19 +302,16 @@ class LarvalParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, int):
+        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
             values = np.float64(values)
-        elif isinstance(values, float):
-            pass
-        elif (
-            isinstance(values, np.ndarray)
-            and values.dtype.kind == "f"
-            and values.size == self.nparts
-        ):
-            pass
+        elif isinstance(values, np.ndarray) and values.size == self.nparts:
+            if values.dtype == np.float64:
+                pass
+            else:
+                values = values.astype(np.float64)
         else:
-            raise TypeError(
-                "amp.setter wrong type, must be either float scalar or NumPy float array"
+            raise Exception(
+                "amp must be either scalar or NumPy array with length = number of particles"
             )
         self._amp = values
 
@@ -361,21 +331,18 @@ class LarvalParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        self._period = values
-        if isinstance(values, int):
+        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
             values = np.float64(values)
-        elif isinstance(values, float):
-            pass
-        elif (
-            isinstance(values, np.ndarray)
-            and values.dtype.kind == "f"
-            and values.size == self.nparts
-        ):
-            pass
+        elif isinstance(values, np.ndarray) and values.size == self.nparts:
+            if values.dtype == np.float64:
+                pass
+            else:
+                values = values.astype(np.float64)
         else:
-            raise TypeError(
-                "period.setter wrong type, must be either float scalar or NumPy float array"
+            raise Exception(
+                "period must be either scalar or NumPy array with length = number of particles"
             )
+        self._period = values
 
     @property
     def ttime(self):
@@ -393,15 +360,14 @@ class LarvalParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if (
-            isinstance(values, np.ndarray)
-            and values.dtype.kind == "f"
-            and values.size == self.nparts
-        ):
-            pass
+        if isinstance(values, np.ndarray) and values.size == self.nparts:
+            if values.dtype == np.float64:
+                pass
+            else:
+                values = values.astype(np.float64)
         else:
             raise TypeError(
-                "ttime.setter wrong type, must be NumPy float array of length nparts"
+                "ttime must be NumPy array with length = number of particles"
             )
         self._ttime = values
 
@@ -420,7 +386,7 @@ class LarvalBotParticles(LarvalParticles):
         """
         amplitude = self.depth * self.amp
         time = self.time + dt
-        pz = (amplitude / 2.0) * np.sin(2.0 * np.pi * (time + self.ttime) / self.amp)
+        pz = (amplitude / 2.0) * np.sin(2.0 * np.pi * (time + self.ttime) / self.period)
         pz += self.bedelev + (amplitude / 2.0)
         self.validate_z(pz)
         return pz
@@ -440,7 +406,7 @@ class LarvalTopParticles(LarvalParticles):
         """
         amplitude = self.depth * self.amp
         time = self.time + dt
-        pz = (amplitude / 2.0) * np.sin(2.0 * np.pi * (time + self.ttime) / self.amp)
+        pz = (amplitude / 2.0) * np.sin(2.0 * np.pi * (time + self.ttime) / self.period)
         pz += self.wse - (amplitude / 2.0)
         self.validate_z(pz)
         return pz

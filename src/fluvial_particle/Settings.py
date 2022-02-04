@@ -1,4 +1,16 @@
 """Settings file, subclass of dictionary."""
+from .FallingParticles import FallingParticles
+from .LarvalParticles import LarvalBotParticles
+from .LarvalParticles import LarvalTopParticles
+from .Particles import Particles
+
+# New Particles subclasses must be added to global_dict before they can be used
+global_dict = {
+    "Particles": Particles,
+    "FallingParticles": FallingParticles,
+    "LarvalTopParticles": LarvalTopParticles,
+    "LarvalBotParticles": LarvalBotParticles,
+}
 
 
 class Settings(dict):
@@ -19,10 +31,6 @@ class Settings(dict):
         return (
             "SimTime",
             "dt",
-            "min_depth",
-            "beta_x",
-            "beta_y",
-            "beta_z",
             "Track3D",
             "PrintAtTick",
             "file_name_2d",
@@ -38,6 +46,6 @@ class Settings(dict):
         # Load user parameters
         with open(filename, "r") as f:
             f = "\n".join(f.readlines())
-            exec(f, {}, options)  # noqa
+            exec(f, global_dict, options)  # noqa
 
         return cls(**options)

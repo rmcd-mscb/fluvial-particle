@@ -11,21 +11,7 @@ class Particles:
     A superclass for particles with active drift.
     """
 
-    def __init__(
-        self,
-        nparts,
-        x,
-        y,
-        z,
-        rng,
-        mesh,
-        track3d=1,
-        lev=0.25,
-        beta=(0.067, 0.067, 0.067),
-        min_depth=0.02,
-        vertbound=0.01,
-        comm=None,
-    ):
+    def __init__(self, nparts, x, y, z, rng, mesh, **kwargs):
         """Initialize instance of class Particles.
 
         Args:
@@ -35,6 +21,9 @@ class Particles:
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
+            **kwargs (dict): additional keyword arguments  # noqa
+
+        Optional keyword arguments:
             track3d (int): 1 if 3D model run, 0 else, optional
             lev (float): lateral eddy viscosity, scalar, optional
             beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
@@ -48,11 +37,12 @@ class Particles:
         self.z = np.copy(z)
         self.rng = rng
         self.mesh = mesh
-        self.track3d = track3d
-        self.lev = lev
-        self.beta = beta
-        self.min_depth = min_depth
-        self.vertbound = vertbound
+        self.track3d = kwargs.get("Track3D", 1)
+        self.lev = kwargs.get("lev", 0.25)
+        self.beta = kwargs.get("beta", (0.067, 0.067, 0.067))
+        self.min_depth = kwargs.get("min_depth", 0.02)
+        self.vertbound = kwargs.get("vertbound", 0.01)
+        self.comm = kwargs.get("comm", None)
 
         self._bedelev = np.zeros(nparts)
         self._wse = np.zeros(nparts)
@@ -77,7 +67,7 @@ class Particles:
         self.zrnum = np.zeros(nparts)
 
         # Construct pipeline objects for VTK probe filter (does the grid interpolations)
-        self.mesh.build_probe_filter(self.nparts, comm)
+        self.mesh.build_probe_filter(self.nparts, self.comm)
 
     def calc_diffusion_coefs(self):
         """Calculate diffusion coefficients, McDonald & Nelson (2021)."""
@@ -89,8 +79,9 @@ class Particles:
     def calc_hdf5_chunksizes(self, nprints):
         """Calculate chunksizes for datasets in particles HDF5 output.
 
-        Designed to create chunks on order of ~1 MB for 8 byte numbers (1e6)
-        HDF5 org recommends chunks of size between 10 KB - 1 MB
+        Designed to create chunks *close to* 1 MiB for 8 byte numbers
+        HDF5 org recommends chunks of size between 10 KiB - 1 MiB;
+        Trials on Denali HPC show 1 MiB works better
 
         Args:
             nprints (int): total number of printing time steps
@@ -100,36 +91,28 @@ class Particles:
             chkvelarray (tuple): chunk size of datasets for 2D velocity arrays
         """
         # Do the 1D particles arrays first, total write dimensions are (nprints, nparts)
-        # 8 bytes per number means 1.25e5 numbers = 1 MB = 1e6 bytes
-        # 6.25e4 is our threshold for doing chksz1 > 1
-        if self.nparts <= 6.25e4:
-            # First handle the case where the number of particles is less than or equal to half of 1 MB, i.e. 1.25e5 64 bit floats
-            chksz1 = np.int64(1.25e5 / self.nparts)
+        # 8 bytes per number means 1 MiB =  2^20 bytes = 2^17 numbers
+        sz1mebibyte = np.int64(2**17)  # 8 bytes per number
+        if self.nparts <= sz1mebibyte:
+            # Case where the number of particles is less than or equal to 1 MiB
+            chksz1 = np.int64(sz1mebibyte / self.nparts)
             chksz1 = np.min([chksz1, nprints])
             chksz2 = self.nparts
         else:
-            # If there are >= 6.25e4 particles, chunk sizes are (1, nparts) or a subset
-            chksz1 = 1
-            if self.nparts >= 2.5e5:
-                # decrease second dim if self.nparts is more than 2 * 1 MB
-                chksz2 = np.int64(self.nparts / 1.25e5)
-            else:
-                chksz2 = self.nparts
+            # If there are > sz1mebibyte particles, chunk sizes are (1, nparts) or a subset
+            chksz1 = np.int64(1)
+            chksz2 = np.int64(self.nparts / np.int64(self.nparts / sz1mebibyte))
         chk1darrays = (chksz1, chksz2)
 
-        # Now do the 2D velocity array, dimensions are (nprints, nparts, 3)
-        if self.nparts <= 6.25e4 / 3:
-            chksz1 = np.int64(1.25e5 / self.nparts / 3)
+        # Now do the 2D velocity array, dimensions are (nprints, nparts, 3), or a subset
+        if self.nparts <= np.int64(sz1mebibyte / 2 / 3):
+            chksz1 = np.int64(sz1mebibyte / self.nparts / 3)
             chksz1 = np.min([chksz1, nprints])
             chksz2 = self.nparts
         else:
-            chksz1 = 1
-            chksz2 = self.nparts
-            if self.nparts >= 2.5e5 / 3:
-                chksz2 = np.int64(self.nparts / 1.25e5 / 3)
-            else:
-                chksz2 = self.nparts
-        chksz3 = 3
+            chksz1 = np.int64(1)
+            chksz2 = np.int64(self.nparts / np.int64(self.nparts / (sz1mebibyte / 3)))
+        chksz3 = np.int64(3)
         chkvelarray = (chksz1, chksz2, chksz3)
 
         return chk1darrays, chkvelarray

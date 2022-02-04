@@ -1,4 +1,4 @@
-"""Falling Particles Class module."""
+"""FallingParticles Class module."""
 import numpy as np
 
 from .Particles import Particles
@@ -7,26 +7,8 @@ from .Particles import Particles
 class FallingParticles(Particles):
     """A subclass of Particles that accelerate due to gravity up to the Ferguson & Church (2004) settling velocity."""
 
-    def __init__(
-        self,
-        nparts,
-        x,
-        y,
-        z,
-        rng,
-        mesh,
-        track3d=1,
-        lev=0.25,
-        beta=(0.067, 0.067, 0.067),
-        min_depth=0.02,
-        vertbound=0.01,
-        comm=None,
-        radius=0.0005,
-        rho=2650.0,
-        c1=20.0,
-        c2=1.1,
-    ):
-        """[Summary].
+    def __init__(self, nparts, x, y, z, rng, mesh, **kwargs):
+        """Initialize instance of class FallingParticles.
 
         Args:
             nparts (int): number of particles in this instance
@@ -35,24 +17,19 @@ class FallingParticles(Particles):
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            track3d (int): 1 if 3D model run, 0 else, optional
-            lev (float): lateral eddy viscosity, scalar, optional
-            beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
-            min_depth (float): minimum allowed depth that particles may enter, scalar, optional
-            vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar, optional
-            comm (mpi4py object): MPI communicator used in parallel execution, optional
+            **kwargs (dict): additional keyword arguments  # noqa
+
+        Optional keyword arguments:
             radius (float): radius of the particles [m], scalar or NumPy array of length nparts, optional
             rho (float): density of the particles [kg/m^3], scalar or NumPy array of length nparts, optional
             c1 (float): viscous drag coefficient [-], scalar or NumPy array of length nparts, optional
             c2 (float): turbulent wake drag coefficient [-], scalar or NumPy array of length nparts, optional
         """
-        super().__init__(
-            nparts, x, y, z, rng, mesh, track3d, lev, beta, min_depth, vertbound, comm
-        )
-        self.c1 = c1
-        self.c2 = c2
-        self.radius = radius
-        self.rho = rho
+        super().__init__(nparts, x, y, z, rng, mesh, **kwargs)
+        self.c1 = kwargs.get("c1", 20.0)
+        self.c2 = kwargs.get("c2", 1.1)
+        self.radius = kwargs.get("radius", 0.0005)
+        self.rho = kwargs.get("rho", 2650.0)
 
     def create_hdf5(self, nprints, globalnparts, comm=None, fname="particles.h5"):
         """Create an HDF5 file to write incremental particles results.
@@ -109,13 +86,13 @@ class FallingParticles(Particles):
         grp["rho"].attrs["Units"] = "kilograms per cubic meter"
         return parts_h5
 
-    def deactivate_particle(self, idx):
+    def deactivate_particles(self, idx):
         """Turn off particles that have left the river domain.
 
         Args:
             idx (int): index of particle to turn off
         """
-        super().deactivate_particle(idx)
+        super().deactivate_particles(idx)
         if isinstance(self.c1, np.ndarray):
             self._c1[idx] = np.nan
         if isinstance(self.c2, np.ndarray):
@@ -367,19 +344,16 @@ class FallingParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, int):
+        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
             values = np.float64(values)
-        elif isinstance(values, float):
-            pass
-        elif (
-            isinstance(values, np.ndarray)
-            and values.dtype.kind == "f"
-            and values.size == self.nparts
-        ):
-            pass
+        elif isinstance(values, np.ndarray) and values.size == self.nparts:
+            if values.dtype == np.float64:
+                pass
+            else:
+                values = values.astype(np.float64)
         else:
-            raise TypeError(
-                "c1.setter wrong type, must be either float scalar or NumPy float array"
+            raise Exception(
+                "c1 must be either scalar or NumPy array with length = number of particles"
             )
         self._c1 = values
 
@@ -399,19 +373,16 @@ class FallingParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, int):
+        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
             values = np.float64(values)
-        elif isinstance(values, float):
-            pass
-        elif (
-            isinstance(values, np.ndarray)
-            and values.dtype.kind == "f"
-            and values.size == self.nparts
-        ):
-            pass
+        elif isinstance(values, np.ndarray) and values.size == self.nparts:
+            if values.dtype == np.float64:
+                pass
+            else:
+                values = values.astype(np.float64)
         else:
-            raise TypeError(
-                "c2.setter wrong type, must be either float scalar or NumPy float array"
+            raise Exception(
+                "c2 must be either scalar or NumPy array with length = number of particles"
             )
         self._c2 = values
 
@@ -431,22 +402,19 @@ class FallingParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, int):
+        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
             values = np.float64(values)
-        elif isinstance(values, float):
-            pass
-        elif (
-            isinstance(values, np.ndarray)
-            and values.dtype.kind == "f"
-            and values.size == self.nparts
-        ):
-            pass
+        elif isinstance(values, np.ndarray) and values.size == self.nparts:
+            if values.dtype == np.float64:
+                pass
+            else:
+                values = values.astype(np.float64)
         else:
-            raise TypeError(
-                "radius.setter wrong type, must be either float scalar or NumPy float array"
+            raise Exception(
+                "radius must be either scalar or NumPy array with length = number of particles"
             )
         if np.any(values <= 0):
-            raise ValueError("radius.setter must be positive number")
+            raise ValueError("radius must be positive number")
 
         self._radius = values
 
@@ -466,21 +434,18 @@ class FallingParticles(Particles):
         Args:
             values ([type]): [description]
         """
-        if isinstance(values, int):
+        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
             values = np.float64(values)
-        elif isinstance(values, float):
-            pass
-        elif (
-            isinstance(values, np.ndarray)
-            and values.dtype.kind == "f"
-            and values.size == self.nparts
-        ):
-            pass
+        elif isinstance(values, np.ndarray) and values.size == self.nparts:
+            if values.dtype == np.float64:
+                pass
+            else:
+                values = values.astype(np.float64)
         else:
-            raise TypeError(
-                "rho.setter wrong type, must be either float scalar or NumPy float array"
+            raise Exception(
+                "rho must be either scalar or NumPy array with length = number of particles"
             )
         if np.any(values <= 0):
-            raise ValueError("rho.setter must be positive number")
+            raise ValueError("rho must be positive number")
 
         self._rho = values
