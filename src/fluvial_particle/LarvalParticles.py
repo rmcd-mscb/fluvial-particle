@@ -117,6 +117,8 @@ class LarvalParticles(Particles):
     def write_hdf5_xmf(self, filexmf, time, nprints, nparts, tidx):
         """Write the body of the particles XDMF file for visualizations in Paraview.
 
+        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name particles.h5.
+
         Args:
             filexmf (file): open file to write
             time (float): current simulation time
@@ -124,165 +126,26 @@ class LarvalParticles(Particles):
             nparts (int): global number of particles summed across processors
             tidx (int): time slice index corresponding to time
         """
-        filexmf.write(
-            f"""
-            <Grid GridType="Uniform">
-                <Time Value="{time}"/>
-                <Topology NodesPerElement="{nparts}" TopologyType="Polyvertex"/>
-                <Geometry GeometryType="X_Y_Z" Name="particles">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                            {tidx} 0
-                            1 1
-                            1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/coordinates/x
-                        </DataItem>
-                    </DataItem>
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                            {tidx} 0
-                            1 1
-                            1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/coordinates/y
-                        </DataItem>
-                    </DataItem>
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                            {tidx} 0
-                            1 1
-                            1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/coordinates/z
-                        </DataItem>
-                    </DataItem>
-                </Geometry>
-                <Attribute Name="BedElevation" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/bedelev
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="CellIndex2D" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/cellidx2d
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="CellIndex3D" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/cellidx3d
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="Depth" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/depth
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="HeightAboveBed" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/htabvbed
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="WaterSurfaceElevation" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/wse
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="VelocityVector" AttributeType="Vector" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts} 3" Format="XML">
-                        <DataItem Dimensions="3 3" Format="XML">
-                        {tidx} 0 0
-                        1 1 1
-                        1 {nparts} 3
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts} 3" Format="HDF" Precision="8">
-                            particles.h5:/properties/velvec
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="Amplitude" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/amp
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="Period" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/period
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-                <Attribute Name="TimePhase" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
-                        <DataItem Dimensions="3 2" Format="XML">
-                        {tidx} 0
-                        1 1
-                        1 {nparts}
-                        </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
-                            particles.h5:/properties/ttime
-                        </DataItem>
-                    </DataItem>
-                </Attribute>
-            </Grid>"""
-        )
+        fname = "particles.h5"
+        self.write_hdf5_xmf_gridheader(filexmf, time, nprints, nparts, tidx)
+
+        # Superclass attributes
+        # fmt: off
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "BedElevation", fname, "/properties/bedelev")
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "CellIndex2D", fname, "/properties/cellidx2d")
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "CellIndex3D", fname, "/properties/cellidx3d")
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth")
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "HeightAboveBed", fname, "/properties/htabvbed")
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "WaterSurfaceElevation", fname, "/properties/wse")
+        self.write_hdf5_xmf_vectorattribute(filexmf, nprints, nparts, tidx, "VelocityVector", fname, "/properties/velvec")
+
+        # Subclass attributes
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Amplitude", fname, "/properties/amp")
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Period", fname, "/properties/period")
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "TimePhase", fname, "/properties/ttime")
+        # fmt: on
+
+        self.write_hdf5_xmf_gridfooter(filexmf)
 
     # Properties
 

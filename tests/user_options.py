@@ -11,7 +11,7 @@ PrintAtTick = 1.0  # Print every PrintAtTick seconds
 StartLoc = (6.14, 9.09, 10.3)
 
 # Declare particle type for the simulation
-ParticleType = LarvalTopParticles  # noqa
+ParticleType = FallingParticles  # noqa
 
 # Optional keyword arguments
 min_depth = 0.02  # minimum depth cells may enter [meters]
@@ -20,5 +20,4 @@ beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient
 vertbound = 0.01  # depth fraction that bounds particles at bed and water surface
 
 # Add keyword arguments for Particles subclasses here
-period = 60.0
-amp = 0.4
+radius = 0.0001
