@@ -68,15 +68,15 @@ def get_prng(timer, seed=None):
 
 
 def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnparts):
-    """Write xml files and cumulative cell counters.
+    """Write XDMF files and cumulative cell counters, must be executed in serial.
 
     Args:
-        output_directory ([type]): [description]
-        river ([type]): [description]
-        particles ([type]): [description]
-        parts_h5 ([type]): [description]
-        n_prints ([type]): [description]
-        globalnparts ([type]): [description]
+        output_directory (path): path to output directory
+        river (RiverGrid): object holding the VTK structured grid(s)
+        particles (Particles): instance of class Particles (or subclass)
+        parts_h5 (h5py file): open HDF5 file object holding particles simulation data
+        n_prints (int): total number of printing time steps
+        globalnparts (int): number of particles across all processors
     """
     # Create and open xdmf files
     cells1d_xmf = open(output_directory + "//cells_onedim.xmf", "w")
@@ -94,7 +94,7 @@ def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnp
     num2dcells = river.vtksgrid2d.GetNumberOfCells()
     cells_h5 = river.create_hdf5(n_prints, time, output_directory + "//cells.h5")
     numpartin2dcell = np.zeros(num2dcells, dtype=np.int64)
-    totpartincell = np.zeros(num2dcells, dtype=np.int64)
+    # totpartincell = np.zeros(num2dcells, dtype=np.int64)
     numpartin1dcell = np.zeros(nsc, dtype=np.int64)
 
     if river.track3d:
@@ -114,7 +114,7 @@ def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnp
         numpartin1dcell[:] = 0
         numpartin2dcell[:] = 0
         np.add.at(numpartin1dcell, cell2d[cell2d >= 0] % nsc, 1)
-        np.add.at(totpartincell, cell2d[cell2d >= 0], 1)
+        # np.add.at(totpartincell, cell2d[cell2d >= 0], 1)
         np.add.at(numpartin2dcell, cell2d[cell2d >= 0], 1)
         if river.track3d:
             cell3d = grpp["cellidx3d"][i, :]
@@ -132,21 +132,23 @@ def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnp
         dims = (river.ns - 1,)
         river.write_hdf5_xmf(cells1d_xmf, t, dims, name, attrname, center="Node")
 
-        name = [[], []]
-        attrname = [[], []]
-        dtypes = [[], []]
+        name = [[]]  # , []]
+        attrname = [[]]  # , []]
+        dtypes = [[]]  # , []]
         name[0] = f"/cells2d/fpc{i}"
         attrname[0] = "FractionalParticleCount"
         dtypes[0] = "Float"
         dims = (river.ns - 1, river.nn - 1)
         data = (numpartin2dcell / globalnparts).reshape(dims)
         river.write_hdf5(cells_h5, name[0], data)
+        """ # Total particle count is not accurately computed in this way
+        # it only sums particle positions at printing time steps, not all simulation steps
         name[1] = f"/cells2d/tpc{i}"
         attrname[1] = "TotalParticleCount"
         dtypes[1] = "Int"
         dims = (river.ns - 1, river.nn - 1)
         data = totpartincell.reshape(dims)
-        river.write_hdf5(cells_h5, name[1], data)
+        river.write_hdf5(cells_h5, name[1], data) """
         river.write_hdf5_xmf(cells2d_xmf, t, dims, name, attrname, dtypes)
 
         if river.track3d:
@@ -172,23 +174,19 @@ def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnp
     cells_h5.close()
 
 
-def load_checkpoint(fname, nparts, tidx, start, end, comm=None):
+def load_checkpoint(fname, tidx, start, end, comm=None):
     """Load initial positions from a checkpoint HDF5 file.
 
     Args:
-        fname ([type]): [description]
-        nparts ([type]): [description]
-        tidx ([type]): [description]
-        start ([type]): [description]
-        end ([type]): [description]
-        comm ([type], optional): [description]. Defaults to None.
-
-    Raises:
-        Exception: [description]
-        ValueError: [description]
+        fname (str): path to checkpoint HDF5 file
+        tidx (int): outer index of HDF5 datasets
+        start (int): starting index of this processor's assigned space
+        end (int): ending index (non-inclusive)
+        comm (mpi4py communicator, optional): for parallel runs.
 
     Returns:
-        [type]: [description]
+        x,y,z (NumPy ndarrays): starting position of particles
+        t (int): simulation start time
     """
     if comm is None or comm.Get_rank() == 0:
         print("Loading initial particle positions from a checkpoint HDF5 file")
@@ -207,11 +205,6 @@ def load_checkpoint(fname, nparts, tidx, start, end, comm=None):
     t = grp["time"][tidx].item(0)  # returns t as a Python basic float
 
     h5file.close()
-
-    if x.size != y.size or x.size != z.size or x.size != nparts:
-        raise ValueError(
-            "Initial location coordinates and the number of particles not self-consistent"
-        )
 
     return x, y, z, t
 
@@ -269,21 +262,23 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     # Initialize RiverGrid object
     river = RiverGrid(track3d, file_name_2d, file_name_3d)
 
-    # Initial particle positions all at one point
-    xstart, ystart, zstart = settings["StartLoc"]
-    x = np.full(npart, fill_value=xstart, dtype=np.float64)
-    y = np.full(npart, fill_value=ystart, dtype=np.float64)
-    z = np.full(npart, fill_value=zstart, dtype=np.float64)
-
-    # Initial particle positions loaded from an HDF5 file
-    """ tidx = -1
-    x, y, z, starttime = load_checkpoint(
-        "tests/test/particles2.h5", npart, tidx, 0, npart, comm
-    ) """
-    if starttime >= endtime:
-        raise Exception(
-            f"Simulation start time must be less than end time; current values: {starttime}, {endtime}"
+    # Initialize particle positions
+    if isinstance(settings["StartLoc"], tuple):
+        # Particles all start at one point
+        xstart, ystart, zstart = settings["StartLoc"]
+        x = np.full(npart, fill_value=xstart, dtype=np.float64)
+        y = np.full(npart, fill_value=ystart, dtype=np.float64)
+        z = np.full(npart, fill_value=zstart, dtype=np.float64)
+    elif isinstance(settings["StartLoc"], str):
+        # Particle positions loaded from an HDF5 file
+        tidx = -1
+        if "StartIdx" in settings.keys():
+            tidx = settings["StartIdx"]
+        x, y, z, starttime = load_checkpoint(
+            "tests/test/particles.h5", tidx, start, end, comm
         )
+    else:
+        raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")
 
     # Get NumPy random state
     rng = get_prng(timer, seed)
@@ -294,6 +289,10 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     particles.initial_validation(0.5)
 
     # Calc simulation and printing times
+    if starttime >= endtime:
+        raise Exception(
+            f"Simulation start time must be less than end time; current values: {starttime}, {endtime}"
+        )
     times = np.arange(starttime + dt, endtime + dt, dt)
     n_times = times.size
     print_inc = np.max([np.int32(print_inc_time / dt), 1])  # bound below
@@ -312,7 +311,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         comm.Barrier()
 
     # Write initial conditions to file
-    particles.write_hdf5(parts_h5, 0, start, end, 0.0, rank)
+    particles.write_hdf5(parts_h5, 0, start, end, starttime, rank)
 
     if comm is not None:
         comm.Barrier()
@@ -329,7 +328,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         else:
             print("Velocity field will be interpolated from 2D grid", flush=True)
         print(
-            f"Simulation start time is {starttime}, maximum end time is {endtime}, using timesteps of {dt} seconds",
+            f"Simulation start time is {starttime}, maximum end time is {endtime}, using timesteps of {dt} (all in seconds).",
             flush=True,
         )
 
