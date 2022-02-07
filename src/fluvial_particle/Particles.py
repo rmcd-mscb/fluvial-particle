@@ -357,7 +357,13 @@ class Particles:
         self.time.fill(0.0)
 
     def interp_3d_field(self, px=None, py=None, pz=None):
-        """Interpolate 3D velocity field at current particle positions."""
+        """Interpolate 3D velocity field at current particle positions.
+
+        Args:
+            px (Numpy ndarray): Particle position coordinates. Defaults to self.x.
+            py (Numpy ndarray): Particle position coordinates. Defaults to self.y.
+            pz (Numpy ndarray): Particle position coordinates. Defaults to self.z.
+        """
         idx = None
         if self.mask is not None:
             if ~self.mask.any():
@@ -399,9 +405,9 @@ class Particles:
         """Interpolate mesh fields at current particle positions.
 
         Args:
-            px ([type], optional): Particle position coordinates. Defaults to self.x.
-            py ([type], optional): Particle position coordinates. Defaults to self.y.
-            pz ([type], optional): Particle position coordinates. Defaults to self.z.
+            px (Numpy ndarray): Particle position coordinates. Defaults to self.x.
+            py (Numpy ndarray): Particle position coordinates. Defaults to self.y.
+            pz (Numpy ndarray): Particle position coordinates. Defaults to self.z.
             twod (bool, optional): Flag to interpolate 2D field arrays. Defaults to True.
             threed (bool, optional): Flag to interpolate 3D field arrays. Defaults to True.
         """
@@ -594,8 +600,8 @@ class Particles:
         """Check that positions are inside the 2D grid and deactivate particles leaving it.
 
         Args:
-            px ([type]): [description]
-            py ([type]): [description]
+            px (float NumPy array): new x coordinates of particles
+            py (float NumPy array): new y coordinates of particles
         """
         if self.mask is None:
             idx = None

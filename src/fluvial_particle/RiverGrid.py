@@ -51,14 +51,16 @@ class RiverGrid:
             comm (mpi4py object): MPI communicator, for parallel runs only
         """
         # Objects for 2d grid interpolation
+        # Pipeline for VTK objects to have a view of data stored in NumPy arrays
         self.pt2d_np = np.zeros((nparts, 3))  # ordering required by vtk
         self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
         self.pt2d = vtk.vtkPoints()
         self.ptset2d = vtk.vtkPointSet()  # vtkPointSet() REQUIRES vtk>=9.1
-        self.probe2d = vtk.vtkProbeFilter()
         self.strategy2d = vtk.vtkCellLocatorStrategy()  # requires vtk>=9.0
         self.pt2d.SetData(self.pt2d_vtk)
         self.ptset2d.SetPoints(self.pt2d)
+        # Build the probe
+        self.probe2d = vtk.vtkProbeFilter()
         self.probe2d.SetInputData(self.ptset2d)
         self.probe2d.SetSourceData(self.vtksgrid2d)
         self.probe2d.SetFindCellStrategy(self.strategy2d)
@@ -78,20 +80,17 @@ class RiverGrid:
             self.probe3d.SetInputData(self.pts3d)
             self.probe3d.SetSourceData(self.vtksgrid3d)
             self.probe3d.SetFindCellStrategy(strategy3d)
-            """ these tolerance functions seem to have no effect for points right on the edge of the 3d cells
-            self.probe.ComputeToleranceOff()  # disables automated tolerance calculation
-            self.probe.SetTolerance(0.01)  # is this a dimensionless tolerance? how defined?"""
 
-    def create_hdf5(self, dimtime, time, fname="cells.h5"):
+    def create_hdf5(self, nprints, time, fname="cells.h5"):
         """Create HDF5 file for cell-centered results.
 
         Args:
-            dimtime ([type]): [description]
-            time ([type]): [description]
-            fname ([type]): [description]
+            nprints (int): number of printing time steps
+            time (NumPy ndarray): array of print times
+            fname (string): file name of output HDF5 file
 
         Returns:
-            [type]: [description]
+            cells_h5: new open HDF5 file object
         """
         if self.track3d:
             vtkcoords = self.vtksgrid3d.GetPoints().GetData()
@@ -125,28 +124,26 @@ class RiverGrid:
         grpg.create_dataset("X", (nz, nn, ns), data=x)
         grpg.create_dataset("Y", (nz, nn, ns), data=y)
         grpg.create_dataset("Z", (nz, nn, ns), data=z)
-        grpg.create_dataset("time", (dimtime, 1), data=time)
+        grpg.create_dataset("time", (nprints, 1), data=time)
         grpg.create_dataset("zeros", (nsc,), data=zeros)
-        for i in np.arange(dimtime):
+        for i in np.arange(nprints):
             dname = f"fpc{i}"
             grp1.create_dataset(dname, (nsc,), data=arr[:, 0, 0])
             grp2.create_dataset(dname, (nsc, nnc), data=arr[:, :, 0])
             if self.track3d:
                 grp3.create_dataset(dname, (nsc, nnc, nzc), data=arr)
-            dname = f"tpc{i}"
-            grp2.create_dataset(dname, (nsc, nnc), data=arr[:, :, 0])
         return cells_h5
 
     def out_of_grid(self, px, py, idx=None):
         """Check if any points in the probe filter pipeline are out of the 2D domain.
 
         Args:
-            px ([type]): [description]
-            py ([type]): [description]
-            idx ([type], optional): [description]. Defaults to None.
+            px (NumPy ndarray): x coordinates of new points
+            py (NumPy ndarray): y coordinates of new points
+            idx (NumPy ndarray, optional): active indices in px & py. Defaults to None.
 
         Returns:
-            (NumPy nd-array): dtype=bool, True for indices of points out of the domain, else False
+            (NumPy ndarray): dtype=bool, True for indices of points out of the domain, else False
         """
         self.update_2d_pipeline(px, py, idx)
         out = self.probe2d.GetOutput()
@@ -314,9 +311,9 @@ class RiverGrid:
         """Update the 2D VTK probe filter pipeline.
 
         Args:
-            px (float): x coordinates of new points, NumPy array of length equal to probe input size
-            py (float): y coordinates of new points, NumPy array of length equal to probe input size
-            idx (int, optional): NumPy array of active indices in px & py. Defaults to None.
+            px (NumPy ndarray): x coordinates of new points
+            py (NumPy ndarray): y coordinates of new points
+            idx (NumPy ndarray, optional): active indices in px & py. Defaults to None.
         """
         if idx is None:
             self.pt2d_np[:, 0] = px
@@ -331,10 +328,10 @@ class RiverGrid:
         """Update the 3D VTK probe filter pipeline.
 
         Args:
-            px (float): x coordinates of new points, NumPy array of length equal to probe input size
-            py (float): y coordinates of new points, NumPy array of length equal to probe input size
-            pz (float): z coordinates of new points, NumPy array of length equal to probe input size
-            idx (int, optional): NumPy array of active indices in px, py & pz. Defaults to None.
+            px (NumPy ndarray): x coordinates of new points
+            py (NumPy ndarray): y coordinates of new points
+            pz (NumPy ndarray): z coordinates of new points
+            idx (NumPy ndarray, optional): active indices in px, py & pz. Defaults to None.
         """
         if idx is None:
             self.pt3d_np[:, 0] = px
@@ -363,9 +360,9 @@ class RiverGrid:
         """Write cell arrays to HDF5 object.
 
         Args:
-            obj ([type]): [description]
-            name ([type]): [description]
-            data ([type]): [description]
+            obj (h5py object): opened HDF5 file to write data to
+            name (str): key of the data to be written
+            data (NumPy ndarray): data to be written
         """
         obj[name][...] = data
 
@@ -375,13 +372,13 @@ class RiverGrid:
         """Body for cell-centered time series data.
 
         Args:
-            filexmf ([type]): [description]
-            time ([type]): [description]
-            dims ([type]): [description]
-            attrnames ([type]): [description]
-            names ([type]): [description]
-            dtypes ([type]): [description]
-            center([type]): [description]
+            filexmf (file): open file to write
+            time (float): current simulation time
+            dims (tuple): integer values describing dimensions of the grid
+            names (list of strings): paths to datasets from the root directory in the HDF5 file
+            attrnames (list of strings): descriptive names corresponding to names
+            dtypes (list of strings): data types corresponding to names (either Float or Int)
+            center(str): Node for node-centered data, Cell for cell-centered data
         """
         filexmf.write(
             f"""
@@ -402,15 +399,15 @@ class RiverGrid:
         )
 
     def write_hdf5_xmf_attr(self, filexmf, dims, name, attrname, center, dtype="Float"):
-        """[summary].
+        """Write data sets as attributes to the XDMF file.
 
         Args:
-            filexmf ([type]): [description]
-            dims ([type]): [description]
-            name ([type]): [description]
-            attrname ([type]): [description]
-            center ([type]): [description]
-            dtype (str, optional): [description]. Defaults to "Float".
+            filexmf (file): open file to write
+            dims (tuple): integer values describing dimensions of the grid
+            name (str): path to dataset from the root directory in the HDF5 file
+            attrname (str): descriptive name of dataset
+            center(str): Node for node-centered data, Cell for cell-centered data
+            dtype (str): dataset type, defaults to Float
         """
         filexmf.write(
             f"""
@@ -425,7 +422,7 @@ class RiverGrid:
         """Header for cell-centered time series data.
 
         Args:
-            filexmf ([type]): [description]
+            filexmf (file): open file to write
         """
         # Important! For whatever reason, dimensions of the xdmf Topology and Geometry files must be switched
         # relative to their order in both the input NumPy arrays and in the cell-centered xdmf body; can't
@@ -457,7 +454,7 @@ class RiverGrid:
         """Header for cell-centered time series data.
 
         Args:
-            filexmf ([type]): [description]
+            filexmf (file): open file to write
         """
         # Important! For whatever reason, dimensions of the xdmf Topology and Geometry files must be switched
         # relative to their order in both the input NumPy arrays and in the cell-centered xdmf body; can't
@@ -496,7 +493,7 @@ class RiverGrid:
         """Header for cell-centered time series data.
 
         Args:
-            filexmf ([type]): [description]
+            filexmf (file): open file to write
         """
         # Important! For whatever reason, dimensions of the xdmf Topology and Geometry files must be switched
         # relative to their order in both the input NumPy arrays and in the cell-centered xdmf body; can't
@@ -525,7 +522,7 @@ class RiverGrid:
         """Footer for cell-centered time series data.
 
         Args:
-            filexmf ([type]): [description]
+            filexmf (file): open file to write
         """
         filexmf.write(
             """
