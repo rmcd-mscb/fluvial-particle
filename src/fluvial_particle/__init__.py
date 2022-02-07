@@ -275,7 +275,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         if "StartIdx" in settings.keys():
             tidx = settings["StartIdx"]
         x, y, z, starttime = load_checkpoint(
-            "tests/test/particles.h5", tidx, start, end, comm
+            settings["StartLoc"], tidx, start, end, comm
         )
     else:
         raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")

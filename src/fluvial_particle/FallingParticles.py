@@ -150,21 +150,71 @@ class FallingParticles(Particles):
         self.write_hdf5_xmf_gridheader(filexmf, time, nprints, nparts, tidx)
 
         # Superclass attributes
-        # fmt: off
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "BedElevation", fname, "/properties/bedelev")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "CellIndex2D", fname, "/properties/cellidx2d")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "CellIndex3D", fname, "/properties/cellidx3d")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "HeightAboveBed", fname, "/properties/htabvbed")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "WaterSurfaceElevation", fname, "/properties/wse")
-        self.write_hdf5_xmf_vectorattribute(filexmf, nprints, nparts, tidx, "VelocityVector", fname, "/properties/velvec")
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, nprints, nparts, tidx, "BedElevation", fname, "/properties/bedelev"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "CellIndex2D",
+            fname,
+            "/properties/cellidx2d",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "CellIndex3D",
+            fname,
+            "/properties/cellidx3d",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "HeightAboveBed",
+            fname,
+            "/properties/htabvbed",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "WaterSurfaceElevation",
+            fname,
+            "/properties/wse",
+        )
+        self.write_hdf5_xmf_vectorattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "VelocityVector",
+            fname,
+            "/properties/velvec",
+        )
 
         # Subclass attributes, time invariant
-        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "c1", fname, "/properties/c1")
-        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "c2", fname, "/properties/c2")
-        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "Radius", fname, "/properties/radius")
-        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "Density", fname, "/properties/rho")
-        # fmt: on
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, 1, nparts, 0, "c1", fname, "/properties/c1"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, 1, nparts, 0, "c2", fname, "/properties/c2"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, 1, nparts, 0, "Radius", fname, "/properties/radius"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, 1, nparts, 0, "Density", fname, "/properties/rho"
+        )
 
         self.write_hdf5_xmf_gridfooter(filexmf)
 

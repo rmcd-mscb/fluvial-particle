@@ -142,7 +142,7 @@ class Particles:
 
         # Get chunk sizes
         chk1darrays, chkvelarray = self.calc_hdf5_chunksizes(nprints)
-        print("Particles HDF5 chunk sizes:", chk1darrays, ", ", chkvelarray)
+        # print("Particles HDF5 chunk sizes:", chk1darrays, ", ", chkvelarray)
 
         grpc.create_dataset(
             "x",
@@ -679,16 +679,58 @@ class Particles:
             tidx (int): time slice index corresponding to time
         """
         fname = "particles.h5"
-        # fmt: off
         self.write_hdf5_xmf_gridheader(filexmf, time, nprints, nparts, tidx)
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "BedElevation", fname, "/properties/bedelev")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "CellIndex2D", fname, "/properties/cellidx2d")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "CellIndex3D", fname, "/properties/cellidx3d")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "HeightAboveBed", fname, "/properties/htabvbed")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "WaterSurfaceElevation", fname, "/properties/wse")
-        self.write_hdf5_xmf_vectorattribute(filexmf, nprints, nparts, tidx, "VelocityVector", fname, "/properties/velvec")
-        # fmt: on
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, nprints, nparts, tidx, "BedElevation", fname, "/properties/bedelev"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "CellIndex2D",
+            fname,
+            "/properties/cellidx2d",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "CellIndex3D",
+            fname,
+            "/properties/cellidx3d",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "HeightAboveBed",
+            fname,
+            "/properties/htabvbed",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "WaterSurfaceElevation",
+            fname,
+            "/properties/wse",
+        )
+        self.write_hdf5_xmf_vectorattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "VelocityVector",
+            fname,
+            "/properties/velvec",
+        )
         self.write_hdf5_xmf_gridfooter(filexmf)
 
     def write_hdf5_xmf_gridfooter(self, filexmf):
