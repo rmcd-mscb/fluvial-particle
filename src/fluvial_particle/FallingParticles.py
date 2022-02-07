@@ -46,42 +46,20 @@ class FallingParticles(Particles):
             parts_h5: new open HDF5 file object
         """
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
-        chk1darrays = self.calc_hdf5_chunksizes(nprints)[0]
         grp = parts_h5["properties"]
-        grp.create_dataset(
-            "c1",
-            (nprints, globalnparts),
-            dtype=np.float64,
-            fillvalue=np.nan,
-            chunks=chk1darrays,
-        )
+        # Subclass datasets are time invariant, only need to be written once
+        grp.create_dataset("c1", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grp["c1"].attrs["Description"] = "Viscous drag coefficient"
         grp["c1"].attrs["Units"] = "None"
-        grp.create_dataset(
-            "c2",
-            (nprints, globalnparts),
-            dtype=np.float64,
-            fillvalue=np.nan,
-            chunks=chk1darrays,
-        )
+        grp.create_dataset("c2", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grp["c2"].attrs["Description"] = "Turbulent wake drag coefficient"
         grp["c2"].attrs["Units"] = "None"
         grp.create_dataset(
-            "radius",
-            (nprints, globalnparts),
-            dtype=np.float64,
-            fillvalue=np.nan,
-            chunks=chk1darrays,
+            "radius", (1, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
         grp["radius"].attrs["Description"] = "Particle radii"
         grp["radius"].attrs["Units"] = "meters"
-        grp.create_dataset(
-            "rho",
-            (nprints, globalnparts),
-            dtype=np.float64,
-            fillvalue=np.nan,
-            chunks=chk1darrays,
-        )
+        grp.create_dataset("rho", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grp["rho"].attrs["Description"] = "Particle density"
         grp["rho"].attrs["Units"] = "kilograms per cubic meter"
         return parts_h5
@@ -148,11 +126,13 @@ class FallingParticles(Particles):
             rank (int): processor rank if run in MPI (0 in serial)
         """
         super().write_hdf5(obj, tidx, start, end, time, rank)
-        grp = obj["properties"]
-        grp["c1"][tidx, start:end] = self.c1
-        grp["c2"][tidx, start:end] = self.c2
-        grp["radius"][tidx, start:end] = self.radius
-        grp["rho"][tidx, start:end] = self.rho
+        # Time invariant subclass properties
+        if tidx == 0:
+            grp = obj["properties"]
+            grp["c1"][tidx, start:end] = self.c1
+            grp["c2"][tidx, start:end] = self.c2
+            grp["radius"][tidx, start:end] = self.radius
+            grp["rho"][tidx, start:end] = self.rho
 
     def write_hdf5_xmf(self, filexmf, time, nprints, nparts, tidx):
         """Write the body of the particles XDMF file for visualizations in Paraview.
@@ -179,11 +159,11 @@ class FallingParticles(Particles):
         self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "WaterSurfaceElevation", fname, "/properties/wse")
         self.write_hdf5_xmf_vectorattribute(filexmf, nprints, nparts, tidx, "VelocityVector", fname, "/properties/velvec")
 
-        # Subclass attributes
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "c1", fname, "/properties/c1")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "c2", fname, "/properties/c2")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Radius", fname, "/properties/radius")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Density", fname, "/properties/rho")
+        # Subclass attributes, time invariant
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "c1", fname, "/properties/c1")
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "c2", fname, "/properties/c2")
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "Radius", fname, "/properties/radius")
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "Density", fname, "/properties/rho")
         # fmt: on
 
         self.write_hdf5_xmf_gridfooter(filexmf)
