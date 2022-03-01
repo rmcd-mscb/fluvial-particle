@@ -11,14 +11,14 @@
       "licenses": [
         {
           "name": "CC0 1.0",
-          "URL": "https://code.usgs.gov/wma/nhgf/toolsteam/nldi-xstool/-/raw/main/LICENSE.md"
+          "URL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/LICENSE.md"
         }
       ]
     },
 
     "homepageURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
     "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/main/fluvparticle-main.zip",
-    "disclaimerURL": "https://code.usgs.gov/wma/fluvparticle/-/blob/make_public/DISCLAIMER.md",
+    "disclaimerURL": "https://code.usgs.gov/wma/fluvparticle/-/blob/main/DISCLAIMER.md",
     "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
     "vcs": "git",
 
