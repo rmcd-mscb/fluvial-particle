@@ -270,18 +270,13 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         y = np.full(npart, fill_value=ystart, dtype=np.float64)
         z = np.full(npart, fill_value=zstart, dtype=np.float64)
     elif isinstance(settings["StartLoc"], str):
-        ifile = settings["StartLoc"]
-        f_type = pathlib.Path(ifile).suffix
-        if ftype == ".h5"
-            # Particle positions loaded from an HDF5 file
-            tidx = -1
-            if "StartIdx" in settings.keys():
-                tidx = settings["StartIdx"]
-            x, y, z, starttime = load_checkpoint(
-                "tests/test/particles.h5", tidx, start, end, comm
-            )
-        elif f_type == ".csv"
-            print(f"StartLoc file is {ifile}")
+        # Particle positions loaded from an HDF5 file
+        tidx = -1
+        if "StartIdx" in settings.keys():
+            tidx = settings["StartIdx"]
+        x, y, z, starttime = load_checkpoint(
+            settings["StartLoc"], tidx, start, end, comm
+        )
     else:
         raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")
 

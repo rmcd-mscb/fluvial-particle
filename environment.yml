@@ -3,10 +3,10 @@ name: fluvial-particle
 channels:
   - conda-forge
 dependencies:
-  - python>=3.8
+  - python>=3.9,<3.10
+  - vtk>=9.1
   - pip
   # Production dependencies defined here (as well as in requirements.txt)
   - click
   - h5py
-  - vtk
   - numpy

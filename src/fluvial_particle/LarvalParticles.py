@@ -45,40 +45,21 @@ class LarvalParticles(Particles):
             parts_h5: new open HDF5 file object
         """
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
-        chk1darrays = self.calc_hdf5_chunksizes(nprints)[0]
         grp = parts_h5["properties"]
-        # these only need to be written once
-        grp.create_dataset(
-            "amp",
-            (nprints, globalnparts),
-            dtype=np.float64,
-            fillvalue=np.nan,
-            chunks=chk1darrays,
-        )
-        grp["amp"].attrs[
-            "Description"
-        ] = "amplitude of sinusoidal swimming, as fraction of depth"
+        # Subclass datasets are time invariant, only need to be written once
+        grp.create_dataset("amp", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
+        grp["amp"].attrs["Description"] = "amplitude of sinusoid, as fraction of depth"
         grp["amp"].attrs["Units"] = "None"
         grp.create_dataset(
-            "period",
-            (nprints, globalnparts),
-            dtype=np.float64,
-            fillvalue=np.nan,
-            chunks=chk1darrays,
+            "period", (1, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
-        grp["period"].attrs["Description"] = "period of swimming, to compute ttime"
+        grp["period"].attrs["Description"] = "period of sinusoid"
         grp["period"].attrs["Units"] = "seconds"
         grp.create_dataset(
-            "ttime",
-            (nprints, globalnparts),
-            dtype=np.float64,
-            fillvalue=np.nan,
-            chunks=chk1darrays,
+            "ttime", (1, globalnparts), dtype=np.float64, fillvalue=np.nan
         )
-        grp["ttime"].attrs[
-            "Description"
-        ] = "phase of swimmers, numpy array of length nparts"
-        grp["ttime"].attrs["Units"] = "None"
+        grp["ttime"].attrs["Description"] = "temporal phase shift of swimmers"
+        grp["ttime"].attrs["Units"] = "seconds"
         return parts_h5
 
     def deactivate_particles(self, idx):
@@ -109,10 +90,12 @@ class LarvalParticles(Particles):
             rank (int): processor rank if run in MPI (0 in serial)
         """
         super().write_hdf5(obj, tidx, start, end, time, rank)
-        grp = obj["properties"]
-        grp["amp"][tidx, start:end] = self.amp
-        grp["period"][tidx, start:end] = self.period
-        grp["ttime"][tidx, start:end] = self.ttime
+        # Time invariant subclass properties
+        if tidx == 0:
+            grp = obj["properties"]
+            grp["amp"][tidx, start:end] = self.amp
+            grp["period"][tidx, start:end] = self.period
+            grp["ttime"][tidx, start:end] = self.ttime
 
     def write_hdf5_xmf(self, filexmf, time, nprints, nparts, tidx):
         """Write the body of the particles XDMF file for visualizations in Paraview.
@@ -130,20 +113,68 @@ class LarvalParticles(Particles):
         self.write_hdf5_xmf_gridheader(filexmf, time, nprints, nparts, tidx)
 
         # Superclass attributes
-        # fmt: off
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "BedElevation", fname, "/properties/bedelev")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "CellIndex2D", fname, "/properties/cellidx2d")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "CellIndex3D", fname, "/properties/cellidx3d")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "HeightAboveBed", fname, "/properties/htabvbed")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "WaterSurfaceElevation", fname, "/properties/wse")
-        self.write_hdf5_xmf_vectorattribute(filexmf, nprints, nparts, tidx, "VelocityVector", fname, "/properties/velvec")
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, nprints, nparts, tidx, "BedElevation", fname, "/properties/bedelev"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "CellIndex2D",
+            fname,
+            "/properties/cellidx2d",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "CellIndex3D",
+            fname,
+            "/properties/cellidx3d",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "HeightAboveBed",
+            fname,
+            "/properties/htabvbed",
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "WaterSurfaceElevation",
+            fname,
+            "/properties/wse",
+        )
+        self.write_hdf5_xmf_vectorattribute(
+            filexmf,
+            nprints,
+            nparts,
+            tidx,
+            "VelocityVector",
+            fname,
+            "/properties/velvec",
+        )
 
-        # Subclass attributes
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Amplitude", fname, "/properties/amp")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Period", fname, "/properties/period")
-        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "TimePhase", fname, "/properties/ttime")
-        # fmt: on
+        # Subclass attributes, time invariant
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, 1, nparts, 0, "Amplitude", fname, "/properties/amp"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, 1, nparts, 0, "Period", fname, "/properties/period"
+        )
+        self.write_hdf5_xmf_scalarattribute(
+            filexmf, 1, nparts, 0, "TimePhase", fname, "/properties/ttime"
+        )
 
         self.write_hdf5_xmf_gridfooter(filexmf)
 
