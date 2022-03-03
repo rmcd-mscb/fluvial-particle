@@ -1,42 +1,16 @@
 Fluvial Particle
 ================
 
-|PyPI| |Status| |Python Version| |License|
+[![PyPI](https://img.shields.io/pypi/v/fluvial-particle.svg)](https://pypi.org/project/fluvial-particle/)
+[![Status](https://img.shields.io/pypi/status/fluvial-particle.svg)](https://pypi.org/project/fluvial-particle/)
+[![Python Version](https://img.shields.io/pypi/pyversions/fluvial-particle)](https://pypi.org/project/fluvial-particle/)
+[![License](https://img.shields.io/pypi/l/fluvial-particle)](https://creativecommons.org/publicdomain/zero/1.0/legalcode)
+[![Read the Docs](https://img.shields.io/readthedocs/fluvial-particle/latest.svg?label=Read%20the%20Docs)](https://fluvial-particle.readthedocs.io/)
 
-|Read the Docs| |Tests| |Codecov|
+[![Codecov](https://codecov.io/gh/rmcd-mscb/fluvial-particle/branch/main/graph/badge.svg)](https://codecov.io/gh/rmcd-mscb/fluvial-particle)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-|pre-commit| |Black| |direnv|
-
-.. |PyPI| image:: https://img.shields.io/pypi/v/fluvial-particle.svg
-   :target: https://pypi.org/project/fluvial-particle/
-   :alt: PyPI
-.. |Status| image:: https://img.shields.io/pypi/status/fluvial-particle.svg
-   :target: https://pypi.org/project/fluvial-particle/
-   :alt: Status
-.. |Python Version| image:: https://img.shields.io/pypi/pyversions/fluvial-particle
-   :target: https://pypi.org/project/fluvial-particle
-   :alt: Python Version
-.. |License| image:: https://img.shields.io/pypi/l/fluvial-particle
-   :target: https://opensource.org/licenses/MIT
-   :alt: License
-.. |Read the Docs| image:: https://img.shields.io/readthedocs/fluvial-particle/latest.svg?label=Read%20the%20Docs
-   :target: https://fluvial-particle.readthedocs.io/
-   :alt: Read the documentation at https://fluvial-particle.readthedocs.io/
-.. |Tests| image:: https://github.com/rmcd-mscb/fluvial-particle/workflows/Tests/badge.svg
-   :target: https://github.com/rmcd-mscb/fluvial-particle/actions?workflow=Tests
-   :alt: Tests
-.. |Codecov| image:: https://codecov.io/gh/rmcd-mscb/fluvial-particle/branch/main/graph/badge.svg
-   :target: https://codecov.io/gh/rmcd-mscb/fluvial-particle
-   :alt: Codecov
-.. |pre-commit| image:: https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white
-   :target: https://github.com/pre-commit/pre-commit
-   :alt: pre-commit
-.. |Black| image:: https://img.shields.io/badge/code%20style-black-000000.svg
-   :target: https://github.com/psf/black
-   :alt: Black
-.. |direnv| image:: https://image.winudf.com/v2/image1/Y29tLmFjci5zaGVsbHRlcm1pbmFsZW11bGF0b3JfaWNvbl8xNTQxOTg3OTA0XzA1MQ/icon.png?w=170&fakeurl=1&type=.png
-   :target: https://direnv.net/
-   :alt: direnv
 
 
 Features
@@ -51,11 +25,17 @@ per Cliff Hills setup description: https://code.usgs.gov/wma/nhgf/pygeoapi-plugi
 
 To set up your development environment do the following.
 
+* fork the reposistory
 ``` {.sourceCode .console}
-$ conda env create -f environment.yml
-$ conda develop -n {{cookiecutter.project_name}} src
-$ conda activate {{cookiecutter.project_name}}
-$ pip install -r requirements.dev
+    git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-partile-fork # to remind yourself your working on a fork :)
+```
+
+Setup Development Environment
+``` {.sourceCode .console}
+    $ conda env create -f environment.yml
+    $ conda develop -n {{cookiecutter.project_name}} src
+    $ conda activate {{cookiecutter.project_name}}
+    $ pip install -r requirements.dev
 ```
 It is important to get [preccommit](https://pre-commit.com/) enabled on
 the project, to ensure that certain standards are always met on a git

@@ -10,5 +10,5 @@
   "package_name": "fluvial_particle",
   "project_name": "fluvial-particle",
   "summary": "Lagrangian particle-tracking for fluvial environments",
-  "version": "0.0.1-dev0"
+  "version": "0.0.1"
 }
