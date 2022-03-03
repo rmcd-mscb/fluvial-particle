@@ -1,0 +1,34 @@
+"""UserDefinedParticles Class module."""
+from .Particles import Particles
+
+
+class UserDefinedParticles(Particles):
+    """A subclass of Particles for user-defined active drift behavior."""
+
+    def __init__(self, nparts, x, y, z, rng, mesh, track3d=1):
+        """Standard initialization of super class.
+
+        Args:
+            nparts ([type]): [description]
+            x ([type]): [description]
+            y ([type]): [description]
+            z ([type]): [description]
+            rng ([type]): [description]
+            mesh ([type]): [description]
+            track3d (int, optional): [description]. Defaults to 1.
+        """
+        super().__init__(nparts, x, y, z, rng, mesh, track3d)
+
+    def perturb_z(self, dt):
+        """[Summary].
+
+        Args:
+            dt ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        # Example, same as super method: random walk in vertical:
+        zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
+        pz = self.bedelev + (self.normdepth * self.depth) + self.velz * dt + zranwalk
+        return pz
