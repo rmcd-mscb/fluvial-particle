@@ -11,15 +11,15 @@
       "licenses": [
         {
           "name": "CC0 1.0",
-          "URL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/LICENSE.md"
+          "URL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/main/LICENSE.md"
         }
       ]
     },
 
     "homepageURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
-    "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/main/fluvparticle-main.zip",
-    "disclaimerURL": "https://code.usgs.gov/wma/fluvparticle/-/blob/main/DISCLAIMER.md",
-    "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
+    "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/0.0.1/fluvparticle-main.zip",
+    "disclaimerURL": "https://code.usgs.gov/wma/fluvparticle/-/raw/main/DISCLAIMER.md",
+    "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle.git",
     "vcs": "git",
 
     "laborHours": 0,
@@ -34,7 +34,7 @@
     },
 
     "date": {
-      "metadataLastUpdated": "2022-3-1"
+      "metadataLastUpdated": "2022-03-03"
     }
   }
 ]
