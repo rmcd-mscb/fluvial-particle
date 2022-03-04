@@ -9,9 +9,11 @@ from datetime import timedelta
 from os import getpid
 import pathlib
 import time
+
 import numpy as np
 import argparse
 import h5py
+from .helpers import load_variable_source
 from .Settings import Settings
 from .FallingParticles import FallingParticles  # noqa
 from .LarvalParticles import LarvalBotParticles, LarvalTopParticles  # noqa
@@ -270,13 +272,21 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         y = np.full(npart, fill_value=ystart, dtype=np.float64)
         z = np.full(npart, fill_value=zstart, dtype=np.float64)
     elif isinstance(settings["StartLoc"], str):
-        # Particle positions loaded from an HDF5 file
-        tidx = -1
-        if "StartIdx" in settings.keys():
-            tidx = settings["StartIdx"]
-        x, y, z, starttime = load_checkpoint(
-            settings["StartLoc"], tidx, start, end, comm
-        )
+        filepath = pathlib.Path(str)
+        suffix = filepath.suffix
+        if not filepath.exists():
+            raise Exception(f"The StartLoc file ({str}) does not exist")
+        if suffix == ".h5":
+            # Particle positions loaded from an HDF5 file
+            tidx = -1
+            if "StartIdx" in settings.keys():
+                tidx = settings["StartIdx"]
+            x, y, z, starttime = load_checkpoint(
+                settings["StartLoc"], tidx, start, end, comm
+            )
+        elif suffix == ".csv":
+            pstime, x, y, z = load_variable_source(settings["StartLoc"])
+
     else:
         raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")
 

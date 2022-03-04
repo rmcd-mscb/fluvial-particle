@@ -3,6 +3,7 @@ from .FallingParticles import FallingParticles
 from .LarvalParticles import LarvalBotParticles
 from .LarvalParticles import LarvalTopParticles
 from .Particles import Particles
+from .VarSrcParticles import VarSrcParticles
 
 # New Particles subclasses must be added to global_dict before they can be used
 global_dict = {
@@ -10,6 +11,7 @@ global_dict = {
     "FallingParticles": FallingParticles,
     "LarvalTopParticles": LarvalTopParticles,
     "LarvalBotParticles": LarvalBotParticles,
+    "VarSrcParticles": VarSrcParticles,
 }
 
 

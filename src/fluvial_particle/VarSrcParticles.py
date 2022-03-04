@@ -1,16 +1,17 @@
 """Variable Source Particles Class module."""
-import numpy as np
-
+# import numpy as np
+from .helpers import load_variable_source
 from .Particles import Particles
 
-class VSParticles(Particles):
+
+class VarSrcParticles(Particles):
     """Variable Source Particles.
 
     Args:
         Particles ([type]): [description]
     """
 
-        def __init__(self, nparts, x, y, z, rng, mesh, **kwargs):
+    def __init__(self, nparts, x, y, z, rng, mesh, **kwargs):
         """Initialize instance of class FallingParticles.
 
         Args:
@@ -29,7 +30,6 @@ class VSParticles(Particles):
             c2 (float): turbulent wake drag coefficient [-], scalar or NumPy array of length nparts, optional
         """
         super().__init__(nparts, x, y, z, rng, mesh, **kwargs)
-        self.c1 = kwargs.get("c1", 20.0)
-        self.c2 = kwargs.get("c2", 1.1)
-        self.radius = kwargs.get("radius", 0.0005)
-        self.rho = kwargs.get("rho", 2650.0)
+        self.sl = kwargs.get("StartLoc")
+        self.part_start_time, x, y, z = load_variable_source(self.sl)
+        print(len(self.part_start_time))
