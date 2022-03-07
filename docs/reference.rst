@@ -6,8 +6,8 @@ Reference
     :backlinks: none
 
 
-fluvial_particle.__main__
+fluvial_particle.__init__
 -------------------------
 
-.. automodule:: fluvial_particle.__main__
+.. automodule:: fluvial_particle.__init__
    :members:

@@ -1,6 +1,8 @@
 Contributor Covenant Code of Conduct
 ====================================
 
+`DOI Code of Scientific and Scholarly Conduct <	https://www.doi.gov/sites/doi.gov/files/migrated/scientificintegrity/upload/DOI-Code-of-Scientific-and-Scholarly-Conduct-Poster-December-2014.pdf>`
+
 Our Pledge
 ----------
 
