@@ -105,7 +105,7 @@ class Particles:
         chk1darrays = (chksz1, chksz2)
 
         # Now do the 2D velocity array, dimensions are (nprints, nparts, 3), or a subset
-        if self.nparts <= np.int64(sz1mebibyte / 2 / 3):
+        if self.nparts <= np.int64(sz1mebibyte / 3):
             chksz1 = np.int64(sz1mebibyte / self.nparts / 3)
             chksz1 = np.min([chksz1, nprints])
             chksz2 = self.nparts
