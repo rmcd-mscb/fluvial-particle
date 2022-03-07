@@ -185,25 +185,22 @@ Note:
 
 ## Installation
 
-You can install _Fluvial Particle_ via pip*from `PyPI*`:
-
-.. code:: console
+You can install _Fluvial_Particle_ via pip from `PyPI_`:
 
 $ pip install fluvial-particle
 
 ## Usage
 
-Please see the `Command-line Reference <Usage_>`\_ for details.
+TODO
 
 ## Contributing
 
 Contributions are very welcome.
-To learn more, see the `Contributor Guide`\_.
+To learn more, see the `Contributor Guide_`\.
 
 ## License
 
-Distributed under the terms of the `MIT license_`,
-_Fluvial Particle_ is free and open source software.
+Distributed under the terms of the `CCO 1.0 license_`, Fluvial Particle is free and open source software.
 
 ## Issues
 
@@ -216,7 +213,7 @@ This project was generated from `@hillc-usgs_`'s `Pygeoapi Plugin Cookiecutter_`
 
 ..\_@hillc-usgs: <https://github.com/hillc-usgs>
 ..\_Cookiecutter: <https://github.com/audreyr/cookiecutter>
-..\_MIT license: <https://opensource.org/licenses/MIT>
+..\_CCO 1.0 license: <https://creativecommons.org/publicdomain/zero/1.0/legalcode>
 ..\_PyPI: <https://pypi.org/>
 ..\_Pygeoapi Plugin Cookiecutter: <https://code.usgs.gov/wma/nhgf/pygeoapi-plugin-cookiecutter>
 ..\_file an issue: <https://github.com/rmcd-mscb/fluvial-particle/issues>

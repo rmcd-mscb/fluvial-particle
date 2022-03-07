@@ -1,6 +1,0 @@
-{
-  "python.linting.flake8Enabled": true,
-  "python.linting.enabled": true,
-  "python.pythonPath": "/home/rmcd/miniconda3/envs/fluvial-particle/bin/python",
-  "esbonio.server.enabled": true
-}
