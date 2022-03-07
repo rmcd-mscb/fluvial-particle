@@ -12,10 +12,10 @@ Track3D = 1  # 1 to use 3D velocity field, 0 to use 2D velocity field
 NumPart = 1000  # Number of particles to simulate per processor
 
 # Starting locations: give tuple for exact point, or path to a checkpoint HDF5 file
-StartLoc = "tests/test/particles.h5"
+# StartLoc = "tests/test/particles.h5"
 # StartIdx = 45  # optional time slice index to pull data from, defaults to -1
 # StartLoc = (490.0, -4965.0, 530.0)
-# StartLoc = (6.14, 9.09, 10.3)
+StartLoc = (6.14, 9.09, 10.3)
 
 # Particle type for the simulation
 ParticleType = FallingParticles  # noqa
