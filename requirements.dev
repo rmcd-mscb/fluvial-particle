@@ -21,6 +21,7 @@ sphinx
 sphinx-click
 sphinx-autobuild
 sphinx-rtd-theme
+myst-parser
 reorder-python-imports
 ipython
 bump2version
