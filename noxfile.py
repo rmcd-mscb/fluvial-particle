@@ -158,11 +158,11 @@ def xdoctest(session: Session) -> None:
 @nox.session(name="docs-build", python="3.9")
 def docs_build(session: Session) -> None:
     """Build the documentation."""
-    args = session.posargs or ["docs", "docs/_build"]
+    args = session.posargs or ["docs", "docs/_build/html"]
     session.install(".")
-    session.install("sphinx", "sphinx-click", "sphinx-rtd-theme")
+    session.install("sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser")
 
-    build_dir = Path("docs", "_build")
+    build_dir = Path("docs", "_build/html")
     if build_dir.exists():
         shutil.rmtree(build_dir)
 
