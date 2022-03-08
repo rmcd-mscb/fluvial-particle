@@ -2,7 +2,7 @@ Contributor Guide
 =================
 
 Thank you for your interest in improving this project.
-This project is open-source under the `MIT license`_ and
+This project is open-source under the `CCO license`_ and
 welcomes contributions in the form of bug reports, feature requests, and pull requests.
 
 Here is a list of important resources for contributors:
@@ -12,15 +12,15 @@ Here is a list of important resources for contributors:
 - `Issue Tracker`_
 - `Code of Conduct`_
 
-.. _MIT license: https://opensource.org/licenses/MIT
-.. _Source Code: https://github.com/rmcd-mscb/fluvial-particle
+.. _CCO license: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+.. _Source Code: https://code.usgs.gov/wma/nhgf/fluvparticle
 .. _Documentation: https://fluvial-particle.readthedocs.io/
-.. _Issue Tracker: https://github.com/rmcd-mscb/fluvial-particle/issues
+.. _Issue Tracker: https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues
 
 How to report a bug
 -------------------
 
-Report bugs on the `Issue Tracker`_.
+Report bugs on the `Issue Tracker_`.
 
 When filing an issue, make sure to answer these questions:
 
@@ -37,7 +37,7 @@ and/or steps to reproduce the issue.
 How to request a feature
 ------------------------
 
-Request features on the `Issue Tracker`_.
+Request features on the `Issue Tracker_`.
 
 
 How to set up your development environment
@@ -118,6 +118,6 @@ To run linting and code formatting checks before commiting your change, you can 
 It is recommended to open an issue before starting work on anything.
 This will allow a chance to talk it over with the owners and validate your approach.
 
-.. _pull request: https://github.com/rmcd-mscb/fluvial-particle/pulls
+.. _pull request: https://code.usgs.gov/wma/nhgf/fluvparticle/-/merge_requests
 .. github-only
 .. _Code of Conduct: CODE_OF_CONDUCT.rst

@@ -13,7 +13,7 @@ import time
 import numpy as np
 import argparse
 import h5py
-from .helpers import load_variable_source
+from .Helpers import load_variable_source
 from .Settings import Settings
 from .FallingParticles import FallingParticles  # noqa
 from .LarvalParticles import LarvalBotParticles, LarvalTopParticles  # noqa
@@ -272,10 +272,12 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         y = np.full(npart, fill_value=ystart, dtype=np.float64)
         z = np.full(npart, fill_value=zstart, dtype=np.float64)
     elif isinstance(settings["StartLoc"], str):
-        filepath = pathlib.Path(str)
-        suffix = filepath.suffix
+        filepath = pathlib.Path(settings["StartLoc"])
+
         if not filepath.exists():
             raise Exception(f"The StartLoc file ({str}) does not exist")
+
+        suffix = filepath.suffix
         if suffix == ".h5":
             # Particle positions loaded from an HDF5 file
             tidx = -1
