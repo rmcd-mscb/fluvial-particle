@@ -350,8 +350,8 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         particles.move(times[i], dt)
 
         # Check that there are still active particles
-        if particles.mask is not None:
-            if ~np.any(particles.mask):
+        if particles.in_bounds_mask is not None:
+            if ~np.any(particles.in_bounds_mask):
                 if comm is None:
                     print(
                         f"No active particles remain; exiting loop at time T={times[i]}",

@@ -37,6 +37,14 @@ class VarSrcParticles(Particles):
         self.start_time_mask = np.full(self.nparts, fill_value=False)
         print(len(self.part_start_time))
 
+    @property
+    def active(self):
+        """Mask both in_bounds_mask and start_time_mask."""
+        if self.in_bounds_mask is None:
+            return self.start_time_mask
+        else:
+            return self.in_bounds_mask & self.start_time_mask
+
     def move(self, time, dt):
         """Update particle positions.
 
@@ -97,8 +105,8 @@ class VarSrcParticles(Particles):
         xranwalk = self.xrnum * (2.0 * self.diffx * dt) ** 0.5
         yranwalk = self.yrnum * (2.0 * self.diffy * dt) ** 0.5
         # Move and update positions in-place on each array
-        a = self.indices[(velmag > 0.0) & (self.start_time_mask is True)]
-        b = self.indices[(velmag == 0.0) & (self.start_time_mask is True)]
+        a = self.indices[(velmag > 0.0) & (self.active)]
+        b = self.indices[(velmag == 0.0) & (self.active)]
         px[a] += (
             vx[a] * dt
             + ((xranwalk[a] * vx[a]) / velmag[a])

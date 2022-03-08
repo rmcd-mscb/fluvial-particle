@@ -3,7 +3,7 @@
 file_name_3d = "./tests/data/Result_FM_MEander_1_long_3D1_new.vtk"
 file_name_2d = "./tests/data/Result_FM_MEander_1_long_2D1.vtk"
 
-SimTime = 300.0  # maximum simulation time [seconds]
+SimTime = 3600.0  # maximum simulation time [seconds]
 dt = 0.25  # simulation time step [seconds]
 PrintAtTick = 1.0  # Print every PrintAtTick seconds
 

@@ -61,7 +61,7 @@ class Particles:
         self._diffz = np.zeros(nparts)
         self._time = np.zeros(nparts)
         self._htabvbed = np.zeros(nparts)
-        self._mask = None
+        self._in_bounds_mask = None
         self.xrnum = np.zeros(nparts)
         self.yrnum = np.zeros(nparts)
         self.zrnum = np.zeros(nparts)
@@ -278,11 +278,11 @@ class Particles:
         self._diffy[idx] = np.nan
         self._diffz[idx] = np.nan
         self._time[idx] = np.nan
-        if self.mask is None:
-            self.mask = np.full(self.nparts, fill_value=True)
-        self.mask[idx] = False
+        if self.in_bounds_mask is None:
+            self.in_bounds_mask = np.full(self.nparts, fill_value=True)
+        self.in_bounds_mask[idx] = False
 
-        idxx = self.indices[self.mask]
+        idxx = self.indices[self.in_bounds_mask]
         if idxx.size > 0:
             # Reconstruct VTK probe filter pipeline objects
             self.mesh.reconstruct_filter_pipeline(idxx.size)
@@ -336,8 +336,8 @@ class Particles:
             frac (float): starting position of particles within water column (scalar or NumPy array), optional
         """
         self.validate_2d_pos(self.x, self.y)
-        if self.mask is not None:
-            if ~self.mask.any():
+        if self.in_bounds_mask is not None:
+            if ~self.in_bounds_mask.any():
                 raise Exception(
                     "No initial points in the 2D grid; check starting location(s)"
                 )
@@ -365,10 +365,10 @@ class Particles:
             pz (Numpy ndarray): Particle position coordinates. Defaults to self.z.
         """
         idx = None
-        if self.mask is not None:
-            if ~self.mask.any():
+        if self.in_bounds_mask is not None:
+            if ~self.in_bounds_mask.any():
                 return
-            idx = self.indices[self.mask]
+            idx = self.indices[self.in_bounds_mask]
 
         if px is None:
             px = self.x
@@ -412,10 +412,10 @@ class Particles:
             threed (bool, optional): Flag to interpolate 3D field arrays. Defaults to True.
         """
         idx = None
-        if self.mask is not None:
-            if ~self.mask.any():
+        if self.in_bounds_mask is not None:
+            if ~self.in_bounds_mask.any():
                 return
-            idx = self.indices[self.mask]
+            idx = self.indices[self.in_bounds_mask]
         if px is None:
             px = self.x
         if py is None:
@@ -470,11 +470,11 @@ class Particles:
         # check cell centered values instead
         ibcvtk = self.mesh.probe2d.GetOutput().GetPointData().GetArray("CellIBC")
         ibc = numpy_support.vtk_to_numpy(ibcvtk)
-        if self.mask is None:
+        if self.in_bounds_mask is None:
             wet = np.asarray(ibc, dtype=bool)
         else:
             wet = np.full((self.nparts,), dtype=bool, fill_value=True)
-            idx = self.indices[self.mask]
+            idx = self.indices[self.in_bounds_mask]
             wet[idx] = ibc
 
         return wet
@@ -603,12 +603,12 @@ class Particles:
             px (float NumPy array): new x coordinates of particles
             py (float NumPy array): new y coordinates of particles
         """
-        if self.mask is None:
+        if self.in_bounds_mask is None:
             idx = None
         else:
-            if ~self.mask.any():
+            if ~self.in_bounds_mask.any():
                 return
-            idx = self.indices[self.mask]
+            idx = self.indices[self.in_bounds_mask]
 
         # Find particles leaving the grid
         outparts = self.mesh.out_of_grid(px, py, idx)
@@ -623,7 +623,7 @@ class Particles:
                 self.deactivate_particles(idx[outparts])
                 px[idx[outparts]] = np.nan
                 py[idx[outparts]] = np.nan
-            idx = self.indices[self.mask]
+            idx = self.indices[self.in_bounds_mask]
             if idx.size > 0:
                 self.mesh.update_2d_pipeline(px, py, idx)
 
@@ -1119,16 +1119,16 @@ class Particles:
         self._lev = values
 
     @property
-    def mask(self):
+    def in_bounds_mask(self):
         """Get mask.
 
         Returns:
             [type]: [description]
         """
-        return self._mask
+        return self._in_bounds_mask
 
-    @mask.setter
-    def mask(self, values):
+    @in_bounds_mask.setter
+    def in_bounds_mask(self, values):
         """Set mask.
 
         Args:
@@ -1142,7 +1142,7 @@ class Particles:
             )
         if not np.issubdtype(values.dtype, "bool"):
             raise TypeError("mask.setter: mask must be of 'bool' data type")
-        self._mask = values
+        self._in_bounds_mask = values
 
     @property
     def mesh(self):
