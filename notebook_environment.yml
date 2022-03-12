@@ -20,3 +20,7 @@ dependencies:
   - pythreejs
   - panel
   - pyvistaqt
+  - scooby
+  - ipyvtklink
+  - sphinx-gallery
+  - matplotlib
