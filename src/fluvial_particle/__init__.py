@@ -288,6 +288,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
             )
         elif suffix == ".csv":
             pstime, x, y, z = load_variable_source(settings["StartLoc"])
+            settings["PartStartTime"] = pstime
 
     else:
         raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")
@@ -298,7 +299,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     # Initialize class of particles instance
     particles = particles(npart, x, y, z, rng, river, **settings)
 
-    particles.initial_validation(0.5)
+    particles.initial_validation(starttime=0.0, frac=0.5)
 
     # Calc simulation and printing times
     if starttime >= endtime:

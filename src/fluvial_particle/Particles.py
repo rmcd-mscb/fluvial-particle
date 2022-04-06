@@ -24,12 +24,13 @@ class Particles:
             **kwargs (dict): additional keyword arguments  # noqa
 
         Optional keyword arguments:
-            track3d (int): 1 if 3D model run, 0 else, optional
+            Track3D (int): 1 if 3D model run, 0 else, optional
             lev (float): lateral eddy viscosity, scalar, optional
             beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
             min_depth (float): minimum allowed depth that particles may enter, scalar, optional
             vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar, optional
             comm (mpi4py object): MPI communicator used in parallel execution, optional
+            PartStartTime (float): variable particle start times, defaults to simulation start time
         """
         self.nparts = nparts
         self.x = np.copy(x)
@@ -43,6 +44,7 @@ class Particles:
         self.min_depth = kwargs.get("min_depth", 0.02)
         self.vertbound = kwargs.get("vertbound", 0.01)
         self.comm = kwargs.get("comm", None)
+        self._part_start_time = kwargs.get("PartStartTime", None)
 
         self._bedelev = np.zeros(nparts)
         self._wse = np.zeros(nparts)
@@ -62,12 +64,21 @@ class Particles:
         self._time = np.zeros(nparts)
         self._htabvbed = np.zeros(nparts)
         self._in_bounds_mask = None
+        self._start_time_mask = None
         self.xrnum = np.zeros(nparts)
         self.yrnum = np.zeros(nparts)
         self.zrnum = np.zeros(nparts)
 
         # Construct pipeline objects for VTK probe filter (does the grid interpolations)
         self.mesh.build_probe_filter(self.nparts, self.comm)
+
+    @property
+    def active(self):
+        """Mask both in_bounds_mask and start_time_mask."""
+        if self.in_bounds_mask is None:
+            return self.start_time_mask
+        else:
+            return self.in_bounds_mask & self.start_time_mask
 
     def calc_diffusion_coefs(self):
         """Calculate diffusion coefficients, McDonald & Nelson (2021)."""
@@ -278,6 +289,11 @@ class Particles:
         self._diffy[idx] = np.nan
         self._diffz[idx] = np.nan
         self._time[idx] = np.nan
+
+        ### nan this too?
+        # self._part_start_time[idx] = np.nan
+
+
         if self.in_bounds_mask is None:
             self.in_bounds_mask = np.full(self.nparts, fill_value=True)
         self.in_bounds_mask[idx] = False
@@ -329,10 +345,11 @@ class Particles:
                 px[b] = self.x[b]
                 py[b] = self.y[b]
 
-    def initial_validation(self, frac=None):
+    def initial_validation(self, starttime=0.0, frac=None):
         """Validate initial 2D positions, set vertical postitions (optional), and interpolate mesh arrays.
 
         Args:
+            starttime (float): initial time of the simulation in seconds, default is 0.0
             frac (float): starting position of particles within water column (scalar or NumPy array), optional
         """
         self.validate_2d_pos(self.x, self.y)
@@ -354,7 +371,10 @@ class Particles:
         # Get 3D velocity field
         self.interp_fields(twod=False)
 
-        self.time.fill(0.0)
+        # Set simulation start time
+        self.time.fill(starttime)
+        if self.part_start_time is None:
+            self.part_start_time = np.full(self.nparts, fill_value=starttime, dtype=np.float64)
 
     def interp_3d_field(self, px=None, py=None, pz=None):
         """Interpolate 3D velocity field at current particle positions.
@@ -495,6 +515,9 @@ class Particles:
         # Calculate turbulent diffusion coefficients
         self.calc_diffusion_coefs()
 
+        # Check time and compute mask
+        self.start_time_mask = self.part_start_time <= self.time
+
         # Perturb 2D positions (and validate w.r.t. grid)
         self.perturb_2d(px, py, dt)
 
@@ -536,8 +559,8 @@ class Particles:
         xranwalk = self.xrnum * (2.0 * self.diffx * dt) ** 0.5
         yranwalk = self.yrnum * (2.0 * self.diffy * dt) ** 0.5
         # Move and update positions in-place on each array
-        a = self.indices[velmag > 0.0]
-        b = self.indices[velmag == 0.0]
+        a = self.indices[(velmag > 0.0) & self.active]
+        b = self.indices[(velmag == 0.0) & self.active]
         px[a] += (
             vx[a] * dt
             + ((xranwalk[a] * vx[a]) / velmag[a])
@@ -1097,6 +1120,32 @@ class Particles:
         self._htabvbed = values
 
     @property
+    def in_bounds_mask(self):
+        """Get bounds mask.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._in_bounds_mask
+
+    @in_bounds_mask.setter
+    def in_bounds_mask(self, values):
+        """Set bounds mask.
+
+        Args:
+            values ([type]): [description]
+        """
+        if not isinstance(values, np.ndarray):
+            raise TypeError("in_bounds_mask requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"in_bounds_mask wrong size {values.shape}; expected ({self.nparts},)"
+            )
+        if not np.issubdtype(values.dtype, "bool"):
+            raise TypeError("in_bounds_mask must be of 'bool' data type")
+        self._in_bounds_mask = values
+    
+    @property
     def lev(self):
         """Get lev.
 
@@ -1117,32 +1166,6 @@ class Particles:
         if not isinstance(values, float):
             raise TypeError("lev.setter must be a scalar")
         self._lev = values
-
-    @property
-    def in_bounds_mask(self):
-        """Get mask.
-
-        Returns:
-            [type]: [description]
-        """
-        return self._in_bounds_mask
-
-    @in_bounds_mask.setter
-    def in_bounds_mask(self, values):
-        """Set mask.
-
-        Args:
-            values ([type]): [description]
-        """
-        if not isinstance(values, np.ndarray):
-            raise TypeError("mask.setter requires a NumPy array")
-        if values.shape != (self.nparts,):
-            raise ValueError(
-                f"mask.setter wrong size {values.shape}; expected ({self.nparts},)"
-            )
-        if not np.issubdtype(values.dtype, "bool"):
-            raise TypeError("mask.setter: mask must be of 'bool' data type")
-        self._in_bounds_mask = values
 
     @property
     def mesh(self):
@@ -1231,6 +1254,36 @@ class Particles:
         self._nparts = values
 
     @property
+    def part_start_time(self):
+        """Get particle start time.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._part_start_time
+
+    @part_start_time.setter
+    def part_start_time(self, values):
+        """Set particle start time.
+
+        Args:
+            values ([type]): [description]
+        """
+        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+            values = np.float64(values)
+        elif isinstance(values, np.ndarray) and values.size == self.nparts:
+            if values.dtype == np.float64:
+                pass
+            else:
+                values = values.astype(np.float64)
+        else:
+            raise Exception(
+                "part_start_time must be either scalar or NumPy array with length = number of particles"
+            )
+
+        self._part_start_time = values
+
+    @property
     def rng(self):
         """Get rng.
 
@@ -1271,6 +1324,32 @@ class Particles:
                 f"shearstress.setter wrong size {values.shape}; expected ({self.nparts},)"
             )
         self._shearstress = values
+
+    @property
+    def start_time_mask(self):
+        """Get time mask.
+
+        Returns:
+            [type]: [description]
+        """
+        return self._start_time_mask
+
+    @start_time_mask.setter
+    def start_time_mask(self, values):
+        """Set time mask.
+
+        Args:
+            values ([type]): [description]
+        """
+        if not isinstance(values, np.ndarray):
+            raise TypeError("start_time_mask requires a NumPy array")
+        if values.shape != (self.nparts,):
+            raise ValueError(
+                f"start_time_mask wrong size {values.shape}; expected ({self.nparts},)"
+            )
+        if not np.issubdtype(values.dtype, "bool"):
+            raise TypeError("start_time_mask must be of 'bool' data type")
+        self._start_time_mask = values
 
     @property
     def time(self):
