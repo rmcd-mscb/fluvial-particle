@@ -31,14 +31,14 @@ def load_variable_source(
                 "(start_time, x, y, z, numpart)"
             )
         )
-    numparts = int(np.sum(data[:, 4]))
-    pstime = np.zeros(numparts, dtype=int)
+    numparts = np.int64(np.sum(data[:, 4]))
+    pstime = np.zeros(numparts, dtype=np.int64)
     x = np.zeros(numparts, dtype=np.float64)
     y = np.zeros(numparts, dtype=np.float64)
     z = np.zeros(numparts, dtype=np.float64)
     count = 0
     for i in np.arange(data.shape[0]):
-        npart = int(data[i, 4])
+        npart = np.int64(data[i, 4])
         for _j in np.arange(npart):
             pstime[count] = data[i, 0]
             x[count] = data[i, 1]
