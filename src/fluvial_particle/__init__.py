@@ -318,7 +318,10 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
 
     # Create HDF5 particles dataset; collective in MPI
     fname = output_directory + "//particles.h5"
-    parts_h5 = particles.create_hdf5(n_prints, globalnparts, fname=fname, comm=comm)
+    dset_kwargs = {"compression": "gzip"}
+    parts_h5 = particles.create_hdf5(
+        n_prints, globalnparts, fname=fname, comm=comm, **dset_kwargs
+    )
 
     if comm is not None:
         comm.Barrier()

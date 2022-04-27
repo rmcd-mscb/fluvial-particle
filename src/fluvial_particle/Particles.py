@@ -128,7 +128,9 @@ class Particles:
 
         return chk1darrays, chkvelarray
 
-    def create_hdf5(self, nprints, globalnparts, comm=None, fname="particles.h5"):
+    def create_hdf5(
+        self, nprints, globalnparts, comm=None, fname="particles.h5", **dset_kwargs
+    ):
         """Create an HDF5 file to write incremental particles results.
 
         Args:
@@ -136,6 +138,7 @@ class Particles:
             globalnparts (int): global number of particles, distributed across processors
             comm (MPI communicator): only for parallel runs
             fname (string): name of the HDF5 file
+            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
 
         Returns:
             parts_h5: new open HDF5 file object
@@ -161,6 +164,7 @@ class Particles:
             dtype=np.float64,
             fillvalue=np.nan,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
         grpc.create_dataset(
             "y",
@@ -168,6 +172,7 @@ class Particles:
             dtype=np.float64,
             fillvalue=np.nan,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
         grpc.create_dataset(
             "z",
@@ -175,8 +180,11 @@ class Particles:
             dtype=np.float64,
             fillvalue=np.nan,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
-        grpc.create_dataset("time", (nprints, 1), dtype=np.float64, fillvalue=np.nan)
+        grpc.create_dataset(
+            "time", (nprints, 1), dtype=np.float64, fillvalue=np.nan, **dset_kwargs
+        )
         grpc["x"].attrs["Units"] = "meters"
         grpc["y"].attrs["Units"] = "meters"
         grpc["z"].attrs["Units"] = "meters"
@@ -190,6 +198,7 @@ class Particles:
             dtype=np.float64,
             fillvalue=np.nan,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
         grpp.create_dataset(
             "cellidx2d",
@@ -197,6 +206,7 @@ class Particles:
             dtype=np.int64,
             fillvalue=-1,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
         grpp.create_dataset(
             "cellidx3d",
@@ -204,6 +214,7 @@ class Particles:
             dtype=np.int64,
             fillvalue=-1,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
         grpp.create_dataset(
             "depth",
@@ -211,6 +222,7 @@ class Particles:
             dtype=np.float64,
             fillvalue=np.nan,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
         grpp.create_dataset(
             "htabvbed",
@@ -218,6 +230,7 @@ class Particles:
             dtype=np.float64,
             fillvalue=np.nan,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
         grpp.create_dataset(
             "velvec",
@@ -225,6 +238,7 @@ class Particles:
             dtype=np.float64,
             fillvalue=np.nan,
             chunks=chkvelarray,
+            **dset_kwargs,
         )
         grpp.create_dataset(
             "wse",
@@ -232,6 +246,7 @@ class Particles:
             dtype=np.float64,
             fillvalue=np.nan,
             chunks=chk1darrays,
+            **dset_kwargs,
         )
         grpp["bedelev"].attrs[
             "Description"
@@ -290,9 +305,8 @@ class Particles:
         self._diffz[idx] = np.nan
         self._time[idx] = np.nan
 
-        ### nan this too?
+        # nan this too?
         # self._part_start_time[idx] = np.nan
-
 
         if self.in_bounds_mask is None:
             self.in_bounds_mask = np.full(self.nparts, fill_value=True)
@@ -374,7 +388,9 @@ class Particles:
         # Set simulation start time
         self.time.fill(starttime)
         if self.part_start_time is None:
-            self.part_start_time = np.full(self.nparts, fill_value=starttime, dtype=np.float64)
+            self.part_start_time = np.full(
+                self.nparts, fill_value=starttime, dtype=np.float64
+            )
 
     def interp_3d_field(self, px=None, py=None, pz=None):
         """Interpolate 3D velocity field at current particle positions.
@@ -1144,7 +1160,7 @@ class Particles:
         if not np.issubdtype(values.dtype, "bool"):
             raise TypeError("in_bounds_mask must be of 'bool' data type")
         self._in_bounds_mask = values
-    
+
     @property
     def lev(self):
         """Get lev.
