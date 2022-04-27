@@ -9,9 +9,11 @@ from datetime import timedelta
 from os import getpid
 import pathlib
 import time
+
 import numpy as np
 import argparse
 import h5py
+from .Helpers import load_variable_source
 from .Settings import Settings
 from .FallingParticles import FallingParticles  # noqa
 from .LarvalParticles import LarvalBotParticles, LarvalTopParticles  # noqa
@@ -270,13 +272,24 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         y = np.full(npart, fill_value=ystart, dtype=np.float64)
         z = np.full(npart, fill_value=zstart, dtype=np.float64)
     elif isinstance(settings["StartLoc"], str):
-        # Particle positions loaded from an HDF5 file
-        tidx = -1
-        if "StartIdx" in settings.keys():
-            tidx = settings["StartIdx"]
-        x, y, z, starttime = load_checkpoint(
-            settings["StartLoc"], tidx, start, end, comm
-        )
+        filepath = pathlib.Path(settings["StartLoc"])
+
+        if not filepath.exists():
+            raise Exception(f"The StartLoc file ({str}) does not exist")
+
+        suffix = filepath.suffix
+        if suffix == ".h5":
+            # Particle positions loaded from an HDF5 file
+            tidx = -1
+            if "StartIdx" in settings.keys():
+                tidx = settings["StartIdx"]
+            x, y, z, starttime = load_checkpoint(
+                settings["StartLoc"], tidx, start, end, comm
+            )
+        elif suffix == ".csv":
+            pstime, x, y, z = load_variable_source(settings["StartLoc"])
+            settings["PartStartTime"] = pstime
+
     else:
         raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")
 
@@ -286,7 +299,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     # Initialize class of particles instance
     particles = particles(npart, x, y, z, rng, river, **settings)
 
-    particles.initial_validation(0.5)
+    particles.initial_validation(starttime=0.0, frac=0.5)
 
     # Calc simulation and printing times
     if starttime >= endtime:
@@ -305,7 +318,10 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
 
     # Create HDF5 particles dataset; collective in MPI
     fname = output_directory + "//particles.h5"
-    parts_h5 = particles.create_hdf5(n_prints, globalnparts, fname=fname, comm=comm)
+    dset_kwargs = {"compression": "gzip"}
+    parts_h5 = particles.create_hdf5(
+        n_prints, globalnparts, fname=fname, comm=comm, **dset_kwargs
+    )
 
     if comm is not None:
         comm.Barrier()
@@ -338,8 +354,8 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         particles.move(times[i], dt)
 
         # Check that there are still active particles
-        if particles.mask is not None:
-            if ~np.any(particles.mask):
+        if particles.in_bounds_mask is not None:
+            if ~np.any(particles.in_bounds_mask):
                 if comm is None:
                     print(
                         f"No active particles remain; exiting loop at time T={times[i]}",

@@ -1,12 +1,15 @@
 """Test cases for the __main__ module."""
-# import pytest
-# from click.testing import CliRunner
-# from fluvial_particle import __main__
-# @pytest.fixture
-# def runner() -> CliRunner:
-#     """Fixture for invoking command-line interfaces."""
-#     return CliRunner()
-# def test_main_succeeds(runner: CliRunner) -> None:
-#     """It exits with a status code of zero."""
-#     result = runner.invoke(__main__.main)
-#     assert result.exit_code == 0
+import time
+
+from fluvial_particle import Settings
+from fluvial_particle import simulate
+
+argdict = {
+    "settings_file": "./tests/user_options_rmcd.py",
+    "output_directory": "./tests/.",
+    "seed": None,
+    "no_postprocess": True,
+}
+settings_file = argdict["settings_file"]
+options = Settings.read(settings_file)
+simulate(options, argdict, timer=time.time)

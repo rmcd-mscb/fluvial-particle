@@ -1,0 +1,26 @@
+name: fluvial-particle
+channels:
+  - conda-forge
+dependencies:
+  - python[version='>=3.9,<3.10']
+  - vtk[version='>=9.1']
+  - pip
+  - click
+  - h5py
+  - numpy
+  - jupyterlab
+  - ca-certificates
+  - openssl
+  - pyvista
+  - certifi
+  - ipyvtklink
+  - meshio
+  - imageio
+  - imageio-ffmpeg
+  - pythreejs
+  - panel
+  - pyvistaqt
+  - scooby
+  - ipyvtklink
+  - sphinx-gallery
+  - matplotlib

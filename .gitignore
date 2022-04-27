@@ -1,6 +1,8 @@
 output/
+.vscode/
 data/
 misc/
+.vscode/
 tests/test/
 tests/120/
 tests/960/
