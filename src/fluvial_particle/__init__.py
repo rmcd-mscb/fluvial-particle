@@ -318,7 +318,9 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
 
     # Create HDF5 particles dataset; collective in MPI
     fname = output_directory + "//particles.h5"
-    dset_kwargs = {"compression": "gzip"}
+    dset_kwargs = {}
+    if "hdf5_dataset_kwargs" in settings.keys():
+        dset_kwargs = settings["hdf5_dataset_kwargs"]
     parts_h5 = particles.create_hdf5(
         n_prints, globalnparts, fname=fname, comm=comm, **dset_kwargs
     )
