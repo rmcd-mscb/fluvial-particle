@@ -81,13 +81,14 @@ class RiverGrid:
             self.probe3d.SetSourceData(self.vtksgrid3d)
             self.probe3d.SetFindCellStrategy(strategy3d)
 
-    def create_hdf5(self, nprints, time, fname="cells.h5"):
+    def create_hdf5(self, nprints, time, fname="cells.h5", **dset_kwargs):
         """Create HDF5 file for cell-centered results.
 
         Args:
             nprints (int): number of printing time steps
             time (NumPy ndarray): array of print times
             fname (string): file name of output HDF5 file
+            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
 
         Returns:
             cells_h5: new open HDF5 file object
@@ -121,17 +122,17 @@ class RiverGrid:
         grp2 = cells_h5.create_group("cells2d")
         if self.track3d:
             grp3 = cells_h5.create_group("cells3d")
-        grpg.create_dataset("X", (nz, nn, ns), data=x)
-        grpg.create_dataset("Y", (nz, nn, ns), data=y)
-        grpg.create_dataset("Z", (nz, nn, ns), data=z)
-        grpg.create_dataset("time", (nprints, 1), data=time)
-        grpg.create_dataset("zeros", (nsc,), data=zeros)
+        grpg.create_dataset("X", (nz, nn, ns), data=x, **dset_kwargs)
+        grpg.create_dataset("Y", (nz, nn, ns), data=y, **dset_kwargs)
+        grpg.create_dataset("Z", (nz, nn, ns), data=z, **dset_kwargs)
+        grpg.create_dataset("time", (nprints, 1), data=time, **dset_kwargs)
+        grpg.create_dataset("zeros", (nsc,), data=zeros, **dset_kwargs)
         for i in np.arange(nprints):
             dname = f"fpc{i}"
-            grp1.create_dataset(dname, (nsc,), data=arr[:, 0, 0])
-            grp2.create_dataset(dname, (nsc, nnc), data=arr[:, :, 0])
+            grp1.create_dataset(dname, (nsc,), data=arr[:, 0, 0], **dset_kwargs)
+            grp2.create_dataset(dname, (nsc, nnc), data=arr[:, :, 0], **dset_kwargs)
             if self.track3d:
-                grp3.create_dataset(dname, (nsc, nnc, nzc), data=arr)
+                grp3.create_dataset(dname, (nsc, nnc, nzc), data=arr, **dset_kwargs)
         return cells_h5
 
     def out_of_grid(self, px, py, idx=None):
@@ -169,6 +170,110 @@ class RiverGrid:
         outparts = np.logical_or(bndrycells, outofgrid)
 
         return outparts
+
+    def postprocess(self, output_directory, n_prints, globalnparts, **dset_kwargs):
+        """Write XDMF files and cumulative cell counters, must be executed in serial.
+
+        Args:
+            output_directory (string): path to output directory
+            n_prints (int): total number of printing time steps
+            globalnparts (int): number of particles across all processors
+            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
+        """
+        # Open Particles HDF5 file for printing steps and cell locations
+        parts_h5 = h5py.File(output_directory + "//particles.h5", "r")
+
+        # Create and open xdmf files
+        cells1d_xmf = open(output_directory + "//cells_onedim.xmf", "w")
+        cells2d_xmf = open(output_directory + "//cells_twodim.xmf", "w")
+
+        self.write_hdf5_xmf_header1d(cells1d_xmf)
+        self.write_hdf5_xmf_header2d(cells2d_xmf)
+
+        # Create cells HDF5 file and arrays
+        grpc = parts_h5["coordinates"]
+        grpp = parts_h5["properties"]
+        time = grpc["time"]
+        nsc = self.nsc
+        num2dcells = self.vtksgrid2d.GetNumberOfCells()
+        cells_h5 = self.create_hdf5(n_prints, time, output_directory + "//cells.h5", **dset_kwargs)
+        numpartin2dcell = np.zeros(num2dcells, dtype=np.int64)
+        # totpartincell = np.zeros(num2dcells, dtype=np.int64)
+        numpartin1dcell = np.zeros(nsc, dtype=np.int64)
+
+        if self.track3d:
+            num3dcells = self.vtksgrid3d.GetNumberOfCells()
+            cells3d_xmf = open(output_directory + "//cells_threedim.xmf", "w")
+            self.write_hdf5_xmf_header3d(cells3d_xmf)
+            numpartin3dcell = np.zeros(num3dcells, dtype=np.int64)
+
+        # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
+        # write the arrays to the cells HDF5, and write metadata to the XDMF files
+        gen = [t for t in time if not np.isnan(t)]
+        for i in range(len(gen)):
+            t = gen[i].item(0)  # this returns a python scalar, for use in f-strings
+
+            cell2d = grpp["cellidx2d"][i, :]
+            numpartin1dcell[:] = 0
+            numpartin2dcell[:] = 0
+            np.add.at(numpartin1dcell, cell2d[cell2d >= 0] % nsc, 1)
+            # np.add.at(totpartincell, cell2d[cell2d >= 0], 1)
+            np.add.at(numpartin2dcell, cell2d[cell2d >= 0], 1)
+            if self.track3d:
+                cell3d = grpp["cellidx3d"][i, :]
+                numpartin3dcell[:] = 0
+                np.add.at(numpartin3dcell, cell3d[cell3d >= 0], 1)
+
+            # dims, name, and attrname must be passed to write_hdf5_xmf as iterable objects
+            # dtypes too, but it is optional (defaults to "Float")
+            name = [[]]
+            attrname = [[]]
+            name[0] = f"/cells1d/fpc{i}"
+            attrname[0] = "FractionalParticleCount"
+            data = numpartin1dcell / globalnparts
+            self.write_hdf5(cells_h5, name[0], data)
+            dims = (self.ns - 1,)
+            self.write_hdf5_xmf(cells1d_xmf, t, dims, name, attrname, center="Node")
+
+            name = [[]]  # , []]
+            attrname = [[]]  # , []]
+            dtypes = [[]]  # , []]
+            name[0] = f"/cells2d/fpc{i}"
+            attrname[0] = "FractionalParticleCount"
+            dtypes[0] = "Float"
+            dims = (self.ns - 1, self.nn - 1)
+            data = (numpartin2dcell / globalnparts).reshape(dims)
+            self.write_hdf5(cells_h5, name[0], data)
+            """ # Total particle count is not accurately computed in this way
+            # it only sums particle positions at printing time steps, not all simulation steps
+            name[1] = f"/cells2d/tpc{i}"
+            attrname[1] = "TotalParticleCount"
+            dtypes[1] = "Int"
+            dims = (self.ns - 1, self.nn - 1)
+            data = totpartincell.reshape(dims)
+            self.write_hdf5(cells_h5, name[1], data) """
+            self.write_hdf5_xmf(cells2d_xmf, t, dims, name, attrname, dtypes)
+
+            if self.track3d:
+                name = [[]]
+                attrname = [[]]
+                name[0] = f"/cells3d/fpc{i}"
+                attrname[0] = "FractionalParticleCount"
+                dims = (self.ns - 1, self.nn - 1, self.nz - 1)
+                data = (numpartin3dcell / globalnparts).reshape(dims)
+                self.write_hdf5(cells_h5, name[0], data)
+                self.write_hdf5_xmf(cells3d_xmf, t, dims, name, attrname)
+
+        # Finalize xmf file writing
+        self.write_hdf5_xmf_footer(cells1d_xmf)
+        self.write_hdf5_xmf_footer(cells2d_xmf)
+        if self.track3d:
+            self.write_hdf5_xmf_footer(cells3d_xmf)
+            cells3d_xmf.close()
+        cells1d_xmf.close()
+        cells2d_xmf.close()
+        cells_h5.close()
+        parts_h5.close()
 
     def process_arrays(self):
         """Add required / delete unneeded arrays from 2D and 3D structured grids."""
