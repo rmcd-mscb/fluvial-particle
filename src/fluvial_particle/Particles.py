@@ -278,6 +278,29 @@ class Particles:
         grpp["wse"].attrs["Units"] = "meters"
         return parts_h5
 
+    def create_hdf5_xdmf(self, output_directory, n_prints, globalnparts):
+        """Creates the particles XDMF file for visualizations in Paraview.
+
+        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name particles.h5.
+
+        Args:
+            output_directory (string): path to output directory
+            n_prints (int): total number of printing steps
+            globalnparts (int): number of particles across all processors
+        """
+        parts_h5 = h5py.File(output_directory + "//particles.h5", "r")
+        parts_xmf = open(output_directory + "//particles.xmf", "w")
+        self.write_hdf5_xmf_header(parts_xmf)
+        grpc = parts_h5["coordinates"]
+        time = grpc["time"]
+        gen = [t for t in time if not np.isnan(t)]
+        for i in range(len(gen)):
+            t = gen[i].item(0)  # this returns a python scalar, for use in f-strings
+            self.write_hdf5_xmf(parts_xmf, t, n_prints, globalnparts, i)
+        self.write_hdf5_xmf_footer(parts_xmf)
+        parts_h5.close()
+        parts_xmf.close()
+
     def deactivate_particles(self, idx):
         """Turn off particles that have left the river domain.
 
