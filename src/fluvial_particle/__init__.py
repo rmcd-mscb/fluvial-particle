@@ -9,9 +9,11 @@ from datetime import timedelta
 from os import getpid
 import pathlib
 import time
+
 import numpy as np
 import argparse
 import h5py
+from .Helpers import load_variable_source
 from .Settings import Settings
 from .FallingParticles import FallingParticles  # noqa
 from .LarvalParticles import LarvalBotParticles, LarvalTopParticles  # noqa
@@ -34,7 +36,7 @@ def checkcommandarguments():
         default=None,
         help="Specify a single integer to fix the seed of the random number generator. Only used in serial mode.",
     )
-    parser.add_argument("--no-postprocess", "--no_postprocess", action="store_false")
+    parser.add_argument("--no-postprocess", "--no_postprocess", action="store_false", help="Include this flag to prevent RiverGrid post-processing.")
     # note: argparse will convert to key="no_postprocess"
 
     argdict = vars(parser.parse_args())
@@ -67,111 +69,7 @@ def get_prng(timer, seed=None):
     return prng
 
 
-def postprocess(output_directory, river, particles, parts_h5, n_prints, globalnparts):
-    """Write XDMF files and cumulative cell counters, must be executed in serial.
 
-    Args:
-        output_directory (path): path to output directory
-        river (RiverGrid): object holding the VTK structured grid(s)
-        particles (Particles): instance of class Particles (or subclass)
-        parts_h5 (h5py file): open HDF5 file object holding particles simulation data
-        n_prints (int): total number of printing time steps
-        globalnparts (int): number of particles across all processors
-    """
-    # Create and open xdmf files
-    cells1d_xmf = open(output_directory + "//cells_onedim.xmf", "w")
-    cells2d_xmf = open(output_directory + "//cells_twodim.xmf", "w")
-    parts_xmf = open(output_directory + "//particles.xmf", "w")
-    river.write_hdf5_xmf_header1d(cells1d_xmf)
-    river.write_hdf5_xmf_header2d(cells2d_xmf)
-    particles.write_hdf5_xmf_header(parts_xmf)
-
-    # Create cells HDF5 file and arrays
-    grpc = parts_h5["coordinates"]
-    grpp = parts_h5["properties"]
-    time = grpc["time"]
-    nsc = river.nsc
-    num2dcells = river.vtksgrid2d.GetNumberOfCells()
-    cells_h5 = river.create_hdf5(n_prints, time, output_directory + "//cells.h5")
-    numpartin2dcell = np.zeros(num2dcells, dtype=np.int64)
-    # totpartincell = np.zeros(num2dcells, dtype=np.int64)
-    numpartin1dcell = np.zeros(nsc, dtype=np.int64)
-
-    if river.track3d:
-        num3dcells = river.vtksgrid3d.GetNumberOfCells()
-        cells3d_xmf = open(output_directory + "//cells_threedim.xmf", "w")
-        river.write_hdf5_xmf_header3d(cells3d_xmf)
-        numpartin3dcell = np.zeros(num3dcells, dtype=np.int64)
-
-    # For every printing time loop, we load the particles data, sum the cell-centered counter arrays,
-    # write the arrays to the cells HDF5, and write metadata to the XDMF files
-    gen = [t for t in time if not np.isnan(t)]
-    for i in range(len(gen)):
-        t = gen[i].item(0)  # this returns a python scalar, for use in f-strings
-        particles.write_hdf5_xmf(parts_xmf, t, n_prints, globalnparts, i)
-
-        cell2d = grpp["cellidx2d"][i, :]
-        numpartin1dcell[:] = 0
-        numpartin2dcell[:] = 0
-        np.add.at(numpartin1dcell, cell2d[cell2d >= 0] % nsc, 1)
-        # np.add.at(totpartincell, cell2d[cell2d >= 0], 1)
-        np.add.at(numpartin2dcell, cell2d[cell2d >= 0], 1)
-        if river.track3d:
-            cell3d = grpp["cellidx3d"][i, :]
-            numpartin3dcell[:] = 0
-            np.add.at(numpartin3dcell, cell3d[cell3d >= 0], 1)
-
-        # dims, name, and attrname must be passed to write_hdf5_xmf as iterable objects
-        # dtypes too, but it is optional (defaults to "Float")
-        name = [[]]
-        attrname = [[]]
-        name[0] = f"/cells1d/fpc{i}"
-        attrname[0] = "FractionalParticleCount"
-        data = numpartin1dcell / globalnparts
-        river.write_hdf5(cells_h5, name[0], data)
-        dims = (river.ns - 1,)
-        river.write_hdf5_xmf(cells1d_xmf, t, dims, name, attrname, center="Node")
-
-        name = [[]]  # , []]
-        attrname = [[]]  # , []]
-        dtypes = [[]]  # , []]
-        name[0] = f"/cells2d/fpc{i}"
-        attrname[0] = "FractionalParticleCount"
-        dtypes[0] = "Float"
-        dims = (river.ns - 1, river.nn - 1)
-        data = (numpartin2dcell / globalnparts).reshape(dims)
-        river.write_hdf5(cells_h5, name[0], data)
-        """ # Total particle count is not accurately computed in this way
-        # it only sums particle positions at printing time steps, not all simulation steps
-        name[1] = f"/cells2d/tpc{i}"
-        attrname[1] = "TotalParticleCount"
-        dtypes[1] = "Int"
-        dims = (river.ns - 1, river.nn - 1)
-        data = totpartincell.reshape(dims)
-        river.write_hdf5(cells_h5, name[1], data) """
-        river.write_hdf5_xmf(cells2d_xmf, t, dims, name, attrname, dtypes)
-
-        if river.track3d:
-            name = [[]]
-            attrname = [[]]
-            name[0] = f"/cells3d/fpc{i}"
-            attrname[0] = "FractionalParticleCount"
-            dims = (river.ns - 1, river.nn - 1, river.nz - 1)
-            data = (numpartin3dcell / globalnparts).reshape(dims)
-            river.write_hdf5(cells_h5, name[0], data)
-            river.write_hdf5_xmf(cells3d_xmf, t, dims, name, attrname)
-
-    # Finalize xmf file writing
-    river.write_hdf5_xmf_footer(cells1d_xmf)
-    river.write_hdf5_xmf_footer(cells2d_xmf)
-    if river.track3d:
-        river.write_hdf5_xmf_footer(cells3d_xmf)
-        cells3d_xmf.close()
-    particles.write_hdf5_xmf_footer(parts_xmf)
-    cells1d_xmf.close()
-    cells2d_xmf.close()
-    parts_xmf.close()
-    cells_h5.close()
 
 
 def load_checkpoint(fname, tidx, start, end, comm=None):
@@ -270,13 +168,24 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         y = np.full(npart, fill_value=ystart, dtype=np.float64)
         z = np.full(npart, fill_value=zstart, dtype=np.float64)
     elif isinstance(settings["StartLoc"], str):
-        # Particle positions loaded from an HDF5 file
-        tidx = -1
-        if "StartIdx" in settings.keys():
-            tidx = settings["StartIdx"]
-        x, y, z, starttime = load_checkpoint(
-            settings["StartLoc"], tidx, start, end, comm
-        )
+        filepath = pathlib.Path(settings["StartLoc"])
+
+        if not filepath.exists():
+            raise Exception(f"The StartLoc file ({str}) does not exist")
+
+        suffix = filepath.suffix
+        if suffix == ".h5":
+            # Particle positions loaded from an HDF5 file
+            tidx = -1
+            if "StartIdx" in settings.keys():
+                tidx = settings["StartIdx"]
+            x, y, z, starttime = load_checkpoint(
+                settings["StartLoc"], tidx, start, end, comm
+            )
+        elif suffix == ".csv":
+            pstime, x, y, z = load_variable_source(settings["StartLoc"])
+            settings["PartStartTime"] = pstime
+
     else:
         raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")
 
@@ -286,7 +195,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     # Initialize class of particles instance
     particles = particles(npart, x, y, z, rng, river, **settings)
 
-    particles.initial_validation(0.5)
+    particles.initial_validation(starttime=0.0, frac=0.5)
 
     # Calc simulation and printing times
     if starttime >= endtime:
@@ -305,7 +214,12 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
 
     # Create HDF5 particles dataset; collective in MPI
     fname = output_directory + "//particles.h5"
-    parts_h5 = particles.create_hdf5(n_prints, globalnparts, fname=fname, comm=comm)
+    dset_kwargs = {}
+    if "hdf5_dataset_kwargs" in settings.keys():
+        dset_kwargs = settings["hdf5_dataset_kwargs"]
+    parts_h5 = particles.create_hdf5(
+        n_prints, globalnparts, fname=fname, comm=comm, **dset_kwargs
+    )
 
     if comm is not None:
         comm.Barrier()
@@ -338,8 +252,8 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         particles.move(times[i], dt)
 
         # Check that there are still active particles
-        if particles.mask is not None:
-            if ~np.any(particles.mask):
+        if particles.in_bounds_mask is not None:
+            if ~np.any(particles.in_bounds_mask):
                 if comm is None:
                     print(
                         f"No active particles remain; exiting loop at time T={times[i]}",
@@ -383,6 +297,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     parts_h5.close()
 
     if master:
+        particles.create_hdf5_xdmf(output_directory, n_prints, globalnparts)
         print(
             f"Finished simulation in {str(timedelta(seconds=timer() - t0))} h:m:s",
             flush=True,
@@ -390,11 +305,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
 
     if master and postprocessflg:
         print("Post-processing...")
-        parts_h5 = h5py.File(fname, "r")
-        postprocess(
-            output_directory, river, particles, parts_h5, n_prints, globalnparts
-        )
-        parts_h5.close()
+        river.postprocess(output_directory, n_prints, globalnparts, **dset_kwargs)
 
     if comm is not None:
         comm.Barrier()
