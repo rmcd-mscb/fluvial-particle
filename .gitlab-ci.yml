@@ -16,6 +16,7 @@ stages:
     - source activate base
     - python --version
     - pip install -r requirements.dev
+    - pre-commit install --install-hooks
     - pip install -e .
 
 .docker-template: &docker
