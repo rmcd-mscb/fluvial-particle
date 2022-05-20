@@ -9,7 +9,7 @@ stages:
     - apt-get update
     - apt-get -y install gdal-bin libgdal-dev
     - conda update -n base conda
-    - conda env update -c conda-forge -n base --file environment.yml
+    - conda env update -n base --file environment.yml
     - conda init bash
     - source ~/.bashrc
     - source activate base
