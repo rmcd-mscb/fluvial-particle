@@ -1,8 +1,8 @@
 """Settings file, subclass of dictionary."""
-from .FallingParticles import FallingParticles
-from .LarvalParticles import LarvalBotParticles
-from .LarvalParticles import LarvalTopParticles
-from .Particles import Particles
+from fluvial_particle.FallingParticles import FallingParticles
+from fluvial_particle.LarvalParticles import LarvalBotParticles
+from fluvial_particle.LarvalParticles import LarvalTopParticles
+from fluvial_particle.Particles import Particles
 
 # New Particles subclasses must be added to global_dict before they can be used
 global_dict = {

@@ -1,0 +1,53 @@
+# example adopted
+# https://github.com/python-poetry/poetry/discussions/4205
+
+stages:
+  - tests
+
+.install-deps-template: &install-deps
+  before_script:
+    - apt-get update
+    - apt-get -y install gdal-bin libgdal-dev
+    - conda update -n base conda
+    - conda env update -n base --file environment.yaml
+    - conda init bash
+    - source ~/.bashrc
+    - source activate base
+    - python --version
+    - pip install -r requirements.dev
+    - pip install .
+
+.docker-template: &docker
+  <<: *install-deps
+  image: continuumio/miniconda3:latest
+  stage: tests
+
+#test jobs -----------------------
+check-code:
+  <<: *docker
+  script: nox -s pre-commit
+
+check-safety:
+  <<: *docker
+  script:
+    - nox -s safety
+
+coverage-check:
+  <<: *docker
+  script:
+    - nox -s tests
+    - nox -s coverage
+
+# check-typing:
+#   <<: *docker
+#   script:
+#     - nox -s mypy
+
+check-tests:
+  <<: *docker
+  script:
+    - nox -s tests
+# check-typeguard:
+#   <<: *docker
+#   script:
+#     - nox -s typeguard

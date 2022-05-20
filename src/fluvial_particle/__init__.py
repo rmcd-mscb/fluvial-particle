@@ -13,12 +13,15 @@ import time
 import numpy as np
 import argparse
 import h5py
-from .Helpers import load_variable_source
-from .Settings import Settings
-from .FallingParticles import FallingParticles  # noqa
-from .LarvalParticles import LarvalBotParticles, LarvalTopParticles  # noqa
-from .Particles import Particles  # noqa
-from .RiverGrid import RiverGrid
+from fluvial_particle.Helpers import load_variable_source
+from fluvial_particle.Settings import Settings
+from fluvial_particle.FallingParticles import FallingParticles  # noqa F401
+from fluvial_particle.LarvalParticles import (
+    LarvalBotParticles,
+    LarvalTopParticles,
+)  # noqa
+from fluvial_particle.Particles import Particles  # noqa
+from fluvial_particle.RiverGrid import RiverGrid
 
 
 def checkcommandarguments():
@@ -36,7 +39,12 @@ def checkcommandarguments():
         default=None,
         help="Specify a single integer to fix the seed of the random number generator. Only used in serial mode.",
     )
-    parser.add_argument("--no-postprocess", "--no_postprocess", action="store_false", help="Include this flag to prevent RiverGrid post-processing.")
+    parser.add_argument(
+        "--no-postprocess",
+        "--no_postprocess",
+        action="store_false",
+        help="Include this flag to prevent RiverGrid post-processing.",
+    )
     # note: argparse will convert to key="no_postprocess"
 
     argdict = vars(parser.parse_args())
@@ -67,9 +75,6 @@ def get_prng(timer, seed=None):
 
     prng = np.random.RandomState(seed)
     return prng
-
-
-
 
 
 def load_checkpoint(fname, tidx, start, end, comm=None):

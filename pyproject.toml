@@ -11,7 +11,7 @@ source = ["fluvial_particle"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 100
+fail_under = 20
 
 [tool.mypy]
 check_untyped_defs = true
