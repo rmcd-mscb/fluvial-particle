@@ -196,7 +196,9 @@ class RiverGrid:
         time = grpc["time"]
         nsc = self.nsc
         num2dcells = self.vtksgrid2d.GetNumberOfCells()
-        cells_h5 = self.create_hdf5(n_prints, time, output_directory + "//cells.h5", **dset_kwargs)
+        cells_h5 = self.create_hdf5(
+            n_prints, time, output_directory + "//cells.h5", **dset_kwargs
+        )
         numpartin2dcell = np.zeros(num2dcells, dtype=np.int64)
         # totpartincell = np.zeros(num2dcells, dtype=np.int64)
         numpartin1dcell = np.zeros(nsc, dtype=np.int64)
