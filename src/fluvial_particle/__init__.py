@@ -13,15 +13,12 @@ import time
 import numpy as np
 import argparse
 import h5py
-from fluvial_particle.Helpers import load_variable_source
-from fluvial_particle.Settings import Settings
-from fluvial_particle.FallingParticles import FallingParticles  # noqa F401
-from fluvial_particle.LarvalParticles import (
-    LarvalBotParticles,
-    LarvalTopParticles,
-)  # noqa
-from fluvial_particle.Particles import Particles  # noqa
-from fluvial_particle.RiverGrid import RiverGrid
+from .Helpers import load_variable_source
+from .Settings import Settings
+from .FallingParticles import FallingParticles  # noqa
+from .LarvalParticles import LarvalBotParticles, LarvalTopParticles  # noqa
+from .Particles import Particles  # noqa
+from .RiverGrid import RiverGrid
 
 
 def checkcommandarguments():
