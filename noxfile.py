@@ -34,7 +34,7 @@ def install_conda_env_yaml(session: nox.Session) -> None:
         "--prefix",
         session.virtualenv.location,
         "--file",
-        "environment.yaml",
+        "environment.yml",
         "--prune",
     )
     print("finished conda install")
