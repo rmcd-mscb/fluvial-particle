@@ -7,8 +7,8 @@ from numpy.testing import assert_allclose
 from .support import get_h5file
 from .support import get_num_timesteps
 from .support import get_points
+from fluvial_particle import Settings
 from fluvial_particle import simulate
-from fluvial_particle.Settings import Settings
 
 # import os
 
