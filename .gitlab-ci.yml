@@ -7,7 +7,8 @@ stages:
 .install-deps-template: &install-deps
   before_script:
     - apt-get update
-    - apt-get -y install gdal-bin libgdal-dev
+    - apt-get upgrade
+    - apt-get -y install gdal-bin libgdal-dev libstdc++6
     - conda update -n base conda
     - conda install -c conda-forge mamba
     - mamba env update -n base --file environment.yml
