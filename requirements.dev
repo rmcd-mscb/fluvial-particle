@@ -26,4 +26,3 @@ reorder-python-imports
 ipython
 bump2version
 bandit<=1.7.2
-yaml

@@ -150,7 +150,7 @@ def tests(session: Session) -> None:
             session.notify("coverage", posargs=[])
 
 
-@nox.session
+@nox.session(python=python_versions, venv_backend="conda")
 def coverage(session: Session) -> None:
     """Produce the coverage report."""
     install_conda_env_yaml(session)
