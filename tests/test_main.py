@@ -1,5 +1,6 @@
 """Test cases for the __main__ module."""
 import time
+from tempfile import TemporaryDirectory
 
 import pytest
 from numpy.testing import assert_allclose
@@ -72,14 +73,16 @@ def run_simulation(argdict: dict) -> None:
 )
 def test_particle(argdict: dict, test_out_path: str) -> None:
     """Test basic particle-tracking."""
-    run_simulation(argdict)
-    # get particle output file
-    new_file = get_h5file(str(argdict.get("output_directory")) + "/particles.h5")
-    new_nts = get_num_timesteps(new_file)
-    new_points = get_points(new_file, new_nts - 1, twod=True)
-    print(type(new_points), new_points.shape)
-    test_file = get_h5file(str(test_out_path) + "/particles.h5")
-    test_nts = get_num_timesteps(test_file)
-    test_points = get_points(test_file, test_nts - 1, twod=True)
+    with TemporaryDirectory() as tmpdirname:
+        argdict["output_directory"] = tmpdirname
+        run_simulation(argdict)
+        # get particle output file
+        new_file = get_h5file(str(argdict.get("output_directory")) + "/particles.h5")
+        new_nts = get_num_timesteps(new_file)
+        new_points = get_points(new_file, new_nts - 1, twod=True)
+        print(type(new_points), new_points.shape)
+        test_file = get_h5file(str(test_out_path) + "/particles.h5")
+        test_nts = get_num_timesteps(test_file)
+        test_points = get_points(test_file, test_nts - 1, twod=True)
 
-    assert_allclose(test_points, new_points)
+        assert_allclose(test_points, new_points)
