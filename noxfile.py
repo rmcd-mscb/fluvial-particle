@@ -141,7 +141,7 @@ def mypy(session: Session) -> None:
 def tests(session: Session) -> None:
     """Run the test suite."""
     install_conda_env_yaml(session)
-    session.install("e", "." "--no-deps")
+    session.install("e", ".", "--no-deps")
     session.install("coverage[toml]", "pytest", "pygments")
     try:
         session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
