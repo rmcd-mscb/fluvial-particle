@@ -27,7 +27,7 @@ def install_conda_env_yaml(session: nox.Session) -> None:
     "Shortcut for installing conda env with yaml file"
     print(session.virtualenv.location)
     session._run(
-        "mamba",
+        "conda",
         "env",
         "update",
         "--verbose",
@@ -183,12 +183,12 @@ def xdoctest(session: Session) -> None:
     session.run("python", "-m", "xdoctest", package, *args)
 
 
-@nox.session(name="docs-build", python="3.9")
+@nox.session(name="docs-build", python="3.9", venv_backend="conda")
 def docs_build(session: Session) -> None:
     """Build the documentation."""
     install_conda_env_yaml(session)
     args = session.posargs or ["docs", "docs/_build/html"]
-    session.install(".")
+    session.install("e", ".", "--no-deps")
     session.install("sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser")
 
     build_dir = Path("docs", "_build/html")
