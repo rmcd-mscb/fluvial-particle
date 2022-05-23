@@ -11,6 +11,7 @@ stages:
     - apt-get -y install gdal-bin libgdal-dev libstdc++6
     - conda update -n base conda
     - conda install -c conda-forge mamba
+    - conda update -n base libstdcxx-ng
     - mamba env update -n base --file environment.yml
     - conda init bash
     - source ~/.bashrc
