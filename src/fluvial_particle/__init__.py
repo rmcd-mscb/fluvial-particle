@@ -36,7 +36,12 @@ def checkcommandarguments():
         default=None,
         help="Specify a single integer to fix the seed of the random number generator. Only used in serial mode.",
     )
-    parser.add_argument("--no-postprocess", "--no_postprocess", action="store_false", help="Include this flag to prevent RiverGrid post-processing.")
+    parser.add_argument(
+        "--no-postprocess",
+        "--no_postprocess",
+        action="store_false",
+        help="Include this flag to prevent RiverGrid post-processing.",
+    )
     # note: argparse will convert to key="no_postprocess"
 
     argdict = vars(parser.parse_args())
@@ -67,9 +72,6 @@ def get_prng(timer, seed=None):
 
     prng = np.random.RandomState(seed)
     return prng
-
-
-
 
 
 def load_checkpoint(fname, tidx, start, end, comm=None):

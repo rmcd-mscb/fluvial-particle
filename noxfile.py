@@ -9,7 +9,7 @@ from nox.sessions import Session
 
 
 package = "fluvial_particle"
-python_versions = ["3.9", "3.8"]
+python_versions = ["3.9"]
 nox.needs_version = ">= 2021.6.6"
 nox.options.sessions = (
     "pre-commit",
@@ -20,6 +20,27 @@ nox.options.sessions = (
     "xdoctest",
     "docs-build",
 )
+nox.options.default_venv_backend = "conda"
+
+
+def install_conda_env_yaml(session: nox.Session) -> None:
+    "Shortcut for installing conda env with yaml file"
+    print(session.virtualenv.location)
+    session._run(
+        "mamba",
+        "env",
+        "update",
+        "--verbose",
+        "--prefix",
+        session.virtualenv.location,
+        "--file",
+        "environment.yml",
+        "--prune",
+    )
+    print("finished conda install")
+    # session._run("poetry", "install", "-vv")
+    session.install("e", ".", "--no-deps")
+    print("finished package install")
 
 
 def activate_virtualenv_in_precommit_hooks(session: Session) -> None:
@@ -76,6 +97,7 @@ def activate_virtualenv_in_precommit_hooks(session: Session) -> None:
 @nox.session(name="pre-commit", python="3.9")
 def precommit(session: Session) -> None:
     """Lint using pre-commit."""
+    install_conda_env_yaml(session)
     args = session.posargs or ["run", "--all-files", "--show-diff-on-failure"]
     session.install(
         "black",
@@ -98,6 +120,7 @@ def precommit(session: Session) -> None:
 @nox.session(python="3.9")
 def safety(session: Session) -> None:
     """Scan dependencies for insecure packages."""
+    install_conda_env_yaml(session)
     session.install("safety", ".")
     session.run("safety", "check", "--full-report")
 
@@ -105,6 +128,7 @@ def safety(session: Session) -> None:
 @nox.session(python=python_versions)
 def mypy(session: Session) -> None:
     """Type-check using mypy."""
+    install_conda_env_yaml(session)
     args = session.posargs or ["src", "tests", "docs/conf.py"]
     session.install(".")
     session.install("mypy", "pytest")
@@ -113,10 +137,11 @@ def mypy(session: Session) -> None:
         session.run("mypy", f"--python-executable={sys.executable}", "noxfile.py")
 
 
-@nox.session(python=python_versions)
+@nox.session(python=python_versions, venv_backend="conda")
 def tests(session: Session) -> None:
     """Run the test suite."""
-    session.install(".")
+    install_conda_env_yaml(session)
+    session.install("e", ".", "--no-deps")
     session.install("coverage[toml]", "pytest", "pygments")
     try:
         session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
@@ -125,9 +150,10 @@ def tests(session: Session) -> None:
             session.notify("coverage", posargs=[])
 
 
-@nox.session
+@nox.session(python=python_versions, venv_backend="conda")
 def coverage(session: Session) -> None:
     """Produce the coverage report."""
+    install_conda_env_yaml(session)
     args = session.posargs or ["report"]
 
     session.install("coverage[toml]")
@@ -141,6 +167,7 @@ def coverage(session: Session) -> None:
 @nox.session(python=python_versions)
 def typeguard(session: Session) -> None:
     """Runtime type checking using Typeguard."""
+    install_conda_env_yaml(session)
     session.install(".")
     session.install("pytest", "typeguard", "pygments")
     session.run("pytest", f"--typeguard-packages={package}", *session.posargs)
@@ -149,6 +176,7 @@ def typeguard(session: Session) -> None:
 @nox.session(python=python_versions)
 def xdoctest(session: Session) -> None:
     """Run examples with xdoctest."""
+    install_conda_env_yaml(session)
     args = session.posargs or ["all"]
     session.install(".")
     session.install("xdoctest[colors]")
@@ -158,6 +186,7 @@ def xdoctest(session: Session) -> None:
 @nox.session(name="docs-build", python="3.9")
 def docs_build(session: Session) -> None:
     """Build the documentation."""
+    install_conda_env_yaml(session)
     args = session.posargs or ["docs", "docs/_build/html"]
     session.install(".")
     session.install("sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser")
@@ -172,6 +201,7 @@ def docs_build(session: Session) -> None:
 @nox.session(python="3.9")
 def docs(session: Session) -> None:
     """Build and serve the documentation with live reloading on file changes."""
+    install_conda_env_yaml(session)
     args = session.posargs or ["--open-browser", "docs", "docs/_build"]
     session.install(".")
     session.install("sphinx", "sphinx-autobuild", "sphinx-click", "sphinx-rtd-theme")
