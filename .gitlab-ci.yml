@@ -8,7 +8,8 @@ stages:
   before_script:
     - apt-get update
     - apt-get -y upgrade
-    - apt-get -y install gdal-bin libgdal-dev libstdc++6
+    - apt-get -y install gdal-bin libgdal-dev libstdc++6 libgl1-mesa-glx
+    - apt-get -y install ffmpeg libsm6 libxext6
     - conda update -n base conda
     - conda install -c conda-forge mamba
     - conda update -n base libstdcxx-ng
@@ -17,9 +18,9 @@ stages:
     - source ~/.bashrc
     - source activate base
     - python --version
-    - pip install -r requirements.dev
+    - pip install -r requirements.dev --no-deps
     - pre-commit install --install-hooks
-    - pip install -e .
+    - pip install -e . --no-deps
 
 .docker-template: &docker
   <<: *install-deps
