@@ -19,9 +19,9 @@ stages:
     - source activate base
     - which python
     - which pip
-    - pip install -r requirements.dev --no-deps
+    - pip install -r requirements.dev
     - pre-commit install --install-hooks
-    - pip install -e . --no-deps
+    - pip install -e .
 
 .docker-template: &docker
   <<: *install-deps
@@ -29,20 +29,20 @@ stages:
   stage: tests
 
 #test jobs -----------------------
-check-code:
-  <<: *docker
-  script: nox -s pre-commit
+# check-code:
+#   <<: *docker
+#   script: nox -s pre-commit
 
-check-safety:
-  <<: *docker
-  script:
-    - nox -s safety
+# check-safety:
+#   <<: *docker
+#   script:
+#     - nox -s safety
 
-coverage-check:
-  <<: *docker
-  script:
-    - nox -s tests
-    - nox -s coverage
+# coverage-check:
+#   <<: *docker
+#   script:
+#     - nox -s tests
+#     - nox -s coverage
 
 # check-typing:
 #   <<: *docker
