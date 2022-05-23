@@ -13,6 +13,7 @@ repos:
         entry: check-added-large-files
         args: ["--maxkb=3000"]
         language: system
+        exclude: ./tests/data/
       - id: check-toml
         name: Check Toml
         entry: check-toml
