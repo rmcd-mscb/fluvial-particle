@@ -39,7 +39,7 @@ def install_conda_env_yaml(session: nox.Session) -> None:
     )
     print("finished conda install")
     # session._run("poetry", "install", "-vv")
-    session.install(".")
+    session.install("e", ".", "--no-deps")
     print("finished package install")
 
 
@@ -137,11 +137,11 @@ def mypy(session: Session) -> None:
         session.run("mypy", f"--python-executable={sys.executable}", "noxfile.py")
 
 
-@nox.session(python=python_versions)
+@nox.session(python=python_versions, venv_backend="conda")
 def tests(session: Session) -> None:
     """Run the test suite."""
     install_conda_env_yaml(session)
-    session.install(".")
+    session.install("e", "." "--no-deps")
     session.install("coverage[toml]", "pytest", "pygments")
     try:
         session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
