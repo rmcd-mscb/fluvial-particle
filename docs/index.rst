@@ -9,6 +9,10 @@
    :maxdepth: 1
 
    usage
+   optionsfile
+   example
+   hdf5files
+   xdmffiles
    reference
    contributing
    Code of Conduct <codeofconduct>
