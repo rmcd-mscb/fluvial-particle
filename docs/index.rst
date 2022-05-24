@@ -11,8 +11,7 @@
    usage
    optionsfile
    example
-   hdf5files
-   xdmffiles
+   output
    reference
    contributing
    Code of Conduct <codeofconduct>

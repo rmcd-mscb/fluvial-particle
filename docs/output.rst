@@ -1,6 +1,42 @@
 ======================
-Output XDMF files
+Output 
 ======================
+
+Model output is written to two HDF5 files: particles.h5 and cells.h5. The particles.h5 file can be written to independently in parallel during an MPI-enabled run, while the cells.h5 file is written by a single processor in a post-processing loop using the data in particles.h5. Both files contain output from the same time step values. The files are organized similarly, with a single-level of groups in the root folder that hold either grid-related data or data defined over the grids. These data can be visualized with Paraview's XDMF Reader by reading the .xmf files that are also written during model execution.
+
+HDF5 files
+------------
+
+particles.h5 file organization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+All of the datasets in particles.h5 are stored as NumPy 8-byte floating point numbers (i.e. np.float64 types) with the exception of cellidx2d and cellidx3d which are np.int64 data types.
+From the HDF5 root directory, the *particles.h5* file is organized as:
+
+.. image:: data/particles_tree.PNG
+
+
+.. csv-table:: particles.h5 dataset descriptions
+ :file: data/particles.csv
+ :widths: 15, 20, 15, 50
+ :header-rows: 1
+
+
+cells.h5 file organization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+All of the datasets in cells.h5 are stored as NumPy 8-byte floating point numbers, i.e. np.float64 types. The fractional particle count data sets only store a single time slice each for reasons related to visualziation with XDMF. 
+From the HDF5 root directory, the *cells.h5* file is organized as:
+
+.. image:: data/cells_tree.PNG
+
+.. csv-table:: cells.h5 dataset descriptions
+ :file: data/cells.csv
+ :widths: 15, 20, 15, 50
+ :header-rows: 1
+
+
+XDMF files
+--------------
 
 To view the model output data in Paraview, read the XDMF files (.xmf extension) with Paraview's built-in "XDMF Reader." There are four files that describe model output defined on different spatial grids (but equivalent temporal grids): particles.xmf holds the time series of particle positions and fields interpolated from the grid nodes; cells1d.xmf holds the time series of quantities described at the 1D grid cell centers; cells2d.xmf and cells3d.xmf are the same with reference to the 2D and 3D grids. Each of the grids must be described in the .xmf files in terms of their topology, geometry, temporal organization, and dataset location. These files are generated automatically by *fluvial-particle* following the descriptions below.
 
