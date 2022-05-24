@@ -74,7 +74,7 @@ This file can be run in either serial or parallel execution mode. The input mesh
 
 
  # Some optional keyword arguments
- beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient
  lev = 0.00025  # reach-averaged lateral eddy viscosity
- min_depth = 0.02  # minimum depth particles may enter [meters]
- vertbound = 0.01  # depth fraction that bounds particles from bed and water surface
+ # beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient
+ # min_depth = 0.02  # minimum depth particles may enter [meters]
+ # vertbound = 0.01  # depth fraction that bounds particles from bed and water surface
