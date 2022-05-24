@@ -22,7 +22,7 @@ From the HDF5 root directory, the *particles.h5* file is organized as:
 
 cells.h5 file organization
 ---------------------------------
-All of the datasets in cells.h5 are stored as NumPy 8-byte floating point numbers, i.e. np.float64 types.
+All of the datasets in cells.h5 are stored as NumPy 8-byte floating point numbers, i.e. np.float64 types. The fractional particle count data sets only store a single time slice each for reasons related to visualziation with XDMF. 
 From the HDF5 root directory, the *cells.h5* file is organized as:
 
 .. image:: data/cells_tree.PNG
