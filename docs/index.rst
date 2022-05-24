@@ -9,6 +9,9 @@
    :maxdepth: 1
 
    usage
+   optionsfile
+   example
+   output
    reference
    contributing
    Code of Conduct <codeofconduct>
