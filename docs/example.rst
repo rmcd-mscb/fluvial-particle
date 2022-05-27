@@ -62,8 +62,8 @@ This file can be run in either serial or parallel execution mode. The input mesh
  """Options file for fluvial particle model."""
  
  # Required keyword arguments
- file_name_3d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_2D1.vtk"  # path to 3D mesh file
- file_name_2d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_3D1.vtk"  # path to 2D mesh file
+ file_name_2d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_2D1.vtk"  # path to 2D mesh file
+ file_name_3d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_3D1_new.vtk"  # path to 3D mesh file
  SimTime = 1000.0  # maximum simulation time [seconds]
  dt = 0.25  # simulation time step [seconds]
  PrintAtTick = 10.0  # Print every PrintAtTick seconds

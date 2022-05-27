@@ -1,0 +1,12 @@
+Dataset,Shape,Units,Description
+x,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",meters,x-coordinate of particles
+y,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",meters,y-coordinate of particles
+z,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",meters,z-coordinate of particles
+time,(N\ :sub:`prints`\ ),seconds,time value of every printing step
+bedelev,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",meters,"interpolated channel bed elevation at point x,y"
+cellidx2d,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",N/A,index of 2D grid cell containing the particle
+cellidx3d,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",N/A,index of 3D grid cell containing the particle
+depth,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",meters,interpolated water depth
+htabvbed,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",meters,"height of particle above channel bed, z - bedelev"
+velvec,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ , 3)",meters / second,"interpolated velocity vector, (v\ :sub:`x`\ , v\ :sub:`y`\ ,v\ :sub:`z`\ )"
+wse,"(N\ :sub:`prints`\ , N\ :sub:`particles`\ )",meters,interpolated water surface elevation

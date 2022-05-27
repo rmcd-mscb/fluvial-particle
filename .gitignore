@@ -1,6 +1,6 @@
 output/
 .vscode/
-data/
+./data/
 misc/
 .vscode/
 tests/test/

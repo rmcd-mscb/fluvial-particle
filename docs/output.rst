@@ -10,8 +10,9 @@ HDF5 files
 particles.h5 file organization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-All of the datasets in particles.h5 are stored as NumPy 8-byte floating point numbers (i.e. np.float64 types) with the exception of cellidx2d and cellidx3d which are np.int64 data types.
-From the HDF5 root directory, the *particles.h5* file is organized as:
+The particles.h5 file contains the coordinates and interpolated quantities for each of the printing time slices. The dataset dimensions have sizes N\ :sub:`prints` (the total number of printing steps), and N\ :sub:`particles` (the total number of simulated particles). All of the datasets in particles.h5 are stored as NumPy 8-byte floating point numbers (i.e. np.float64 types) with the exception of cellidx2d and cellidx3d which are np.int64 data types.
+
+The *particles.h5* file is organized as:
 
 .. image:: data/particles_tree.PNG
 
@@ -24,8 +25,9 @@ From the HDF5 root directory, the *particles.h5* file is organized as:
 
 cells.h5 file organization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-All of the datasets in cells.h5 are stored as NumPy 8-byte floating point numbers, i.e. np.float64 types. The fractional particle count data sets only store a single time slice each for reasons related to visualziation with XDMF. 
-From the HDF5 root directory, the *cells.h5* file is organized as:
+The cells.h5 file contains particle concentrations (as a fraction of total simulated particles) in the cells of the input river curvilinear meshes. The dimensions of the meshes are (N\ :sub:`s`\ , N\ :sub:`n`\ , N\ :sub:`z`\ ), where N\ :sub:`s` is the number of nodes in the streamwise direction, N\ :sub:`n` is the number of nodes in the cross-stream direction, and N\ :sub:`z` is the number of nodes in the vertical. Note that the different array orderings in cells.h5 are necessary for visualizing with XDMF in Paraview. All of the datasets in cells.h5 are stored as NumPy 8-byte floating point numbers, i.e. np.float64 types. The fractional particle count data sets only store a single time slice each for reasons related to visualziation with XDMF.
+
+The *cells.h5* file is organized as:
 
 .. image:: data/cells_tree.PNG
 

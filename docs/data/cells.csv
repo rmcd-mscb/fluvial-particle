@@ -1,0 +1,9 @@
+Dataset,Shape,Units,Description
+X,"(N\ :sub:`z`\ , N\ :sub:`n`\ , N\ :sub:`s`\ )",meters,x-coordinate of curvilinear grid nodes
+Y,"(N\ :sub:`z`\ , N\ :sub:`n`\ , N\ :sub:`s`\ )",meters,y-coordinate of curvilinear grid nodes
+Z,"(N\ :sub:`z`\ , N\ :sub:`n`\ , N\ :sub:`s`\ )",meters,z-coordinate of curvilinear grid nodes
+time,(N\ :sub:`prints`\ ),seconds,time value of every printing step
+zeros,(N\ :sub:`s`\  - 1),N/A,array of zeros for cells1D polyvertex visualization
+/cells1d/fpc\ *n*,(N\ :sub:`s`\  - 1),N/A,fractional particle count in each streamwise 1D cell at the *nth* printing step
+/cells2d/fpc\ *n*,"(N\ :sub:`s`\  - 1, N\ :sub:`n`\  - 1)",N/A,fractional particle count in each 2D grid cell
+/cells3d/fpc\ *n*,"(N\ :sub:`s`\  - 1, N\ :sub:`n`\  - 1, N\ :sub:`z`\  - 1)",N/A,fractional particle count in each 3D grid cell
