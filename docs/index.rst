@@ -12,6 +12,7 @@
    optionsfile
    example
    output
+   memory
    reference
    contributing
    Code of Conduct <codeofconduct>
