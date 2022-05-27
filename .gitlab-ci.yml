@@ -11,7 +11,7 @@ stages:
     - apt-get -y install gdal-bin libgdal-dev libstdc++6 libgl1-mesa-glx
     - apt-get -y install ffmpeg libsm6 libxext6
     - conda update -n base conda
-    - conda install -c conda-forge mamba
+    - conda install -c conda-forge mamba=0.23.3
     - conda update -n base libstdcxx-ng
     - mamba env update -n base --file environment.yml
     - conda init bash
