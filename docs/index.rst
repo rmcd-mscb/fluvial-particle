@@ -12,7 +12,7 @@
    optionsfile
    example
    output
-   memory
+   scaling
    reference
    contributing
    Code of Conduct <codeofconduct>
