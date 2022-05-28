@@ -27,7 +27,7 @@ def install_conda_env_yaml(session: nox.Session) -> None:
     "Shortcut for installing conda env with yaml file"
     print(session.virtualenv.location)
     session._run(
-        "conda",
+        "mamba",
         "env",
         "update",
         "--verbose",
