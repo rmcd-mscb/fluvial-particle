@@ -52,3 +52,6 @@ As an example, the plots below show the print-step scaling relations for both fi
 
 
 .. image:: data/memory_cellshdf5.png
+
+
+When using 8,192 cores on Denali in the strong scaling experiment, the particles HDF5 file was larger than expected by several tens of GiBs, possibly due to increased metadata associated with dataset memory chunking.

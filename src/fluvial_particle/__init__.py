@@ -197,7 +197,10 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     # Initialize class of particles instance
     particles = particles(npart, x, y, z, rng, river, **settings)
 
-    particles.initial_validation(starttime=0.0, frac=0.5)
+    frac = None
+    if "startfrac" in settings.keys():
+        frac = settings["startfrac"]
+    particles.initial_validation(starttime=starttime, frac=frac)
 
     # Calc simulation and printing times
     if starttime >= endtime:
