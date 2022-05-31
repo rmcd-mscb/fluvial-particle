@@ -6,6 +6,7 @@ stages:
 
 .install-deps-template: &install-deps
   before_script:
+    - ln -fs /usr/share/zoneinfo/UTC /etc/localtime
     - apt-get update
     - apt-get -y upgrade
     - apt-get -y install gdal-bin libgdal-dev libstdc++6 libgl1-mesa-glx
