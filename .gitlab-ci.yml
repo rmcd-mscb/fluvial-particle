@@ -6,15 +6,14 @@ stages:
 
 .install-deps-template: &install-deps
   before_script:
+    - ln -fs /usr/share/zoneinfo/UTC /etc/localtime
     - apt-get update
     - apt-get -y upgrade
     - apt-get -y install gdal-bin libgdal-dev libstdc++6 libgl1-mesa-glx
     - apt-get -y install ffmpeg libsm6 libxext6
-    - conda update -n base conda
-    - conda install -c conda-forge "mamba>=0.23.3"
-    - conda update -n base libstdcxx-ng
+    - mamba update -n base mamba
     - mamba env update -n base --file environment.yml
-    - conda init bash
+    - mamba init bash
     - source ~/.bashrc
     - source activate base
     - which python
@@ -25,7 +24,7 @@ stages:
 
 .docker-template: &docker
   <<: *install-deps
-  image: continuumio/miniconda3:latest
+  image: condaforge/mambaforge:latest
   stage: tests
 
 #test jobs -----------------------
