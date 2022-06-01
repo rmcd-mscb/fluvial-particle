@@ -1,12 +1,13 @@
 .. include:: ../README.md
-   :end-before: github-only
+   :parser: myst_parser.docutils_
 
-.. _Contributor Guide: contributing.html
-.. _Usage: usage.html
+_Contributor Guide: contributing.html
+_Usage: usage.html
 
 .. toctree::
    :hidden:
    :maxdepth: 1
+   :titlesonly:
 
    usage
    optionsfile
@@ -15,6 +16,6 @@
    memory
    reference
    contributing
-   Code of Conduct <codeofconduct>
+   codeofconduct
    License <license>
-   Changelog <https://github.com/rmcd-mscb/fluvial-particle/releases>
+   Changelog <https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/HISTORY.rst>

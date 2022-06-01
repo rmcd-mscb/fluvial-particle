@@ -1,4 +1,5 @@
-.. include:: ../CONTRIBUTING.rst
-   :end-before: github-only
+
+.. include:: ../CONTRIBUTING.md
+   :parser: myst_parser.docutils_
 
 .. _Code of Conduct: codeofconduct.html
