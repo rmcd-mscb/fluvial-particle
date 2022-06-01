@@ -27,3 +27,5 @@ ipython
 bump2version
 bandit<=1.7.2
 mamba
+build
+twine
