@@ -2,7 +2,7 @@
 
 __author__ = "Richard McDonald"
 __email__ = "rmcd@usgs.gov"
-__version__ = "0.0.1"
+__version__ = "0.0.2-dev0"
 
 
 from datetime import timedelta
