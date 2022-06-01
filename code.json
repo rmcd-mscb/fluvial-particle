@@ -3,7 +3,7 @@
     "name": "fluvial-particle",
     "organization": "U.S. Geological Survey",
     "description": "Lagrangian particle-tracking code for 2d/3d hydraulic models.",
-    "version": "0.0.2-dev0",
+    "version": "0.0.3-dev0",
     "status": "Development",
 
     "permissions": {
