@@ -17,10 +17,9 @@ stages:
     - source ~/.bashrc
     - source activate base
     - which python
-    - which pip
-    - pip install -r requirements.dev
+    - poetry config virtualenvs.create false
+    - poetry install
     - pre-commit install --install-hooks
-    - pip install -e .
 
 .docker-template: &docker
   <<: *install-deps

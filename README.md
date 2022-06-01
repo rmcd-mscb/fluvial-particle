@@ -17,8 +17,6 @@
 
 ## Requirements
 
-per Cliff Hills setup description: <https://code.usgs.gov/wma/nhgf/pygeoapi-plugin-cookiecutter>
-
 To set up your development environment do the following.
 
 - fork the reposistory

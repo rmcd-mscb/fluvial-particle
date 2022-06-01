@@ -1,6 +1,55 @@
+[tool.poetry]
+name = "fluvial-particle"
+version = "0.0.3-dev0"
+description = "Lagrangian particle-tracking for fluvial environments."
+authors = ["Richard McDonald <rmcd@usgs.gov>"]
+license = "LICENSE.md"
+readme = "README.md"
+homepage = "https://code.usgs.gov/wma/nhgf/fluvparticle"
+repository = "https://code.usgs.gov/wma/nhgf/fluvparticle"
+documentation = "https://fluvial-particle.readthedocs.io/en/latest/"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+h5py = "^3.7.0"
+vtk = ">=9.1"
+
+[tool.poetry.dev-dependencies]
+black = "^22.3.0"
+darglint = "^1.8.1"
+flake8 = "^4.0.1"
+flake8-bandit = "^3.0.0"
+flake8-bugbear = "^22.4.25"
+flake8-docstrings = "^1.6.0"
+flake8-rst-docstrings = "^0.2.5"
+nox = "^2022.1.7"
+pep8-naming = "^0.12.1"
+pre-commit = "^2.19.0"
+pre-commit-hooks = "^4.2.0"
+safety = "^1.10.3"
+mypy = "^0.960"
+pytest = "^7.1.2"
+coverage = {extras = ["toml"], version = "^6.4"}
+Pygments = "^2.12.0"
+typeguard = "^2.13.3"
+xdoctest = "^1.0.0"
+Sphinx = ">=3.1,<5"
+sphinx-click = "^4.1.0"
+sphinx-autobuild = "^2021.3.14"
+sphinx-rtd-theme = "^1.0.0"
+myst-parser = "^0.17.2"
+reorder-python-imports = "^3.1.0"
+ipython = "^8.4.0"
+bump2version = "^1.0.1"
+bandit = "^1.7.4"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.black]
 line-length = 88
-target-version = ["py38"]
+target-version = ["py39"]
 
 [tool.coverage.paths]
 source = ["src", "*/site-packages"]
@@ -11,7 +60,7 @@ source = ["fluvial_particle"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 20
+fail_under = 60
 
 [tool.mypy]
 check_untyped_defs = true

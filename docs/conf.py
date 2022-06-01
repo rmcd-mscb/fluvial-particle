@@ -17,7 +17,21 @@ extensions = [
     "myst_parser",
 ]
 
-myst_enable_extensions = ["colon_fence"]
+myst_enable_extensions = [
+    "amsmath",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "fieldlist",
+    "html_admonition",
+    "html_image",
+    "linkify",
+    "replacements",
+    "smartquotes",
+    "strikethrough",
+    "substitution",
+    "tasklist",
+]
 
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 autodoc_typehints = "description"
