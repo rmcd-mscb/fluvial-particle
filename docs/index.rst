@@ -13,7 +13,7 @@ _Usage: usage.html
    optionsfile
    example
    output
-   memory
+   scaling
    reference
    contributing
    codeofconduct

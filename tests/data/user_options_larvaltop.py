@@ -18,6 +18,7 @@ NumPart = 20  # Number of particles to simulate per processor
 # StartIdx = 45  # optional time slice index to pull data from, defaults to -1
 # StartLoc = (490.0, -4965.0, 530.0)
 StartLoc = (6.14, 9.09, 10.3)
+startfrac = 0.5
 # StartLoc = "./tests/data/varsrc.csv"
 
 # Particle type for the simulation
