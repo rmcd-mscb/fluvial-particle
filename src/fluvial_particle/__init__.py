@@ -56,7 +56,7 @@ def checkcommandarguments():
     return argdict
 
 
-def get_prng(timer, seed=None):
+def get_prng(timer, comm=None, seed=None):
     """Generate a random seed using time and the process id.
 
     Returns
@@ -68,7 +68,8 @@ def get_prng(timer, seed=None):
     if seed is None:
         seed = np.int64(np.abs(((timer() * 181) * ((getpid() - 83) * 359)) % 104729))
 
-    print(f"Using seed {seed}", flush=True)
+    if comm is None:
+        print(f"Using seed {seed}", flush=True)
 
     prng = np.random.RandomState(seed)
     return prng
@@ -192,7 +193,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")
 
     # Get NumPy random state
-    rng = get_prng(timer, seed)
+    rng = get_prng(timer, comm, seed)
 
     # Initialize class of particles instance
     particles = particles(npart, x, y, z, rng, river, **settings)
@@ -262,11 +263,6 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
                 if comm is None:
                     print(
                         f"No active particles remain; exiting loop at time T={times[i]}",
-                        flush=True,
-                    )
-                else:
-                    print(
-                        f"No active particles remain on processor {rank}; exiting local loop at T={times[i]}",
                         flush=True,
                     )
                 break

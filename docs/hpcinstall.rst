@@ -84,7 +84,7 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
 
 And that is it! Your are ready to run massively in parallel on Denali.
 
-An example SLURM submission script follows that runs on a single compute node with 40 cores. Note that the environment commands of step 1 are duplicated in the script.
+An example SLURM submission script follows that runs on a single compute node with 40 cores. Note that the environment commands of step 1 are duplicated in the script. This will run using the settings in user_options.py and will simulate a total of 40*NumPart particles.
 
 .. code-block:: slurm
 
@@ -93,7 +93,7 @@ An example SLURM submission script follows that runs on a single compute node wi
  #SBATCH --job-name=fluvparticle-mpi-sim
  #SBATCH -N 1
  #SBATCH -n 40
- #SBATCH -p <partition>
+ #SBATCH -p workq
  #SBATCH --account=<your account>
  #SBATCH --hint=nomultithread
  #SBATCH --time=2-00:00:00
