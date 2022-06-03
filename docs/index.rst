@@ -14,6 +14,7 @@ _Usage: usage.html
    example
    output
    scaling
+   hpcinstall
    reference
    contributing
    codeofconduct
