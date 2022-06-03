@@ -22,8 +22,8 @@ To set up your development environment do the following.
 - fork the reposistory
 
 ```{.sourceCode .console}
-# to remind yourself your working on a fork
-git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-partile-fork
+# to remind yourself you're working on a fork
+git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-particle-fork
 ```
 
 Setup Development Environment

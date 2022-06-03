@@ -37,7 +37,7 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
 
     .. code:: bash
      
-     conda create -n fluvial-mpi python=3.9
+     conda create -n fluvial-mpi python=3.9 poetry
      source /caldera/path/to/miniconda3/bin/activate fluvial-mpi
 
 4. Download and install mpi4py using the system compiler -- this will install mpi4py with reference to the already loaded MPICH module.
@@ -74,12 +74,12 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
 
      pip install vtk
 
-7. Install *fluvial-particle* on the fluvial-mpi conda environment. If you haven't already, clone the repository into your Caldera space.
+7. Install *fluvial-particle* on the fluvial-mpi conda environment using the poetry package. If you haven't already, clone the repository into your Caldera work space with :bash:`git clone https://code.usgs.gov/wma/nhgf/fluvparticle.git`.
 
     .. code:: bash
 
      cd path/to/caldera/fluvparticle
-     pip install -e .
+     poetry install
 
 
 And that is it! Your are ready to run massively in parallel on Denali.
