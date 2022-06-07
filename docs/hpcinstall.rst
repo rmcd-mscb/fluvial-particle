@@ -28,9 +28,15 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
      wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
      bash ./Miniconda3-latest-Linux-x86_64.sh
 
-   Be sure to specify a location on your Caldera path when asked where to install conda, e.g. :bash:`/caldera/path/to/your/directory/miniconda3`
+   Be sure to specify a location on your Caldera path when asked where to install conda, e.g. :bash:`/caldera/projects/your/path/miniconda3/`
    
-   When asked by the installer if you would like it to initialize Miniconda3, answer "no". Once installation completes, run :bash:`/path/to/miniconda3/bin/conda init` to initialize. You may need to log out and back in -- remember to repeat step 1!
+   When asked by the installer if you would like it to initialize Miniconda3, answer "no". Instead, once installation completes, initialize with
+   
+    .. code:: bash
+
+     /path/to/miniconda3/bin/conda init
+    
+   You may need to log out and back in -- remember to repeat step 1!
  
 
 3. Create the conda environment with Python 3.9, then activate using source (this is equivalent to running conda activate fluvial-mpi but is more robust).
