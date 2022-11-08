@@ -13,13 +13,11 @@
 
 A Python package to efficiently model active- and passive-particle transport in flowing rivers.
 
-![An animated image shows a fluvial-particle simulation output in the Kootenai River, Idaho, USA](./data/simulation_example.png "KootenaiParticles")
+![An animated image shows a fluvial-particle simulation output in the Kootenai River, Idaho, USA](./data/kootenai_2to27_particles_fpc2d_rotate.gif "KootenaiParticles")
 
 ## Description
 
 This package advects conservative flow tracers (a.k.a. passive particles) with the fluid velocity and displaces them with stochastic diffusion due to fluid turbulence over discrete time steps. It tracks particles under a Lagrangian frame of reference as they move through a curvilinear 2- or 3-D hydrodynamic mesh. Users may customize particle subclasses to implement additional active particle motions, e.g. channel-bed adjacent sinusoidal vertical motion to simulate the preferred swimming patterns of white sturgeon larvae (McDonald and Nelson, 2021).
-
-![An animated image shows a fluvial-particle simulation output in the Kootenai River, Idaho, USA](./data/kootenai_2to27_particles_fpc2d_rotate.gif "KootenaiParticles")
 
 ## Efficiently programmed and parallel enabled
 
@@ -207,19 +205,19 @@ Note:
 
 ## Installation
 
-You can install _Fluvial_Particle_ via pip from [PyPI](https://pypi.org/):
+You can install *fluvial-particle* via pip from [PyPI](https://pypi.org/):
 
 ```shell
 pip install fluvial-particle
 ```
 ## Usage
 
-TODO
+Directions on invoking *fluvial-particle* from the command line can be found in the [docs](https://fluvial-particle.readthedocs.io/en/latest/usage.html).
 
 ## Contributing
 
 Contributions are very welcome.
-To learn more, see the [Contributor Guide](https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/CONTRIBUTING.md).
+To learn more, see the [Contributor Guide](https://fluvial-particle.readthedocs.io/en/latest/contributing.html).
 
 ## License
 
