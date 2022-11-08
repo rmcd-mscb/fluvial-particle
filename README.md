@@ -1,4 +1,4 @@
-# Fluvial Particle
+# Welcome to *fluvial-particle*
 
 [![PyPI](https://img.shields.io/pypi/v/fluvial-particle.svg)](https://pypi.org/project/fluvial-particle/)
 [![Status](https://img.shields.io/pypi/status/fluvial-particle.svg)](https://pypi.org/project/fluvial-particle/)
@@ -10,6 +10,28 @@
 [![Codecov](https://codecov.io/gh/rmcd-mscb/fluvial-particle/branch/main/graph/badge.svg)](https://codecov.io/gh/rmcd-mscb/fluvial-particle)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+A Python package to efficiently model active- and passive-particle transport in flowing rivers.
+
+![An animated image shows a fluvial-particle simulation output in the Kootenai River, Idaho, USA](./data/simulation_example.png "KootenaiParticles")
+
+## Description
+
+This package advects conservative flow tracers (a.k.a. passive particles) with the fluid velocity and displaces them with stochastic diffusion due to fluid turbulence over discrete time steps. It tracks particles under a Lagrangian frame of reference as they move through a curvilinear 2- or 3-D hydrodynamic mesh. Users may customize particle subclasses to implement additional active particle motions, e.g. channel-bed adjacent sinusoidal vertical motion to simulate the preferred swimming patterns of white sturgeon larvae (McDonald and Nelson, 2021).
+
+![An animated image shows a fluvial-particle simulation output in the Kootenai River, Idaho, USA](./data/kootenai_2to27_particles_fpc2d_rotate.gif "KootenaiParticles")
+
+## Efficiently programmed and parallel enabled
+
+As the total simulation duration, the size of the mesh, or the number of particles increases, so too do the computational resources used in the simulation (real-world time, memory, etc.). *fluvial-particle* uses the efficient array storage and operator methods of NumPy and VTK to update particle positions. Simulation results are written to hierarchical data format (HDF5) files using the h5py package, which allows writing and compression of terabytes of data. The mpi4py package enables massively-parallel execution mode to simulate millions or billions of particles (or more!). A strong-scaling test simulation of 2<sup>27</sup> particles on the Kootenai River over many thousands of CPUs shows that MPI-enabled fluvial-particle scales well, as shown in the figure below.
+
+![Strong-scaling panel shows the decrease in simulation time and the simulation speed-up as a function of the number of CPUs (from 2^10 to 2^13 CPUs) used in the simulation. The scaling is very close to ideal over this range.](./data/strongscalingpanel.png "Parallel strong scaling")
+
+For simulations over a large spatial or temporal domain, a large number of particles is needed to adequately resolve the particle concentrations. Consider the figure below. It shows a sequence of simulated particle density surfaces at the same time slice on the Kootenai River, Idaho, where each simulation uses a different number of particles. The left image shows the 2D output, and the right image shows the 3D surface and cross-sectional slice from the region outlined in the 2D image.
+As the number of simulated particles increases, the 3D distribution taken from near the center of mass of the transported particles becomes continuous. The 2D distribution shows greater resolution as the number of particles increases, especially towards the tails of the distribution. For research in which capturing the distribution tails is important (e.g. river dye-dispersion studies), a sufficient number of particles must be used. Parallel execution with MPI enables greater particle concentration resolution without significantly increasing the total real-world execution time.
+
+![An animated image shows a 2D and 3D snapshot of the Kootenai River results over multiple simulations that use different numbers of particles.](./data/kootenai_decimate_particles_fpc.gif "Simulation resolution as function of number of particles")
+
 
 ## Features
 
