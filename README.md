@@ -31,8 +31,8 @@ Setup Development Environment
 
 ```shell
 conda env create -f environment.yml
-conda develop -n {{cookiecutter.project_name}} src
-conda activate {{cookiecutter.project_name}}
+conda develop -n fluvial-particle src
+conda activate fluvial-particle
 pip install -r requirements.dev
 ```
 
@@ -185,7 +185,7 @@ Note:
 
 ## Installation
 
-You can install _Fluvial_Particle_ via pip from `PyPI_`:
+You can install _Fluvial_Particle_ via pip from [PyPI](https://pypi.org/):
 
 $ pip install fluvial-particle
 
@@ -196,28 +196,17 @@ TODO
 ## Contributing
 
 Contributions are very welcome.
-To learn more, see the `Contributor Guide_`\.
+To learn more, see the [Contributor Guide](https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/CONTRIBUTING.md).
 
 ## License
 
-Distributed under the terms of the `CCO 1.0 license_`, Fluvial Particle is free and open source software.
+Distributed under the terms of the [CCO 1.0 license](https://creativecommons.org/publicdomain/zero/1.0/legalcode), Fluvial Particle is free and open source software.
 
 ## Issues
 
 If you encounter any problems,
-please `file an issue_` along with a detailed description.
+please [file an issue](https://github.com/rmcd-mscb/fluvial-particle/issues) along with a detailed description.
 
 ## Credits
 
-This project was generated from `@hillc-usgs_`'s `Pygeoapi Plugin Cookiecutter_` template.
-
-..\_@hillc-usgs: <https://github.com/hillc-usgs>
-..\_Cookiecutter: <https://github.com/audreyr/cookiecutter>
-..\_CCO 1.0 license: <https://creativecommons.org/publicdomain/zero/1.0/legalcode>
-..\_PyPI: <https://pypi.org/>
-..\_Pygeoapi Plugin Cookiecutter: <https://code.usgs.gov/wma/nhgf/pygeoapi-plugin-cookiecutter>
-..\_file an issue: <https://github.com/rmcd-mscb/fluvial-particle/issues>
-..\_pip: <https://pip.pypa.io/>
-.. github-only
-..\_Contributor Guide: CONTRIBUTING.rst
-..\_Usage: <https://fluvial-particle.readthedocs.io/en/latest/usage.html>
+This project was generated from [hillc-usgs's](https://github.com/hillc-usgs) [Pygeoapi Plugin Cookiecutter](https://code.usgs.gov/wma/nhgf/pygeoapi-plugin-cookiecutter) template.

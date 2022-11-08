@@ -11,7 +11,7 @@ Here is a list of important resources for contributors:
 - [Source Code](https://code.usgs.gov/wma/nhgf/fluvparticle)
 - [Documentation](https://fluvial-particle.readthedocs.io/)
 - [Issue Tracker](https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues)
-- [Code of Conduct](./CODE_OF_CONDUCT.md)
+- [Code of Conduct](https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/CONTRIBUTING.md)
 
 ## How to report a bug
 
