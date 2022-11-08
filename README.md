@@ -35,128 +35,16 @@ As the number of simulated particles increases, the 3D distribution taken from n
 
 - TODO
 
-## Requirements
+## Installation
 
-To set up your development environment do the following.
-
-- fork the reposistory
-
-To remind yourself you're working on a fork.
+You can install *fluvial-particle* via pip from [PyPI](https://pypi.org/):
 
 ```shell
-git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-particle-fork
+pip install fluvial-particle
 ```
+## Usage
 
-Setup Development Environment
-
-```shell
-conda env create -f environment.yml
-conda develop -n fluvial-particle src
-conda activate fluvial-particle
-pip install -r requirements.dev
-```
-
-It is important to get [preccommit](https://pre-commit.com/) enabled on
-the project, to ensure that certain standards are always met on a git
-commit. With several of these, it might fail if files are changed, but
-it will change them, and trying the commit a second time will actually
-work.
-
-### Git hook configuration
-
-```shell
-pre-commit install --install-hooks
-```
-
-### Testing
-
-[Nox](https://nox.thea.codes/) is used for testing everything, with
-several sessions built-in. To run the full suite of tests, simply use:
-
-```shell
-nox
-```
-
-The different sessions are:
-
-- `pre-commit` -- validates that the
-  [preccommit](https://pre-commit.com/) checks all come back clean.
-- `safety` -- validates the [Safety](https://github.com/pyupio/safety)
-  of all production dependencies.
-- `mypy` -- validates the type-hints for the application using
-  [mypy](http://mypy-lang.org/).
-- `tests` -- runs all [pytest](https://docs.pytest.org/en/latest/)
-  tests.
-- `typeguard` -- runs all [pytest](https://docs.pytest.org/en/latest/)
-  tests, validates with
-  [Typeguard](https://github.com/agronholm/typeguard).
-- `xdoctest` -- runs any and all documentation examples with
-  [xdoctest](https://github.com/Erotemic/xdoctest).
-- `docs-build` -- builds the full set of generated API docs with
-  [Sphinx](http://www.sphinx-doc.org/).
-
-These can be run individually with the following command:
-
-```shell
-nox -s <session>
-```
-
-Replace `<session>` with the name of the session give above, i.e.:
-
-```shell
-nox -s mypy
-```
-
-You can also simply run [pytest](https://docs.pytest.org/en/latest/)
-tests, by using the command:
-
-```shell
-pytest tests
-```
-
-### Dependencies
-
-Production dependencies are duplicated, in both `requirements.txt` and
-`environment.yml` due to how [conda](https://www.anaconda.com) does not
-work with the `requirements.txt` file. It is necessary for both files to
-be updated as dependencies are added.
-
-Development dependencies are contained in `requirements.dev`.
-
-### Version Management
-
-The projects made by this cookiecutter use
-[Bump2version](https://github.com/c4urself/bump2version) for version
-management. The default version that the project starts with is a
-developmental version, `0.0.1-dev0`. In github, this should be
-auto-incremented on each commit to the next dev build number. To manage
-the version changes yourself, you can use the
-[Bump2version](https://github.com/c4urself/bump2version) command:
-
-```shell
-bump2version <part>
-```
-
-Where `<part>` is one of:
-
-- `major`
-- `minor`
-- `patch`
-- `build`
-
-Note:
-: This makes a `dev` version, which does not write a tag into git. It is just useful for development purposes and not the version that is recommended for a release version. The version string will be formatted as: `<major>.<minor>.<patch>-dev<build>`
-
-To do a production release, use the command:
-
-```shell
-bump2version --tag release
-```
-
-This will add a tag in the git repository noting the version.
-
-Note:
-: The version string for this will be: `<major>.<minor>.<patch>`
+Directions on invoking *fluvial-particle* from the command line can be found in the [docs](https://fluvial-particle.readthedocs.io/en/latest/usage.html).
 
 ## Utilities
 
@@ -202,17 +90,6 @@ Note:
   [Bump2version](https://github.com/c4urself/bump2version)
 - Automatic loading/unloading of [conda](https://www.anaconda.com)
   environment with [direnv](https://direnv.net/)
-
-## Installation
-
-You can install *fluvial-particle* via pip from [PyPI](https://pypi.org/):
-
-```shell
-pip install fluvial-particle
-```
-## Usage
-
-Directions on invoking *fluvial-particle* from the command line can be found in the [docs](https://fluvial-particle.readthedocs.io/en/latest/usage.html).
 
 ## Contributing
 
