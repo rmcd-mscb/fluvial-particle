@@ -209,8 +209,9 @@ Note:
 
 You can install _Fluvial_Particle_ via pip from [PyPI](https://pypi.org/):
 
-$ pip install fluvial-particle
-
+```shell
+pip install fluvial-particle
+```
 ## Usage
 
 TODO
@@ -227,7 +228,7 @@ Distributed under the terms of the [CCO 1.0 license](https://creativecommons.org
 ## Issues
 
 If you encounter any problems,
-please [file an issue](https://github.com/rmcd-mscb/fluvial-particle/issues) along with a detailed description.
+please [file an issue](https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues) along with a detailed description.
 
 ## Credits
 

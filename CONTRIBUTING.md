@@ -11,7 +11,7 @@ Here is a list of important resources for contributors:
 - [Source Code](https://code.usgs.gov/wma/nhgf/fluvparticle)
 - [Documentation](https://fluvial-particle.readthedocs.io/)
 - [Issue Tracker](https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues)
-- [Code of Conduct](https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/CODE_OF_CONDUCT.md)
 
 ## How to report a bug
 
@@ -32,56 +32,9 @@ steps to reproduce the issue.
 
 Request features on the [Issue Tracker\_]{.title-ref}.
 
-## How to set up your development environment
-
-You need Python 3.6+ and the following tools:
-
-- [Poetry](https://python-poetry.org/)
-- [Nox](https://nox.thea.codes/)
-- [nox-poetry](https://nox-poetry.readthedocs.io/)
-
-Install the package with development requirements:
-
-```shell
-poetry install
-```
-
-You can now run an interactive Python session, or the command-line
-interface:
-
-```shell
-poetry run python
-poetry run fluvial-particle
-```
-
-## How to test the project
-
-Run the full test suite:
-
-```shell
-nox
-```
-
-List the available Nox sessions:
-
-```shell
-nox --list-sessions
-```
-
-You can also run a specific Nox session. For example, invoke the unit
-test suite like this:
-
-```shell
-nox --session=tests
-```
-
-Unit tests are located in the `tests` directory, and are written using
-the [pytest](https://pytest.readthedocs.io/) testing framework.
-
 ## How to submit changes
 
-Open a [pull
-request](https://code.usgs.gov/wma/nhgf/fluvparticle/-/merge_requests)
+Open a [pull request](https://code.usgs.gov/wma/nhgf/fluvparticle/-/merge_requests)
 to submit changes to this project.
 
 Your pull request needs to meet the following guidelines for acceptance:
