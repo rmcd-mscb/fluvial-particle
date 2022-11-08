@@ -11,7 +11,7 @@ Here is a list of important resources for contributors:
 - [Source Code](https://code.usgs.gov/wma/nhgf/fluvparticle)
 - [Documentation](https://fluvial-particle.readthedocs.io/)
 - [Issue Tracker](https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues)
-- [Code of Conduct](CODE_OF_CONDUCT.rst)
+- [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 ## How to report a bug
 
@@ -42,14 +42,14 @@ You need Python 3.6+ and the following tools:
 
 Install the package with development requirements:
 
-```{.sourceCode .console}
+```shell
 poetry install
 ```
 
 You can now run an interactive Python session, or the command-line
 interface:
 
-```{.sourceCode .console}
+```shell
 poetry run python
 poetry run fluvial-particle
 ```
@@ -58,20 +58,20 @@ poetry run fluvial-particle
 
 Run the full test suite:
 
-```{.sourceCode .console}
+```shell
 nox
 ```
 
 List the available Nox sessions:
 
-```{.sourceCode .console}
+```shell
 nox --list-sessions
 ```
 
 You can also run a specific Nox session. For example, invoke the unit
 test suite like this:
 
-```{.sourceCode .console}
+```shell
 nox --session=tests
 ```
 
@@ -97,7 +97,7 @@ To run linting and code formatting checks before commiting your change,
 you can install pre-commit as a Git hook by running the following
 command:
 
-```{.sourceCode .console}
+```shell
 nox --session=pre-commit -- install
 ```
 

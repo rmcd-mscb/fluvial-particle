@@ -21,14 +21,15 @@ To set up your development environment do the following.
 
 - fork the reposistory
 
-```{.sourceCode .console}
-# to remind yourself your working on a fork
-git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-partile-fork
+To remind yourself you're working on a fork.
+
+```shell
+git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-particle-fork
 ```
 
 Setup Development Environment
 
-```{.sourceCode .console}
+```shell
 conda env create -f environment.yml
 conda develop -n {{cookiecutter.project_name}} src
 conda activate {{cookiecutter.project_name}}
@@ -43,7 +44,7 @@ work.
 
 ### Git hook configuration
 
-```{.sourceCode .console}
+```shell
 pre-commit install --install-hooks
 ```
 
@@ -52,7 +53,7 @@ pre-commit install --install-hooks
 [Nox](https://nox.thea.codes/) is used for testing everything, with
 several sessions built-in. To run the full suite of tests, simply use:
 
-```{.sourceCode .console}
+```shell
 nox
 ```
 
@@ -76,20 +77,20 @@ The different sessions are:
 
 These can be run individually with the following command:
 
-```{.sourceCode .console}
+```shell
 nox -s <session>
 ```
 
 Replace `<session>` with the name of the session give above, i.e.:
 
-```{.sourceCode .console}
+```shell
 nox -s mypy
 ```
 
 You can also simply run [pytest](https://docs.pytest.org/en/latest/)
 tests, by using the command:
 
-```{.sourceCode .console}
+```shell
 pytest tests
 ```
 
@@ -112,7 +113,7 @@ auto-incremented on each commit to the next dev build number. To manage
 the version changes yourself, you can use the
 [Bump2version](https://github.com/c4urself/bump2version) command:
 
-```{.sourceCode .console}
+```shell
 bump2version <part>
 ```
 
@@ -128,7 +129,7 @@ Note:
 
 To do a production release, use the command:
 
-```{.sourceCode .console}
+```shell
 bump2version --tag release
 ```
 

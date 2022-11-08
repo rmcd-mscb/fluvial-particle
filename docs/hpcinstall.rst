@@ -28,16 +28,22 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
      wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
      bash ./Miniconda3-latest-Linux-x86_64.sh
 
-   Be sure to specify a location on your Caldera path when asked where to install conda, e.g. :bash:`/caldera/path/to/your/directory/miniconda3`
+   Be sure to specify a location on your Caldera path when asked where to install conda, e.g. :bash:`/caldera/projects/your/path/miniconda3/`
    
-   When asked by the installer if you would like it to initialize Miniconda3, answer "no". Once installation completes, run :bash:`/path/to/miniconda3/bin/conda init` to initialize. You may need to log out and back in -- remember to repeat step 1!
+   When asked by the installer if you would like it to initialize Miniconda3, answer "no". Instead, once installation completes, initialize with
+   
+    .. code:: bash
+
+     /path/to/miniconda3/bin/conda init
+    
+   You may need to log out and back in -- remember to repeat step 1!
  
 
 3. Create the conda environment with Python 3.9, then activate using source (this is equivalent to running conda activate fluvial-mpi but is more robust).
 
     .. code:: bash
      
-     conda create -n fluvial-mpi python=3.9
+     conda create -n fluvial-mpi python=3.9 poetry
      source /caldera/path/to/miniconda3/bin/activate fluvial-mpi
 
 4. Download and install mpi4py using the system compiler -- this will install mpi4py with reference to the already loaded MPICH module.
@@ -74,12 +80,12 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
 
      pip install vtk
 
-7. Install *fluvial-particle* on the fluvial-mpi conda environment. If you haven't already, clone the repository into your Caldera space.
+7. Install *fluvial-particle* on the fluvial-mpi conda environment using the poetry package. If you haven't already, clone the repository into your Caldera work space with :bash:`git clone https://code.usgs.gov/wma/nhgf/fluvparticle.git`.
 
     .. code:: bash
 
      cd path/to/caldera/fluvparticle
-     pip install -e .
+     poetry install
 
 
 And that is it! Your are ready to run massively in parallel on Denali.
