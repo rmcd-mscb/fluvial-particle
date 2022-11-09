@@ -37,11 +37,26 @@ As the number of simulated particles increases, the 3D distribution taken from n
 
 ## Installation
 
-You can install *fluvial-particle* via pip from [PyPI](https://pypi.org/):
+This package uses [poetry](https://python-poetry.org/) for installation and dependency management. It is recommended to use a conda environment.
+
+First, create the conda environment with Python 3.9 and the latest version of poetry:
 
 ```shell
-pip install fluvial-particle
+conda create -n fluvial-particle python==3.9 poetry -c conda-forge
+conda activate fluvial-particle
 ```
+
+Next, use poetry to install the package dependencies and *fluvial-particle* itself:
+```shell
+poetry install
+```
+
+The success of the installation can be tested with pytest:
+
+```shell
+pytest tests
+```
+
 ## Usage
 
 Directions on invoking *fluvial-particle* from the command line can be found in the [docs](https://fluvial-particle.readthedocs.io/en/latest/usage.html).
