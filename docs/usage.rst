@@ -2,6 +2,9 @@
 Running fluvial-particle
 ========================
 
+.. image:: ./data/simulation_example.png
+    :alt: Particle concentration from three different time slices from a simulation on the Kootenai River, Idaho, USA. Flow is from bottom to top and time increases from the left figure to the right.
+
 .. role:: bash(code)
  :language: bash
 
