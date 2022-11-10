@@ -5,7 +5,14 @@ Scaling Guide
 Parallel strong scaling
 ----------------------------------
 
-Prohibitively long or large simulation problems can be made tractable with the highly scalable *fluvial-particle*. MPI-enabled installations may run simulations in parallel using a few cores on a laptop or thousands of cores on a supercomputer. A strong scaling experiment was conducted on the USGS Denali supercomputer using a fixed number of passive particles (:math:`2^{27}`). The particles were split evenly among 1024, 2048, 4096, and 8192 cores, and all simulations used the 3D Kootenai river mesh with identical simulation parameters. The first plot shows the time spent executing the main simulation loop, while the second shows the speedup calculated relative to the 1024 simulation.
+For simulations over a large spatial or temporal domain, a large number of particles is needed to adequately resolve the particle concentrations. Consider the figure below. It shows a sequence of simulated particle density surfaces at the same time slice on the Kootenai River, Idaho, where each simulation uses a different number of particles. The left image shows the 2D output, and the right image shows the 3D surface and cross-sectional slice from the region outlined in the 2D image. Flow is from bottom to top.
+
+As the number of simulated particles increases, the 3D distribution taken from near the particles' center of mass becomes continuous. The 2D distribution shows greater resolution as the number of particles increases, especially towards the tails of the distribution. For research in which capturing the distribution tails is important (e.g. river dye-dispersion studies), a sufficient number of particles must be used. Parallel execution with MPI enables greater particle concentration resolution without significantly increasing the total real-world execution time.
+
+.. image::data/kootenai_decimate_particles_fpc.gif
+    :alt: An animated image shows a 2D and 3D snapshot of the Kootenai River results over multiple simulations that use different numbers of particles
+
+MPI-enabled installations may run simulations in parallel using a few cores on a laptop or thousands of cores on a supercomputer. A strong scaling experiment was conducted on the USGS Denali supercomputer using a fixed number of passive particles (:math:`2^{27}`). The particles were split evenly among 1024, 2048, 4096, and 8192 cores, and all simulations used the 3D Kootenai river mesh with identical simulation parameters. The first plot shows the time spent executing the main simulation loop, while the second shows the speedup calculated relative to the 1024 simulation.
 
 .. image:: data/strongscaling_time.png
 
