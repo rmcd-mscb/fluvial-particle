@@ -19,7 +19,7 @@ class FallingParticles(Particles):
             mesh (RiverGrid): class instance of the river hydrodynamic data
             **kwargs (dict): additional keyword arguments  # noqa
 
-        Optional keyword arguments:
+        Keyword args:
             radius (float): radius of the particles [m], scalar or NumPy array of length nparts, optional
             rho (float): density of the particles [kg/m^3], scalar or NumPy array of length nparts, optional
             c1 (float): viscous drag coefficient [-], scalar or NumPy array of length nparts, optional

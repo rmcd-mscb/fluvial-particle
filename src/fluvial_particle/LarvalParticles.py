@@ -19,7 +19,7 @@ class LarvalParticles(Particles):
             mesh (RiverGrid): class instance of the river hydrodynamic data
             **kwargs (dict): additional keyword arguments  # noqa
 
-        Optional keyword arguments:
+        Keyword args:
             amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts, optional
             period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts, optional
             ttime (float): phase of swimmers, numpy array of length nparts, optional

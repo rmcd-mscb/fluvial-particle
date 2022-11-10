@@ -23,7 +23,7 @@ class Particles:
             mesh (RiverGrid): class instance of the river hydrodynamic data
             **kwargs (dict): additional keyword arguments  # noqa
 
-        Optional keyword arguments:
+        Keyword args:
             Track3D (int): 1 if 3D model run, 0 else, optional
             lev (float): lateral eddy viscosity, scalar, optional
             beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
