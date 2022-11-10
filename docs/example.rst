@@ -54,13 +54,13 @@ Notice the discontinuous concentrations in the cells2d.xmf plot. Additional simu
 Example options file
 ----------------------------
 
-This file can be run in either serial or parallel execution mode. The input mesh data paths are relative to the repository root directory -- be sure to update :python:`"path/to/repo"` with the correct path on your machine. 
+This file can be run in either serial or parallel execution mode. The input mesh data paths are relative to the repository root directory -- be sure to update :python:`"path/to/repo"` with the correct path on your machine.
 
 
 .. code-block:: python
 
  """Options file for fluvial particle model."""
- 
+
  # Required keyword arguments
  file_name_2d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_2D1.vtk"  # path to 2D mesh file
  file_name_3d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_3D1_new.vtk"  # path to 3D mesh file

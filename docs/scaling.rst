@@ -42,14 +42,14 @@ In a 3D simulation with one simulated particle, the peak memory usage increases 
 Output file sizes
 -------------------
 
-In addition to scaling with the number of mesh cells and the *total* number of particles (i.e. summed across all cores), the output HDF5 files also scale with the number of printing steps. The particles HDF5 file writes 12 1D arrays per printing time step, each of which store 8-byte numbers. The expected scaling relation of the file size :math:`S` (in bytes) with the total number of printing steps is therefore: 
+In addition to scaling with the number of mesh cells and the *total* number of particles (i.e. summed across all cores), the output HDF5 files also scale with the number of printing steps. The particles HDF5 file writes 12 1D arrays per printing time step, each of which store 8-byte numbers. The expected scaling relation of the file size :math:`S` (in bytes) with the total number of printing steps is therefore:
 
 .. math::
  S_{particles} = N_{particles}*12*8*N_{prints}
 
 The cells HDF5 file writes three datasets per printing time step, one for each of the 1D, 2D, and 3D meshes. The expected relation follows, with :math:`N_{sc}` equal to the number of cells in the streamwise direction, :math:`N_{nc}` the number in the cross-stream direction, and :math:`N_{zc}` the number in the vertical:
 
-.. math:: 
+.. math::
  S_{cells} = (N_{sc} + N_{sc}*N_{nc} + N_{sc}*N_{nc}*N_{zc})*4*N_{prints}
 
 

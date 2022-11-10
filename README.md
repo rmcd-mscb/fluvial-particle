@@ -1,4 +1,4 @@
-# Welcome to *fluvial-particle*
+# Welcome to _fluvial-particle_
 
 [![PyPI](https://img.shields.io/pypi/v/fluvial-particle.svg)](https://pypi.org/project/fluvial-particle/)
 [![Status](https://img.shields.io/pypi/status/fluvial-particle.svg)](https://pypi.org/project/fluvial-particle/)
@@ -21,12 +21,11 @@ This package advects conservative flow tracers (a.k.a. passive particles) with t
 
 ## Efficiently programmed and parallel enabled
 
-As the total simulation duration, the size of the mesh, or the number of particles increases, so too do the computational resources used in the simulation (real-world time, memory, etc.). *fluvial-particle* uses the efficient array storage and operator methods of NumPy and VTK to update particle positions. Simulation results are written to hierarchical data format (HDF5) files using the h5py package, which allows writing and compression of terabytes of data. 
+As the total simulation duration, the size of the mesh, or the number of particles increases, so too do the computational resources used in the simulation (real-world time, memory, etc.). _fluvial-particle_ uses the efficient array storage and operator methods of NumPy and VTK to update particle positions. Simulation results are written to hierarchical data format (HDF5) files using the h5py package, which allows writing and compression of terabytes of data.
 
-Prohibitively large or long simulation problems can be made tractable with the highly scalable *fluvial-particle* package. The mpi4py package enables massively-parallel execution mode to simulate millions or billions of particles (or more!). A strong-scaling test simulation of 2<sup>27</sup> particles on the Kootenai River over many thousands of CPUs shows that MPI-enabled fluvial-particle scales well, as shown in the figure below.
+Prohibitively large or long simulation problems can be made tractable with the highly scalable _fluvial-particle_ package. The mpi4py package enables massively-parallel execution mode to simulate millions or billions of particles (or more!). A strong-scaling test simulation of 2<sup>27</sup> particles on the Kootenai River over many thousands of CPUs shows that MPI-enabled fluvial-particle scales well, as shown in the figure below.
 
 ![Strong-scaling panel shows the decrease in simulation time and the simulation speed-up as a function of the number of CPUs (from 2^10 to 2^13 CPUs) used in the simulation. The scaling is very close to ideal over this range.](https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/main/docs/data/strongscalingpanel.png "Parallel strong scaling")
-
 
 ## Features
 
@@ -43,7 +42,8 @@ conda create -n fluvial-particle python==3.9 poetry -c conda-forge
 conda activate fluvial-particle
 ```
 
-Next, use poetry to install the package dependencies and *fluvial-particle* itself:
+Next, use poetry to install the package dependencies and _fluvial-particle_ itself:
+
 ```shell
 poetry install
 ```
@@ -56,7 +56,7 @@ pytest tests
 
 ## Usage
 
-Directions on invoking *fluvial-particle* from the command line can be found in the [docs](https://fluvial-particle.readthedocs.io/en/latest/usage.html).
+Directions on invoking _fluvial-particle_ from the command line can be found in the [docs](https://fluvial-particle.readthedocs.io/en/latest/usage.html).
 
 ## Utilities
 
@@ -121,4 +121,4 @@ please [file an issue](https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues) alo
 
 This project was generated from [hillc-usgs's](https://github.com/hillc-usgs) [Pygeoapi Plugin Cookiecutter](https://code.usgs.gov/wma/nhgf/pygeoapi-plugin-cookiecutter) template.
 
-This package is based on the model described by [McDonald \& Nelson (2021)](https://doi.org/10.1080/24705357.2019.1709102), *A Lagrangian particle-tracking approach to modelling larval drift in rivers*, Journal of Ecohydraulics, 6(1) 17-35.
+This package is based on the model described by [McDonald \& Nelson (2021)](https://doi.org/10.1080/24705357.2019.1709102), _A Lagrangian particle-tracking approach to modelling larval drift in rivers_, Journal of Ecohydraulics, 6(1) 17-35.

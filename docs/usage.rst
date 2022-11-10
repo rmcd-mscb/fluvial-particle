@@ -28,6 +28,3 @@ There are two command line flags which can be used to further specify run time o
  :bash:`--seed <int>` : specify the random seed as an integer in a serial simulation (does not apply to parallel simulations)
 
  :bash:`--no-postprocess` : disable the post-processing routine that generates the output cells.h5 and cells XDMF files
-
-
-

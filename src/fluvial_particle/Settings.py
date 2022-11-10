@@ -27,7 +27,9 @@ class Settings(dict):
 
     @property
     def required_keys(self):
-        """Attributes required in the options file. Required keys are SimTime, dt, Track3D, PrintAtTick, file_name_2d, file_name_3d, NumPart, StartLoc
+        """Attributes required in the options file.
+
+        Required keys are SimTime, dt, Track3D, PrintAtTick, file_name_2d, file_name_3d, NumPart, StartLoc
         """
         return (
             "SimTime",

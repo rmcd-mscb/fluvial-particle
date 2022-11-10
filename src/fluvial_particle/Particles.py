@@ -103,7 +103,7 @@ class Particles:
         """
         # Do the 1D particles arrays first, total write dimensions are (nprints, nparts)
         # 8 bytes per number means 1 MiB =  2^20 bytes = 2^17 numbers
-        sz1mebibyte = np.int64(2**17)  # 8 bytes per number
+        sz1mebibyte = np.int64(2 ** 17)  # 8 bytes per number
         if self.nparts <= sz1mebibyte:
             # Case where the number of particles is less than or equal to 1 MiB
             chksz1 = np.int64(sz1mebibyte / self.nparts)
@@ -594,7 +594,7 @@ class Particles:
         """
         vx = self.velx
         vy = self.vely
-        velmag = (vx**2 + vy**2) ** 0.5
+        velmag = (vx ** 2 + vy ** 2) ** 0.5
         xranwalk = self.xrnum * (2.0 * self.diffx * dt) ** 0.5
         yranwalk = self.yrnum * (2.0 * self.diffy * dt) ** 0.5
         # Move and update positions in-place on each array
