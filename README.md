@@ -35,10 +35,10 @@ Prohibitively large or long simulation problems can be made tractable with the h
 
 This package uses [poetry](https://python-poetry.org/) for installation and dependency management. It is recommended to use a conda environment.
 
-First, create the conda environment with Python 3.9 and the latest version of poetry:
+First, create the fluvial-particle conda environment using the environment.yml file:
 
 ```shell
-conda create -n fluvial-particle python==3.9 poetry -c conda-forge
+conda env create -f environment.yml
 conda activate fluvial-particle
 ```
 
