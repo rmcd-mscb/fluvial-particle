@@ -672,20 +672,12 @@ class RiverGrid:
 
     @property
     def fname2d(self):
-        """Get 2d grid input filename.
-
-        Returns:
-            [type]: [description]
-        """
+        """str: the filename of the 2d grid input."""
         return self._fname2d
 
     @fname2d.setter
     def fname2d(self, values):
-        """Set 2d grid input filename.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set 2d grid input filename."""
         # Check that input file exists
         inputfile = pathlib.Path(values)
         if not inputfile.exists():
@@ -694,20 +686,12 @@ class RiverGrid:
 
     @property
     def fname3d(self):
-        """Get 3d grid input filename.
-
-        Returns:
-            [type]: [description]
-        """
+        """str: the filename of the 3d grid input."""
         return self._fname3d
 
     @fname3d.setter
     def fname3d(self, values):
-        """Set 3d grid input filename.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set 3d grid input filename."""
         # Check that input file exists
         inputfile = pathlib.Path(values)
         if not inputfile.exists():
@@ -716,20 +700,15 @@ class RiverGrid:
 
     @property
     def nn(self):
-        """Get nn, number of stream-normal points that define the grids.
+        """int: the number of stream-normal points that define the grids.
 
-        Returns:
-            [type]: [description]
+        For file writing reasons, nn must be >= 1.
         """
         return self._nn
 
     @nn.setter
     def nn(self, values):
-        """Set nn, number of stream-normal points that define the grids.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set the number of stream-normal points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nn.setter must be int")
@@ -740,20 +719,15 @@ class RiverGrid:
 
     @property
     def nnc(self):
-        """Get nnc, number of stream-normal cells defined by the grids.
+        """int: the number of stream-normal cells defined by the grids.
 
-        Returns:
-            [type]: [description]
+        For file writing reasons, nnc must be >= 1.
         """
         return self._nnc
 
     @nnc.setter
     def nnc(self, values):
-        """Set nnc, number of stream-normal cells defined by the grids.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set the number of stream-normal cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nnc.setter must be int")
@@ -764,20 +738,15 @@ class RiverGrid:
 
     @property
     def ns(self):
-        """Get ns, number of stream-wise points that define the grids.
+        """int: the number of stream-wise points that define the grids.
 
-        Returns:
-            [type]: [description]
+        For file writing reasons, ns must be >= 1.
         """
         return self._ns
 
     @ns.setter
     def ns(self, values):
-        """Set ns, number of stream-wise points that define the grids.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set the number of stream-wise points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("ns.setter must be int")
@@ -788,20 +757,15 @@ class RiverGrid:
 
     @property
     def nsc(self):
-        """Get nsc, number of stream-wise cells defined by the grids.
+        """int: the number of stream-wise cells defined by the grids.
 
-        Returns:
-            [type]: [description]
+        For file writing reasons, nsc must be >= 1.
         """
         return self._nsc
 
     @nsc.setter
     def nsc(self, values):
-        """Set nsc, number of stream-wise cells defined by the grids.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set the number of stream-wise cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nsc.setter must be int")
@@ -812,20 +776,15 @@ class RiverGrid:
 
     @property
     def nz(self):
-        """Get nz, number of vertical points that define the grids.
+        """int: the number of vertical points that define the grids.
 
-        Returns:
-            [type]: [description]
+        For file writing reasons, ns must be >= 1.
         """
         return self._nz
 
     @nz.setter
     def nz(self, values):
-        """Set nz, number of vertical points that define the grids.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set the number of vertical points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nz.setter must be int")
@@ -836,20 +795,15 @@ class RiverGrid:
 
     @property
     def nzc(self):
-        """Get nzc, number of vertical cells defined by the grids.
+        """int: the number of vertical cells defined by the grids.
 
-        Returns:
-            [type]: [description]
+        For file writing reasons, ns must be >= 1.
         """
         return self._nzc
 
     @nzc.setter
     def nzc(self, values):
-        """Set nzc, number of vertical cells defined by the grids.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set the number of vertical cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nzc.setter must be int")
@@ -860,20 +814,15 @@ class RiverGrid:
 
     @property
     def track3d(self):
-        """Get track3d.
+        """int: flag that indicates the dimension of the simulation.
 
-        Returns:
-            [type]: [description]
+        If 3D simulation, track3d=1. Else track3d=0.
         """
         return self._track3d
 
     @track3d.setter
     def track3d(self, values):
-        """Set track3d.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set track3d."""
         if not isinstance(values, int):
             raise TypeError("track3d.setter must be int")
         if values < 0 or values > 1:
