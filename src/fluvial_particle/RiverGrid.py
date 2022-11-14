@@ -643,20 +643,16 @@ class RiverGrid:
 
     @property
     def boundarycells(self):
-        """Get inflow/outflow boundary cells.
+        """ndarray: the inflow/outflow 2D boundary cells.
 
-        Returns:
-            [type]: [description]
+        A NumPy ndarray with ndims=1 that holds the indices of the upstream and downstream mesh boundary cells.
+        As currently implemented, upstream is the i=0 row and downstream is the i=nsc-1 row.
         """
         return self._boundarycells
 
     @boundarycells.setter
     def boundarycells(self, values):
-        """Set inflow/outflow boundary cells.
-
-        Args:
-            values ([type]): [description]
-        """
+        """Set the inflow/outflow boundary cells."""
         if not isinstance(values, np.ndarray):
             raise TypeError("boundarycells.setter: wrong type, must be NumPy ndarray")
         if values.ndim != 1:
