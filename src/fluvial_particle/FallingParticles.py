@@ -19,7 +19,7 @@ class FallingParticles(Particles):
             mesh (RiverGrid): class instance of the river hydrodynamic data
             **kwargs (dict): additional keyword arguments  # noqa
 
-        Optional keyword arguments:
+        Keyword args:
             radius (float): radius of the particles [m], scalar or NumPy array of length nparts, optional
             rho (float): density of the particles [kg/m^3], scalar or NumPy array of length nparts, optional
             c1 (float): viscous drag coefficient [-], scalar or NumPy array of length nparts, optional
@@ -97,8 +97,8 @@ class FallingParticles(Particles):
         specgrav = (self.rho - 1000.0) / 1000.0  # specific gravity of particle [-]
         nu = 0.000001  # kinematic viscosity of water [m^2/s]
         d = 2 * self.radius  # diameter of particle [m]
-        top = specgrav * g * (d**2)
-        bot = self.c1 * nu + (0.75 * self.c2 * specgrav * g * (d**3)) ** 0.5
+        top = specgrav * g * (d ** 2)
+        bot = self.c1 * nu + (0.75 * self.c2 * specgrav * g * (d ** 3)) ** 0.5
         ws = top / bot  # Ferguson & Church (2004) settling velocity
         a = self.indices[uz < -ws]
         # bound below by settling velocity

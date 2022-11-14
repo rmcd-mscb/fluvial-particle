@@ -58,14 +58,13 @@ It is recommended to open an issue before starting work on anything.
 This will allow a chance to talk it over with the owners and validate
 your approach.
 
-
 ## Development requirements
 
 To set up your development environment do the following.
 
 ### Fork the repository
 
-Code edits must be made on your personal fork of 
+Code edits must be made on your personal fork of
 the [main repository](https://code.usgs.gov/wma/nhgf/fluvparticle/-/tree/main).
 Read the [Gitlab forking workflow documentation](https://docs.gitlab.com/ee/user/project/repository/forking_workflow.html)
 for forking instructions and additional information.
@@ -73,7 +72,7 @@ for forking instructions and additional information.
 ### Clone the forked repository
 
 To remind yourself that you're working on a fork of the main repository,
-we suggest using the name *fluvial-particle-fork* for your local repo:
+we suggest using the name _fluvial-particle-fork_ for your local repo:
 
 ```shell
 git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-particle-fork

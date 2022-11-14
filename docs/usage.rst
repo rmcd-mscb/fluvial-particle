@@ -2,7 +2,7 @@
 Running fluvial-particle
 ========================
 
-.. image:: ./data/simulation_example.png
+.. image:: data/simulation_example.png
     :alt: Particle concentration from three different time slices from a simulation on the Kootenai River, Idaho, USA. Flow is from bottom to top and time increases from the left figure to the right.
 
 .. role:: bash(code)
@@ -28,6 +28,3 @@ There are two command line flags which can be used to further specify run time o
  :bash:`--seed <int>` : specify the random seed as an integer in a serial simulation (does not apply to parallel simulations)
 
  :bash:`--no-postprocess` : disable the post-processing routine that generates the output cells.h5 and cells XDMF files
-
-
-
