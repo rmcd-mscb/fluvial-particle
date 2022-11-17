@@ -943,7 +943,7 @@ class Particles:
 
     @property
     def bedelev(self):
-        """ndarray: NumPy array of particles' bed elevation
+        """ndarray: NumPy array of particles' bed elevation.
 
         Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
         """
@@ -1166,7 +1166,7 @@ class Particles:
     @property
     def normdepth(self):
         """ndarray: the normalized depth of each particle.
-        
+
         In other words, the fraction of the way from the channel bed to the particle's elevation.
         In the range of (0, 1).
         Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
@@ -1257,7 +1257,7 @@ class Particles:
 
     @property
     def start_time_mask(self):
-        """ndarray(bool): masks particles that are active by (part_start_time <= current simulation time)
+        """ndarray(bool): masks particles that are active by (part_start_time <= current simulation time).
 
         Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
         Must have dtype=bool
