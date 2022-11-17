@@ -24,13 +24,13 @@ class Particles:
             **kwargs (dict): additional keyword arguments  # noqa
 
         Keyword args:
-            Track3D (int): 1 if 3D model run, 0 else, optional
-            lev (float): lateral eddy viscosity, scalar, optional
-            beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
-            min_depth (float): minimum allowed depth that particles may enter, scalar, optional
-            vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar, optional
-            comm (mpi4py object): MPI communicator used in parallel execution, optional
-            PartStartTime (float): variable particle start times, defaults to simulation start time
+            Track3D (int): 1 if 3D model run, 0 else. Defaults to 1
+            lev (float): lateral eddy viscosity, scalar. Defaults to 0.25
+            beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3. Defaults to 0.067
+            min_depth (float): minimum allowed depth that particles may enter, scalar. Defaults to 0.02
+            vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar. Defaults to 0.01
+            comm (mpi4py object): MPI communicator used in parallel execution. Defaults to None
+            PartStartTime (float): variable particle start times. Defaults to the simulation start time
         """
         self.nparts = nparts
         self.x = np.copy(x)
@@ -386,8 +386,8 @@ class Particles:
         """Validate initial 2D positions, set vertical postitions (optional), and interpolate mesh arrays.
 
         Args:
-            starttime (float): initial time of the simulation in seconds, default is 0.0
-            frac (float): starting position of particles within water column (scalar or NumPy array), optional
+            starttime (float): initial time of the simulation in seconds. Defaults to 0.0
+            frac (float): starting position of particles within water column (scalar or NumPy array). Defaults to None
         """
         self.validate_2d_pos(self.x, self.y)
         if self.in_bounds_mask is not None:
@@ -1202,7 +1202,7 @@ class Particles:
 
     @property
     def part_start_time(self):
-        """np.float64, or ndarray: the starting simulation time of the particles.
+        """np.float64 or ndarray: the starting simulation time of the particles.
 
         If a scalar, all particles will be activated when the simulation time exceeds part_start_time.
         If an ndarray, must be 1D and the same length as the number of simulated particles.

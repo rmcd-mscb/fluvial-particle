@@ -20,9 +20,8 @@ class LarvalParticles(Particles):
             **kwargs (dict): additional keyword arguments  # noqa
 
         Keyword args:
-            amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts, optional
-            period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts, optional
-            ttime (float): phase of swimmers, numpy array of length nparts, optional
+            amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts. Defaults to 0.2
+            period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts. Defaluts to 60.0
         """
         super().__init__(nparts, x, y, z, rng, mesh, **kwargs)
         self.amp = kwargs.get("amp", 0.2)
@@ -38,8 +37,8 @@ class LarvalParticles(Particles):
         Args:
             nprints (int): size of first dimension, indexes printing time slices
             globalnparts (int): global number of particles, distributed across processors
-            comm (MPI communicator): only for parallel runs
-            fname (string): name of the HDF5 file
+            comm (MPI communicator): only for parallel runs. Defaults to None
+            fname (string): name of the HDF5 file. Defaults to "particles.h5"
 
         Returns:
             parts_h5: new open HDF5 file object
@@ -182,21 +181,15 @@ class LarvalParticles(Particles):
 
     @property
     def amp(self):
-        """[summary].
+        """np.float64 or ndarray: amplitude of sinusoid swimming behavior as depth fraction.
 
-        Returns:
-            [type]: [description]
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
         """
         return self._amp
 
     @amp.setter
     def amp(self, values):
-        """[summary].
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
@@ -211,21 +204,15 @@ class LarvalParticles(Particles):
 
     @property
     def period(self):
-        """[summary].
+        """np.float64 or ndarray: period of sinusoid swimming behavior.
 
-        Returns:
-            [type]: [description]
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
         """
         return self._period
 
     @period.setter
     def period(self, values):
-        """[summary].
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
@@ -240,20 +227,11 @@ class LarvalParticles(Particles):
 
     @property
     def ttime(self):
-        """[summary].
-
-        Returns:
-            [type]: [description]
-        """
+        """ndarray: phase of swimmers, must be same length as the number of simulated particles."""
         return self._ttime
 
     @ttime.setter
     def ttime(self, values):
-        """[summary].
-
-        Args:
-            values ([type]): [description]
-        """
         if isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
                 pass
