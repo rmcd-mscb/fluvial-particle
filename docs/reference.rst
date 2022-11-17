@@ -37,18 +37,18 @@ LarvalParticles class
 
     .. automethod:: __init__
 
-LarvalTopParticles class
--------------------------
-
-.. autoclass:: fluvial_particle.LarvalParticles.LarvalTopParticles
-    :members:
-
-    .. automethod:: __init__
-
 LarvalBotParticles class
 -------------------------
 
 .. autoclass:: fluvial_particle.LarvalParticles.LarvalBotParticles
+    :members:
+
+    .. automethod:: __init__
+
+LarvalTopParticles class
+-------------------------
+
+.. autoclass:: fluvial_particle.LarvalParticles.LarvalTopParticles
     :members:
 
     .. automethod:: __init__

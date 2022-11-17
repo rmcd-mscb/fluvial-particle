@@ -5,7 +5,12 @@ from .Particles import Particles
 
 
 class LarvalParticles(Particles):
-    """A larval fish subclass of Particles, a helper superclass for bottom- or top-swimmers."""
+    """A larval fish subclass of Particles, a helper superclass for bottom- or top-swimmers.
+
+    On its own, the LarvalParticles class does not implement any special swimming behavior (i.e. active-drift).
+    LarvalTopParticles will swim near the water surface.
+    LarvalBotParticles will swim near the channel bed.
+    """
 
     def __init__(self, nparts, x, y, z, rng, mesh, **kwargs):
         """Initialize instance of class LarvalParticles.
@@ -245,7 +250,7 @@ class LarvalParticles(Particles):
 
 
 class LarvalBotParticles(LarvalParticles):
-    """A subclass of LarvalParticles for larvae that swim near bottom of water column."""
+    """A subclass of LarvalParticles for larvae that swim in the bottom of water column."""
 
     def perturb_z(self, dt):
         """Project particles vertical trajectory, sinusoidal bed-swimmer.
@@ -265,7 +270,7 @@ class LarvalBotParticles(LarvalParticles):
 
 
 class LarvalTopParticles(LarvalParticles):
-    """A subclass of LarvalParticles for larvae that swim near top of water column."""
+    """A subclass of LarvalParticles for larvae that swim in the top of water column."""
 
     def perturb_z(self, dt):
         """Project particles vertical trajectory, sinusoidal top-swimmer.
