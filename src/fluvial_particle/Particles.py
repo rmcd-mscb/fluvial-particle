@@ -90,7 +90,7 @@ class Particles:
     def calc_hdf5_chunksizes(self, nprints):
         """Calculate chunksizes for datasets in particles HDF5 output.
 
-        Designed to create chunks *close to* 1 MiB for 8 byte numbers
+        Designed to create chunks *close to* 1 MiB for 8 byte numbers.
         HDF5 org recommends chunks of size between 10 KiB - 1 MiB;
         Trials on Denali HPC show 1 MiB works better
 
@@ -945,7 +945,7 @@ class Particles:
     def bedelev(self):
         """ndarray: NumPy array of particles' bed elevation.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._bedelev
 
@@ -983,7 +983,7 @@ class Particles:
     def cellindex2d(self):
         """ndarray: the index of the 2D cell that each particle is currently in.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._cellindex2d
 
@@ -1001,7 +1001,7 @@ class Particles:
     def cellindex3d(self):
         """ndarray: the index of the 3D cell that each particle is currently in.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._cellindex3d
 
@@ -1019,7 +1019,7 @@ class Particles:
     def depth(self):
         """ndarray: the water-column depth that each particle is currently in.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._depth
 
@@ -1037,7 +1037,7 @@ class Particles:
     def diffx(self):
         """ndarray: the diffusion coefficient in the x-direction of each particle.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._diffx
 
@@ -1055,7 +1055,7 @@ class Particles:
     def diffy(self):
         """ndarray: the diffusion coefficient in the y-direction of each particle.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._diffy
 
@@ -1073,7 +1073,7 @@ class Particles:
     def diffz(self):
         """ndarray: the diffusion coefficient in the z-direction of each particle.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._diffz
 
@@ -1091,7 +1091,7 @@ class Particles:
     def htabvbed(self):
         """ndarray: the elevation of each particle above the channel bed.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._htabvbed
 
@@ -1109,8 +1109,8 @@ class Particles:
     def in_bounds_mask(self):
         """ndarray(bool): masks particles that are not in the 2D grid.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
-        Must have dtype=bool
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
+        Must have dtype=bool.
         """
         return self._in_bounds_mask
 
@@ -1169,7 +1169,7 @@ class Particles:
 
         In other words, the fraction of the way from the channel bed to the particle's elevation.
         In the range of (0, 1).
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._normdepth
 
@@ -1229,7 +1229,7 @@ class Particles:
     def rng(self):
         """np.random.RandomState: NumPy random number generator.
 
-        Generates random numbers for stochastic diffusion
+        Generates random numbers for stochastic diffusion.
         """
         return self._rng
 
@@ -1241,7 +1241,7 @@ class Particles:
     def shearstress(self):
         """ndarray: the shear stress interpolated from the mesh to each particle.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._shearstress
 
@@ -1259,8 +1259,8 @@ class Particles:
     def start_time_mask(self):
         """ndarray(bool): masks particles that are active by (part_start_time <= current simulation time).
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
-        Must have dtype=bool
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
+        Must have dtype=bool.
         """
         return self._start_time_mask
 
@@ -1280,7 +1280,7 @@ class Particles:
     def time(self):
         """ndarray: the current simulation time.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._time
 
@@ -1315,7 +1315,7 @@ class Particles:
         """ndarray: the shear velocity at each particle.
 
         Computed as the square root of shearstress / 1000 [kg/m^3].
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._ustar
 
@@ -1333,7 +1333,7 @@ class Particles:
     def velx(self):
         """ndarray: the fluid velocity x-component interpolated to each particle from the mesh.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._velx
 
@@ -1351,7 +1351,7 @@ class Particles:
     def vely(self):
         """ndarray: the fluid velocity y-component interpolated to each particle from the mesh.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._vely
 
@@ -1369,7 +1369,7 @@ class Particles:
     def velz(self):
         """ndarray: the fluid velocity z-component interpolated to each particle from the mesh.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._velz
 
@@ -1417,7 +1417,7 @@ class Particles:
     def wse(self):
         """ndarray: the water surface elevation interpolated to each particle's 2D position.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._wse
 
@@ -1435,7 +1435,7 @@ class Particles:
     def x(self):
         """ndarray: the x-coordinate of each particle.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._x
 
@@ -1453,7 +1453,7 @@ class Particles:
     def y(self):
         """ndarray: the y-coordinate of each particle.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._y
 
@@ -1471,7 +1471,7 @@ class Particles:
     def z(self):
         """ndarray: the z-coordinate of each particle.
 
-        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,))
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._z
 

@@ -767,7 +767,7 @@ class RiverGrid:
     def nz(self):
         """int: the number of vertical points that define the grids.
 
-        For file writing reasons, ns must be >= 1.
+        For file writing reasons, nz must be >= 1.
         """
         return self._nz
 
@@ -785,7 +785,7 @@ class RiverGrid:
     def nzc(self):
         """int: the number of vertical cells defined by the grids.
 
-        For file writing reasons, ns must be >= 1.
+        For file writing reasons, nzc must be >= 1.
         """
         return self._nzc
 
@@ -818,15 +818,17 @@ class RiverGrid:
 
 # @jit(nopython=True)
 def is_sorted(arr):
-    """Using Numba, an efficient check that a 1D NumPy array is sorted in increasing order.
+    """An efficient check that a 1D NumPy array is sorted in increasing order.
+
+    Written to allow the use of Numba j.i.t. compiling, though not currently enabled.
 
     https://stackoverflow.com/questions/47004506/check-if-a-numpy-array-is-sorted
 
     Args:
-        arr ([type]): [description]
+        arr (ndarray): array to check
 
     Returns:
-        [type]: [description]
+        bool: True if arr is sorted in increasing order, False otherwise
     """
     for i in range(arr.size - 1):
         if arr[i + 1] < arr[i]:
