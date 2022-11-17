@@ -652,7 +652,6 @@ class RiverGrid:
 
     @boundarycells.setter
     def boundarycells(self, values):
-        """Set the inflow/outflow boundary cells."""
         if not isinstance(values, np.ndarray):
             raise TypeError("boundarycells.setter: wrong type, must be NumPy ndarray")
         if values.ndim != 1:
@@ -673,7 +672,6 @@ class RiverGrid:
 
     @fname2d.setter
     def fname2d(self, values):
-        """Set 2d grid input filename."""
         # Check that input file exists
         inputfile = pathlib.Path(values)
         if not inputfile.exists():
@@ -687,7 +685,6 @@ class RiverGrid:
 
     @fname3d.setter
     def fname3d(self, values):
-        """Set 3d grid input filename."""
         # Check that input file exists
         inputfile = pathlib.Path(values)
         if not inputfile.exists():
@@ -704,7 +701,6 @@ class RiverGrid:
 
     @nn.setter
     def nn(self, values):
-        """Set the number of stream-normal points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nn.setter must be int")
@@ -723,7 +719,6 @@ class RiverGrid:
 
     @nnc.setter
     def nnc(self, values):
-        """Set the number of stream-normal cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nnc.setter must be int")
@@ -742,7 +737,6 @@ class RiverGrid:
 
     @ns.setter
     def ns(self, values):
-        """Set the number of stream-wise points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("ns.setter must be int")
@@ -761,7 +755,6 @@ class RiverGrid:
 
     @nsc.setter
     def nsc(self, values):
-        """Set the number of stream-wise cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nsc.setter must be int")
@@ -780,7 +773,6 @@ class RiverGrid:
 
     @nz.setter
     def nz(self, values):
-        """Set the number of vertical points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nz.setter must be int")
@@ -799,7 +791,6 @@ class RiverGrid:
 
     @nzc.setter
     def nzc(self, values):
-        """Set the number of vertical cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nzc.setter must be int")
@@ -818,7 +809,6 @@ class RiverGrid:
 
     @track3d.setter
     def track3d(self, values):
-        """Set track3d."""
         if not isinstance(values, int):
             raise TypeError("track3d.setter must be int")
         if values < 0 or values > 1:
