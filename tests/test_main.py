@@ -69,6 +69,15 @@ def run_simulation(argdict: dict) -> None:
             },
             "./tests/data/output_larvtop_fixed",
         ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_varsrc.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_varsrc_fixed",
+        ),
     ],
 )
 def test_particle(argdict: dict, test_out_path: str) -> None:

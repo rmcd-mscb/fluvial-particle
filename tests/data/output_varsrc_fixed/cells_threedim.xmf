@@ -1,0 +1,79 @@
+<Xdmf Version="3.0">
+            <Domain>
+                <Topology Name="Topo" TopologyType="3DSMesh" Dimensions="9 11 601"/>
+                <Geometry Name="Geo" GeometryType="X_Y_Z">
+                    <DataItem Name="X" Dimensions="9 11 601" Format="HDF">
+                        cells.h5:/grid/X
+                    </DataItem>
+                    <DataItem Name="Y" Dimensions="9 11 601" Format="HDF">
+                        cells.h5:/grid/Y
+                    </DataItem>
+                    <DataItem Name="Z" Dimensions="9 11 601" Format="HDF">
+                        cells.h5:/grid/Z
+                    </DataItem>
+
+                </Geometry>
+                <Grid Name="3D time series" GridType="Collection" CollectionType="Temporal">
+            <Grid Name="t=0.0" GridType="Uniform">
+                <Time Value="0.0"/>
+                <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
+                <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
+            <Attribute Name="FractionalParticleCount" Center="Cell">
+                <DataItem Dimensions="600 10 8" DataType="Float" Format="HDF">
+                    cells.h5:/cells3d/fpc0
+                </DataItem>
+            </Attribute>
+            </Grid>
+            <Grid Name="t=20.0" GridType="Uniform">
+                <Time Value="20.0"/>
+                <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
+                <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
+            <Attribute Name="FractionalParticleCount" Center="Cell">
+                <DataItem Dimensions="600 10 8" DataType="Float" Format="HDF">
+                    cells.h5:/cells3d/fpc1
+                </DataItem>
+            </Attribute>
+            </Grid>
+            <Grid Name="t=40.0" GridType="Uniform">
+                <Time Value="40.0"/>
+                <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
+                <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
+            <Attribute Name="FractionalParticleCount" Center="Cell">
+                <DataItem Dimensions="600 10 8" DataType="Float" Format="HDF">
+                    cells.h5:/cells3d/fpc2
+                </DataItem>
+            </Attribute>
+            </Grid>
+            <Grid Name="t=60.0" GridType="Uniform">
+                <Time Value="60.0"/>
+                <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
+                <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
+            <Attribute Name="FractionalParticleCount" Center="Cell">
+                <DataItem Dimensions="600 10 8" DataType="Float" Format="HDF">
+                    cells.h5:/cells3d/fpc3
+                </DataItem>
+            </Attribute>
+            </Grid>
+            <Grid Name="t=80.0" GridType="Uniform">
+                <Time Value="80.0"/>
+                <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
+                <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
+            <Attribute Name="FractionalParticleCount" Center="Cell">
+                <DataItem Dimensions="600 10 8" DataType="Float" Format="HDF">
+                    cells.h5:/cells3d/fpc4
+                </DataItem>
+            </Attribute>
+            </Grid>
+            <Grid Name="t=100.0" GridType="Uniform">
+                <Time Value="100.0"/>
+                <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
+                <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
+            <Attribute Name="FractionalParticleCount" Center="Cell">
+                <DataItem Dimensions="600 10 8" DataType="Float" Format="HDF">
+                    cells.h5:/cells3d/fpc5
+                </DataItem>
+            </Attribute>
+            </Grid>
+                </Grid>
+            </Domain>
+        </Xdmf>
