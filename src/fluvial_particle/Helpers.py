@@ -10,6 +10,26 @@ import numpy as np
 
 def checkcommandarguments():
     """Check the user's command line arguments."""
+    parser = create_parser()
+
+    argdict = vars(parser.parse_args())
+
+    inputfile = pathlib.Path(argdict["settings_file"])
+    if not inputfile.exists():
+        raise Exception(f"Cannot find settings file {inputfile}")
+    outdir = pathlib.Path(argdict["output_directory"])
+    if not outdir.is_dir():
+        raise Exception(f"Output directory {outdir} does not exist")
+
+    return argdict
+
+
+def create_parser():
+    """Factory method to create an argument parser for command-line arguments.
+
+    Returns:
+        argparse.ArgumentParser: the container for command line argument specifications
+    """
     parser = argparse.ArgumentParser(
         description="fluvial_particle",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -28,19 +48,9 @@ def checkcommandarguments():
         "--no_postprocess",
         action="store_false",
         help="Include this flag to prevent RiverGrid post-processing.",
-    )
-    # note: argparse will convert to key="no_postprocess"
+    )  # note: argparse will convert to key="no_postprocess"
 
-    argdict = vars(parser.parse_args())
-
-    inputfile = pathlib.Path(argdict["settings_file"])
-    if not inputfile.exists():
-        raise Exception(f"Cannot find settings file {inputfile}")
-    outdir = pathlib.Path(argdict["output_directory"])
-    if not outdir.is_dir():
-        raise Exception(f"Output directory {outdir} does not exist")
-
-    return argdict
+    return parser
 
 
 def get_prng(timer, comm=None, seed=None):
