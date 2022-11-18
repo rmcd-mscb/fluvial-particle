@@ -1,8 +1,102 @@
 """General helper functions."""
+import argparse
 import pathlib
+from os import getpid
 from typing import Tuple
 
+import h5py
 import numpy as np
+
+
+def checkcommandarguments():
+    """Check the user's command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="fluvial_particle",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("settings_file", help="User settings file")
+    parser.add_argument("output_directory", help="Output directory for results")
+    parser.add_argument(
+        "--seed",
+        dest="seed",
+        type=int,
+        default=None,
+        help="Specify a single integer to fix the seed of the random number generator. Only used in serial mode.",
+    )
+    parser.add_argument(
+        "--no-postprocess",
+        "--no_postprocess",
+        action="store_false",
+        help="Include this flag to prevent RiverGrid post-processing.",
+    )
+    # note: argparse will convert to key="no_postprocess"
+
+    argdict = vars(parser.parse_args())
+
+    inputfile = pathlib.Path(argdict["settings_file"])
+    if not inputfile.exists():
+        raise Exception(f"Cannot find settings file {inputfile}")
+    outdir = pathlib.Path(argdict["output_directory"])
+    if not outdir.is_dir():
+        raise Exception(f"Output directory {outdir} does not exist")
+
+    return argdict
+
+
+def get_prng(timer, comm=None, seed=None):
+    """Generate a random seed using time and the process id, then create and return the random number generator.
+
+    Args:
+        timer (time.time or MPI.Wtime): object that controls the timing; time.time for serial execution, MPI.Wtime for parallel
+        comm (MPI.Intracomm): MPI communicator for parallel execution. Defaults to None
+        seed (int): random seed
+
+    Returns:
+        np.random.RandomState: the random number generator
+
+    """
+    if seed is None:
+        seed = np.int64(np.abs(((timer() * 181) * ((getpid() - 83) * 359)) % 104729))
+
+    if comm is None:
+        print(f"Using seed {seed}", flush=True)
+
+    prng = np.random.RandomState(seed)
+    return prng
+
+
+def load_checkpoint(fname, tidx, start, end, comm=None):
+    """Load initial positions from a checkpoint HDF5 file.
+
+    Args:
+        fname (str): path to checkpoint HDF5 file
+        tidx (int): outer index of HDF5 datasets
+        start (int): starting index of this processor's assigned space
+        end (int): ending index (non-inclusive)
+        comm (mpi4py communicator, optional): for parallel runs.
+
+    Returns:
+        Tuple(ndarray, ndarray, ndarray, int): the (x,y,z) starting positions of the particles and the simulation start time
+    """
+    if comm is None or comm.Get_rank() == 0:
+        print("Loading initial particle positions from a checkpoint HDF5 file")
+    inputfile = pathlib.Path(fname)
+    if not inputfile.exists():
+        raise Exception(f"Cannot find load_checkpoint HDF5 file: {fname}")
+    if comm is None:
+        h5file = h5py.File(fname, "r")
+    else:
+        h5file = h5py.File(fname, "r", driver="mpio", comm=comm)
+
+    grp = h5file["coordinates"]
+    x = grp["x"][tidx, start:end]
+    y = grp["y"][tidx, start:end]
+    z = grp["z"][tidx, start:end]
+    t = grp["time"][tidx].item(0)  # returns t as a Python basic float
+
+    h5file.close()
+
+    return x, y, z, t
 
 
 def load_variable_source(
@@ -30,7 +124,7 @@ def load_variable_source(
         Exception: the input did not contain 5 columns per row
 
     Returns:
-        Tuple(np.ndarray, np.ndarray, np.ndarray, np.ndarray): each output ndarray is 1D and has length numpart
+        Tuple(ndarray, ndarray, ndarray, ndarray): each output ndarray is 1D and has length equal to the summed numpart column
     """
     inputfile = pathlib.Path(fname)
     if not inputfile.exists():
