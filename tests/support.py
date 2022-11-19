@@ -26,7 +26,7 @@ def get_num_timesteps(f: h5py._hl.files.File) -> int:
     Returns:
         int: _description_
     """
-    return f["coordinates"].get("x").shape[0]
+    return f["coordinates"]["x"].shape[0]
 
 
 def get_points(
@@ -43,18 +43,10 @@ def get_points(
         np.ndarray: _description_
     """
     # f = h5py.File(filename)
-    pt_dim = f["coordinates"].get("x").shape[1]
-    x = f["coordinates"].get("x")
-    y = f["coordinates"].get("y")
-    z = f["coordinates"].get("z")
+    x = f["coordinates"]["x"][time, :]
+    y = f["coordinates"]["y"][time, :]
+    z = f["coordinates"]["z"][time, :]
     if not twod:
-        return np.array(
-            [[[x[i, j], y[i, j], z[i, j]] for i in [time] for j in np.arange(pt_dim)]][
-                0
-            ]
-        )
+        return np.stack([x, y, z]).T
     else:
-        # returns z as 0.5 so it sits above 2d mesh
-        return np.array(
-            [[[x[i, j], y[i, j], 0.5] for i in [time] for j in np.arange(pt_dim)]][0]
-        )
+        return np.stack([x, y, 0.5 * np.ones(x.size)]).T
