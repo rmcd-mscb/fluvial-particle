@@ -11,17 +11,6 @@ from .support import get_points
 from fluvial_particle import simulate
 from fluvial_particle.Settings import Settings
 
-# import os
-
-# def test_Particles():
-# print(f'the current working directory is {os.getcwd()}')
-argdict = {
-    "settings_file": "./tests/data/user_options_test.py",
-    "output_directory": "./tests/data/output",
-    "seed": 3654125,
-    "no_postprocess": True,
-}
-
 
 def run_simulation(argdict: dict) -> None:
     """Run simulation."""
@@ -78,7 +67,24 @@ def run_simulation(argdict: dict) -> None:
             },
             "./tests/data/output_varsrc_fixed",
         ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_checkpoint.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_checkpoint_fixed",
+        ),
     ],
+    ids=(
+        "Particles simulation",
+        "FallingParticles simulation",
+        "LarvalBotParticles simulation",
+        "LarvalTopParticles simulation",
+        "simulate with variable start times",
+        "simulate from checkpoint",
+    ),
 )
 def test_particle(argdict: dict, test_out_path: str) -> None:
     """Test basic particle-tracking."""
