@@ -5,6 +5,9 @@ import numpy as np
 from numpy.testing import assert_equal
 from numpy.testing import assert_string_equal
 
+from .support import get_h5file
+from .support import get_num_timesteps
+from .support import get_points
 from fluvial_particle.Helpers import create_parser
 from fluvial_particle.Helpers import get_prng
 from fluvial_particle.Helpers import load_checkpoint
@@ -88,3 +91,17 @@ def test_settings_module():
     assert_string_equal(
         options["file_name_2d"], "./tests/data/Result_FM_MEander_1_long_2D1.vtk"
     )
+
+
+def test_support():
+    """Test the testing support functions."""
+    h5fname = "./tests/data/output_fixed/particles.h5"
+    test_file = get_h5file(h5fname)
+    test_keys = list(test_file.keys())
+    test_nts = get_num_timesteps(test_file)
+    test_points = get_points(test_file, test_nts - 1, twod=True)
+    test_file.close()
+
+    assert_equal(test_keys, ["coordinates", "properties"])
+    assert_equal(test_nts, 4)
+    assert_equal(test_points[-1, :], [32.42796805680734, 8.330739593602996, 0.5])
