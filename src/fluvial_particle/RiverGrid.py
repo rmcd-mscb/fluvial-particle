@@ -392,11 +392,7 @@ class RiverGrid:
 
     @property
     def required_keys2d(self):
-        """Array names required in the input 2D grid.
-
-        Returns:
-            tuple
-        """
+        """tuple(str): array names required in the input 2D grid."""
         return (
             "Elevation",
             "IBC",
@@ -407,11 +403,7 @@ class RiverGrid:
 
     @property
     def required_keys3d(self):
-        """Array names required in the input 3D grid.
-
-        Returns:
-            tuple
-        """
+        """tuple(str): array names required in the input 3D grid."""
         return ("Velocity",)
 
     def update_2d_pipeline(self, px, py, idx=None):
