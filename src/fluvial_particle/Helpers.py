@@ -6,6 +6,8 @@ from typing import Tuple
 
 import h5py
 import numpy as np
+import vtk
+from vtk.util import numpy_support
 
 
 def checkcommandarguments():
@@ -23,6 +25,67 @@ def checkcommandarguments():
 
     return argdict
 
+
+def convert_grid_hdf5tovtk(h5fname, output_dir, output_prefix="cells", output_threed=True):
+    """Convert a HDF5 RiverGrid mesh file into a time series of VTKStructuredGrid files.
+
+    Args:
+        h5fname (str): path to the RiverGrid HDF5 output file
+        output_dir (str): directory to write output VTK files
+        output_prefix (str, optional): shared name of the output VTK files, a suffix like "00.vtk" will be appended to each one.
+            Defaults to "cells".
+        output_threed (bool, optional): if True, output files will be on 3D grids. If False, output will be 2D. Defaults to True.
+
+    Raises:
+        Exception: if the output directory output_dir does not exist
+    """
+    outdir = pathlib.Path(output_dir)
+    if not outdir.is_dir():
+        raise Exception(f"Output directory {outdir} does not exist")
+
+    with h5py.File(h5fname,"r") as h5f:
+        grid = h5f["grid"]
+        n_prints = grid["time"].size  # the number of output files = number of time steps
+        n_digits = len(str(n_prints - 1))
+        if output_threed:
+            X = grid["X"][()].ravel()  # raveled because VTK takes grid points as a collection of (x,y,z) tuples
+            Y = grid["Y"][()].ravel()
+            Z = grid["Z"][()].ravel()
+            dims = tuple(np.flip(grid["X"].shape))  # VTK uses x_i,y_j,z_k ordering
+            grpname = "cells3d"
+        else:
+            X = grid["X"][0, ...].ravel()  # take just the z=0 slice
+            Y = grid["Y"][0, ...].ravel()
+            Z = np.zeros(X.size)  # VTK takes 3D points, even on a 2D structured grid
+            dims = (grid["X"].shape[2], grid["X"].shape[1], 1)
+            grpname = "cells2d"
+
+        ptdata = np.stack([X,Y,Z]).T  # all the (x,y,z) grid points
+        vptdata = numpy_support.numpy_to_vtk(ptdata)
+
+        pts = vtk.vtkPoints()
+        pts.SetNumberOfPoints(X.size)
+        pts.SetData(vptdata)
+
+        grid = vtk.vtkStructuredGrid()
+        grid.SetDimensions(dims)
+        grid.SetPoints(pts)
+
+        for j in range(n_prints):
+            dname = "fpc" + str(j)
+            data = h5f[grpname][dname][()].ravel()
+            vdata = numpy_support.numpy_to_vtk(data)
+            vdata.SetName("Fractional Particle Count")
+            grid.GetCellData().AddArray(vdata)
+
+            vtkout = output_prefix + f"{j:0{n_digits}d}" + ".vtk"
+            vtkout = "/".join([output_dir, vtkout])
+            writer = vtk.vtkStructuredGridWriter()
+            writer.SetFileName(vtkout)
+            writer.SetInputData(grid)
+            writer.Write()
+
+            grid.GetCellData().RemoveArray("Fractional Particle Count")
 
 def create_parser():
     """Factory method to create an argument parser for command-line arguments.
