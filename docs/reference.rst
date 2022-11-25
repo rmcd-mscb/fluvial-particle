@@ -8,7 +8,7 @@ API Reference
 RiverGrid class
 ----------------
 
-.. autoclass:: fluvial_particle.RiverGrid
+.. autoclass:: fluvial_particle.RiverGrid.RiverGrid
     :members:
 
     .. automethod:: __init__
@@ -16,7 +16,7 @@ RiverGrid class
 Particles class
 ----------------
 
-.. autoclass:: fluvial_particle.Particles
+.. autoclass:: fluvial_particle.Particles.Particles
     :members:
 
     .. automethod:: __init__
@@ -24,7 +24,7 @@ Particles class
 FallingParticles class
 -----------------------
 
-.. autoclass:: fluvial_particle.FallingParticles
+.. autoclass:: fluvial_particle.FallingParticles.FallingParticles
     :members:
 
     .. automethod:: __init__
