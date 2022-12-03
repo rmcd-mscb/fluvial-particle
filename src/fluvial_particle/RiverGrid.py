@@ -89,7 +89,7 @@ class RiverGrid:
         Args:
             nprints (int): number of printing time steps
             time (NumPy ndarray): array of print times
-            fname (string): file name of output HDF5 file
+            fname (str): file name of output HDF5 file
             **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
 
         Returns:
@@ -177,7 +177,7 @@ class RiverGrid:
         """Write XDMF files and cumulative cell counters, must be executed in serial.
 
         Args:
-            output_directory (string): path to output directory
+            output_directory (str): path to output directory
             n_prints (int): total number of printing time steps
             globalnparts (int): number of particles across all processors
             **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
@@ -545,18 +545,6 @@ class RiverGrid:
         self.pt3d.Modified()
         self.probe3d.Update()
 
-    def update_velocity_fields(self, tidx):
-        """Updates time-dependent field arrays on VTK structured grids.
-
-        Args:
-            tidx ([type]): [description]
-        """
-        # want this to be callable from every time index, including 0
-        # want it to support a different timestep than the particles timestep
-        # can all of the time-dependent velocity data be stored in the same vtk file, e.g. along a new dimension?
-        # or do we need to load a new file with every new time step?
-        # the answer to these questions will determine how we implement
-
     def write_hdf5(self, obj, name, data):
         """Write cell arrays to HDF5 object.
 
@@ -576,9 +564,9 @@ class RiverGrid:
             filexmf (file): open file to write
             time (float): current simulation time
             dims (tuple): integer values describing dimensions of the grid
-            names (list of strings): paths to datasets from the root directory in the HDF5 file
-            attrnames (list of strings): descriptive names corresponding to names
-            dtypes (list of strings): data types corresponding to names (either Float or Int)
+            names (list of str): paths to datasets from the root directory in the HDF5 file
+            attrnames (list of str): descriptive names corresponding to names
+            dtypes (list of str): data types corresponding to names (either Float or Int)
             center(str): Node for node-centered data, Cell for cell-centered data
         """
         filexmf.write(
