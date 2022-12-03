@@ -175,12 +175,20 @@ def test_rivergrid_load_npz():
         wse = np.ones(dims)
 
         # save to an npz file
-        sv_dict = {"x": x, "y": y, "elev": elev, "ibc": ibc, "shear": shear, "vx": vx, "vy": vy, "wse": wse}
+        sv_dict = {
+            "x": x,
+            "y": y,
+            "elev": elev,
+            "ibc": ibc,
+            "shear": shear,
+            "vx": vx,
+            "vy": vy,
+            "wse": wse,
+        }
         fname = "/".join([tmpdirname, "input.npz"])
         np.savez(fname, **sv_dict)
 
-        # create mesh with data from npz file 
+        # create mesh with data from npz file
         grid = RiverGrid(0, fname)
 
         assert_equal((grid.nz, grid.nn, grid.ns), (1, 11, 201))
-
