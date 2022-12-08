@@ -3,7 +3,6 @@ import time
 from os.path import join
 from tempfile import TemporaryDirectory
 
-import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from numpy.testing import assert_equal
@@ -12,7 +11,6 @@ from .support import get_h5file
 from .support import get_num_timesteps
 from .support import get_points
 from fluvial_particle import simulate
-from fluvial_particle.RiverGrid import RiverGrid
 from fluvial_particle.Settings import Settings
 
 
@@ -80,6 +78,15 @@ def run_simulation(argdict: dict) -> None:
             },
             "./tests/data/output_checkpoint_fixed",
         ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_npz.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_fixed",
+        ),
     ],
     ids=(
         "Particles simulation",
@@ -88,6 +95,7 @@ def run_simulation(argdict: dict) -> None:
         "LarvalTopParticles simulation",
         "simulate with variable start times",
         "simulate from checkpoint",
+        "simulate with npz input meshes",
     ),
 )
 def test_particle(argdict: dict, test_out_path: str) -> None:
@@ -157,38 +165,3 @@ def test_track_serial(run, request, testdir):
     result = run("--seed", "3654125", "--no-postprocess", settings_file, "./")
     # For this test, only assert that fluvial_particle completed successfully
     assert_equal(result.ret, 0)
-
-
-def test_rivergrid_load_npz():
-    """Test the conversion of input Numpy .npz file to VTK structured grid."""
-    with TemporaryDirectory() as tmpdirname:
-        # create expected arrays for 2D mesh
-        x = np.mgrid[0:200:201j]
-        y = np.mgrid[0:10:11j]
-        x, y = np.meshgrid(x, y)
-        dims = x.shape
-        elev = np.ones(dims)
-        ibc = np.ones(dims, dtype=np.int64)
-        shear = np.ones(dims)
-        vx = np.ones(dims)
-        vy = np.ones(dims)
-        wse = np.ones(dims)
-
-        # save to an npz file
-        sv_dict = {
-            "x": x,
-            "y": y,
-            "elev": elev,
-            "ibc": ibc,
-            "shear": shear,
-            "vx": vx,
-            "vy": vy,
-            "wse": wse,
-        }
-        fname = "/".join([tmpdirname, "input.npz"])
-        np.savez(fname, **sv_dict)
-
-        # create mesh with data from npz file
-        grid = RiverGrid(0, fname)
-
-        assert_equal((grid.nz, grid.nn, grid.ns), (1, 11, 201))
