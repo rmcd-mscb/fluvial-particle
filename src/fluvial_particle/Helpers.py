@@ -29,7 +29,7 @@ def checkcommandarguments():
 def convert_grid_hdf5tovtk(
     h5fname, output_dir, output_prefix="cells", output_threed=True
 ):
-    """Convert a HDF5 RiverGrid mesh file into a time series of VTKStructuredGrid files.
+    """Convert an HDF5 RiverGrid mesh output file into a time series of VTKStructuredGrid files.
 
     Args:
         h5fname (str): path to the RiverGrid HDF5 output file
@@ -48,7 +48,7 @@ def convert_grid_hdf5tovtk(
     with h5py.File(h5fname, "r") as h5f:
         grid = h5f["grid"]
         n_prints = grid["time"].size  # the number of output files
-        n_digits = len(str(n_prints - 1))
+        n_digits = len(str(n_prints - 1))  # the number of digits needed in file suffix
         if output_threed:
             x = grid["X"][()].ravel()
             y = grid["Y"][()].ravel()
@@ -88,6 +88,89 @@ def convert_grid_hdf5tovtk(
             writer.Write()
 
             grid.GetCellData().RemoveArray("Fractional Particle Count")
+
+
+def convert_particles_hdf5tocsv(h5fname, output_dir, output_prefix="particles"):
+    """Convert an HDF5 Particles output file into a time series of csv files.
+
+    Args:
+        h5fname (str): path to the Particles HDF5 output file
+        output_dir (str): directory to write output csv files
+        output_prefix (str, optional): shared name of the output csv files, a suffix like "00.csv" will be appended to each one.
+            Defaults to "particles".
+
+    Raises:
+        Exception: if the output directory output_dir does not exist
+    """
+    outdir = pathlib.Path(output_dir)
+    if not outdir.is_dir():
+        raise Exception(f"Output directory {outdir} does not exist")
+
+    with h5py.File(h5fname, "r") as h5f:
+        coords = h5f["coordinates"]
+        props = h5f["properties"]
+
+        x = coords["x"][()]
+        y = coords["y"][()]
+        z = coords["z"][()]
+        time = coords["time"][()]
+        bedelev = props["bedelev"][()]
+        cellidx2d = props["cellidx2d"][()]
+        cellidx3d = props["cellidx3d"][()]
+        depth = props["depth"][()]
+        htbabvbed = props["htabvbed"][()]
+        velvec = props["velvec"][()]
+        wse = props["wse"][()]
+        vx = velvec[..., 0]
+        vy = velvec[..., 1]
+        vz = velvec[..., 2]
+
+        n_prints = time.size  # the number of output files
+        n_digits = len(str(n_prints - 1))  # the number of digits needed in file suffix
+
+        for j in range(n_prints):
+            csv_out = output_prefix + f"{j:0{n_digits}d}" + ".csv"
+            csv_out = "/".join([output_dir, csv_out])
+            with open(csv_out, "w") as f:
+                # write header first using "w" flag to overwrite existing file
+                header = [
+                    "time",
+                    "x",
+                    "y",
+                    "z",
+                    "bed_elevation",
+                    "cell_index_2d",
+                    "cell_index_3d",
+                    "depth",
+                    "height_above_bed",
+                    "velocity_x",
+                    "velocity_y",
+                    "velocity_z",
+                    "water_surface_elevation",
+                ]
+                f.write(", ".join(header) + "\n")
+            with open(csv_out, "a") as f:
+                # now write data to same file in append mode
+                idx = np.s_[j, :]
+                t = time[idx] + np.zeros(x[idx].shape)
+                data = np.stack(
+                    [
+                        t,
+                        x[idx],
+                        y[idx],
+                        z[idx],
+                        bedelev[idx],
+                        cellidx2d[idx],
+                        cellidx3d[idx],
+                        depth[idx],
+                        htbabvbed[idx],
+                        vx[idx],
+                        vy[idx],
+                        vz[idx],
+                        wse[idx],
+                    ]
+                ).T
+                np.savetxt(f, data, delimiter=",")
 
 
 def create_parser():
