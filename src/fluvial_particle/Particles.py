@@ -98,8 +98,8 @@ class Particles:
             nprints (int): total number of printing time steps
 
         Returns:
-            chk1darrays (tuple): chunk size of datasets for 1D arrays
-            chkvelarray (tuple): chunk size of datasets for 2D velocity arrays
+            tuple(tuple, tuple): 1st tuple is chunk size of datasets for 1D arrays (len=2), 2nd tuple is
+            chunk size of datasets for 2D velocity arrays (len=3)
         """
         # Do the 1D particles arrays first, total write dimensions are (nprints, nparts)
         # 8 bytes per number means 1 MiB =  2^20 bytes = 2^17 numbers
@@ -141,7 +141,7 @@ class Particles:
             **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
 
         Returns:
-            parts_h5: new open HDF5 file object
+            h5py file object: the newly created and open HDF5 file
         """
         if comm is None:
             parts_h5 = h5py.File(fname, "w")  # Serial version
@@ -634,7 +634,7 @@ class Particles:
             dt (float): time step
 
         Returns:
-            pz (float NumPy array): new elevation array
+            ndarray: new elevation array
         """
         # Perturbations are assumed to start from the same fractional depth as last time
         z0 = self.bedelev + self.normdepth * self.depth

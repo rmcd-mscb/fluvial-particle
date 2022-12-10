@@ -93,7 +93,7 @@ class RiverGrid:
             **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
 
         Returns:
-            cells_h5: new open HDF5 file object
+            h5py file object: the newly created and open HDF5 file
         """
         if self.track3d:
             vtkcoords = self.vtksgrid3d.GetPoints().GetData()
@@ -146,7 +146,7 @@ class RiverGrid:
             idx (NumPy ndarray, optional): active indices in px & py. Defaults to None.
 
         Returns:
-            (NumPy ndarray): dtype=bool, True for indices of points out of the domain, else False
+            ndarray(bool): True for indices of points out of the domain, else False
         """
         self.update_2d_pipeline(px, py, idx)
         out = self.probe2d.GetOutput()

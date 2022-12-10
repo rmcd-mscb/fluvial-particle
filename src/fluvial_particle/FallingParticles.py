@@ -43,7 +43,7 @@ class FallingParticles(Particles):
             fname (string): name of the HDF5 file. Defauts to "particles.h5"
 
         Returns:
-            parts_h5: new open HDF5 file object
+            h5py file object: the newly created and open HDF5 file
         """
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
         grp = parts_h5["properties"]
@@ -87,7 +87,7 @@ class FallingParticles(Particles):
             dt (float): time step
 
         Returns:
-            pz (float NumPy array): new elevation array
+            ndarray: new elevation array
         """
         z0 = self.bedelev + self.normdepth * self.depth
         zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5

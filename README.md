@@ -29,7 +29,8 @@ Prohibitively large or long simulation problems can be made tractable with the h
 
 ## Features
 
-- TODO
+- Lagrangian particle-tracking in fluvial environments
+- parallel computing with MPI using mpi4py
 
 ## Installation
 

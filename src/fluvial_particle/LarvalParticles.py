@@ -46,7 +46,7 @@ class LarvalParticles(Particles):
             fname (string): name of the HDF5 file. Defaults to "particles.h5"
 
         Returns:
-            parts_h5: new open HDF5 file object
+            h5py file object: the newly created and open HDF5 file
         """
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
         grp = parts_h5["properties"]
@@ -259,7 +259,7 @@ class LarvalBotParticles(LarvalParticles):
             dt (float): time step
 
         Returns:
-            pz (float NumPy array): new elevation array
+            ndarray: new elevation array
         """
         amplitude = self.depth * self.amp
         time = self.time + dt
@@ -279,7 +279,7 @@ class LarvalTopParticles(LarvalParticles):
             dt (float): time step
 
         Returns:
-            pz (float NumPy array): new elevation array
+            ndarray: new elevation array
         """
         amplitude = self.depth * self.amp
         time = self.time + dt
