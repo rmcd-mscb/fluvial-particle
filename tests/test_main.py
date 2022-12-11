@@ -14,6 +14,9 @@ from fluvial_particle import simulate
 from fluvial_particle.Settings import Settings
 
 
+pytest_plugins = ["pytester"]  # allows testing of command-line applications
+
+
 def run_simulation(argdict: dict) -> None:
     """Run simulation."""
     settings_file = argdict["settings_file"]
@@ -113,9 +116,6 @@ def test_particle(argdict: dict, test_out_path: str) -> None:
         test_points = get_points(test_file, test_nts - 1, twod=True)
 
         assert_allclose(test_points, new_points)
-
-
-pytest_plugins = ["pytester"]  # allows testing of command-line applications
 
 
 @pytest.fixture

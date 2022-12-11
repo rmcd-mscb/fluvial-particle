@@ -23,7 +23,6 @@ startfrac = 0.5
 
 # Particle type for the simulation
 ParticleType = LarvalTopParticles  # noqa
-radius = 0.0001  # optional keyword argument for FallingParticles subclass
 
 # Optional Particles keyword arguments
 beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient
