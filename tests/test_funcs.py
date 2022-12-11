@@ -1,18 +1,55 @@
 """Test cases for the Settings and Helpers modules."""
 import time
+from os.path import join
+from tempfile import TemporaryDirectory
 
 import numpy as np
+import vtk
+from numpy.testing import assert_allclose
 from numpy.testing import assert_equal
 from numpy.testing import assert_string_equal
+from vtk.util import numpy_support
 
 from .support import get_h5file
 from .support import get_num_timesteps
 from .support import get_points
+from fluvial_particle.Helpers import convert_grid_hdf5tovtk
+from fluvial_particle.Helpers import convert_particles_hdf5tocsv
 from fluvial_particle.Helpers import create_parser
 from fluvial_particle.Helpers import get_prng
 from fluvial_particle.Helpers import load_checkpoint
 from fluvial_particle.Helpers import load_variable_source
 from fluvial_particle.Settings import Settings
+
+
+def test_conversions(request):
+    """Test the HDF5 conversion methods from the Helpers module."""
+    with TemporaryDirectory() as tmpdirname:
+        tests_dir = request.fspath.dirname
+        parts_file = join(tests_dir, "data", "output_fixed", "particles.h5")
+        cells_file = join(tests_dir, "data", "output_fixed", "cells.h5")
+        convert_particles_hdf5tocsv(parts_file, tmpdirname)
+        convert_grid_hdf5tovtk(cells_file, tmpdirname)
+
+        # Test on particles csv conversion
+        parts_out_name = join(tmpdirname, "particles0.csv")
+        parts_out = np.loadtxt(parts_out_name, delimiter=",", skiprows=1)
+        pts_out = parts_out[:, 1:4]
+        test_f = get_h5file(parts_file)
+        test_pts = get_points(test_f, 0, twod=False)
+        assert_allclose(pts_out, test_pts)
+
+        # Test on mesh vtk conversion
+        cellsh5 = get_h5file(cells_file)
+        cells_out_name = join(tmpdirname, "cells0.vtk")
+        grid = vtk.vtkStructuredGrid()
+        reader = vtk.vtkStructuredGridReader()
+        reader.SetOutput(grid)
+        reader.SetFileName(cells_out_name)
+        reader.Update()
+        test_x = cellsh5["grid"]["X"][()].ravel()
+        out_x = numpy_support.vtk_to_numpy(grid.GetPoints().GetData())[:, 0]
+        assert_allclose(test_x, out_x)
 
 
 def test_create_parser():
