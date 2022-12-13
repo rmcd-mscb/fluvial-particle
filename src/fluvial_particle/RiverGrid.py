@@ -17,8 +17,10 @@ class RiverGrid:
 
         Args:
             track3d (int): 1 if 3D model run, 0 else
-            filename2d (string): path to the input 2D VTK structured grid
-            filename3d (string, optional): path to the input 2D VTK structured grid. Required for 3D simulations
+            filename2d (str): path to the input 2D grid. Must be either a VTK structured grid file (with extension .vtk),
+                or a NumPy NpzFile created using the savez command. The arrays in the .npz file must match the expected keys.
+                See the docstring of the read_2d_data() method for additional details.
+            filename3d (str, optional): path to the input 2D VTK structured grid. Required for 3D simulations
         """
         self.vtksgrid2d = vtk.vtkStructuredGrid()
         self.vtksgrid3d = None
@@ -87,11 +89,11 @@ class RiverGrid:
         Args:
             nprints (int): number of printing time steps
             time (NumPy ndarray): array of print times
-            fname (string): file name of output HDF5 file
+            fname (str): file name of output HDF5 file
             **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
 
         Returns:
-            cells_h5: new open HDF5 file object
+            h5py file object: the newly created and open HDF5 file
         """
         if self.track3d:
             vtkcoords = self.vtksgrid3d.GetPoints().GetData()
@@ -144,7 +146,7 @@ class RiverGrid:
             idx (NumPy ndarray, optional): active indices in px & py. Defaults to None.
 
         Returns:
-            (NumPy ndarray): dtype=bool, True for indices of points out of the domain, else False
+            ndarray(bool): True for indices of points out of the domain, else False
         """
         self.update_2d_pipeline(px, py, idx)
         out = self.probe2d.GetOutput()
@@ -175,7 +177,7 @@ class RiverGrid:
         """Write XDMF files and cumulative cell counters, must be executed in serial.
 
         Args:
-            output_directory (string): path to output directory
+            output_directory (str): path to output directory
             n_prints (int): total number of printing time steps
             globalnparts (int): number of particles across all processors
             **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
@@ -341,32 +343,209 @@ class RiverGrid:
             self.vtksgrid3d.GetCellData().AddArray(cidx3)
 
     def read_2d_data(self):
-        """Read 2D structured grid data file."""
-        # Read 2D grid
-        reader2d = vtk.vtkStructuredGridReader()
-        reader2d.SetFileName(self.fname2d)
-        reader2d.SetOutput(self.vtksgrid2d)
-        reader2d.Update()
-        # Check for required field arrays defined at the grid points
-        ptdata = self.vtksgrid2d.GetPointData()
-        names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
-        missing = [x for x in self.required_keys2d if x not in names]
-        if len(missing) > 0:
-            raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
+        """Read 2D structured grid data file.
+
+        Loads 2D data onto a VTK structured grid. The structured grid can be directly supplied as a .vtk file,
+        or as a collection of 2D arrays in a NumPy .npz file. The filename is read from the self.fname2d variable,
+        saved during class initialization via the filename2d argument.
+
+        If a .npz file is supplied, then each expected field is a 2D array of the same shape. The (x, y) coordinates
+        of every node that defines the grid are supplied via the x & y arguments. The remaining fields are all defined
+        at the grid points. The npz file must have been saved using the following keyword arguments:
+
+            - x: x coordinates of the grid
+            - y: y coordinates of the grid
+            - elev: topographic elevation
+            - ibc: indicates whether node is wet (1) or dry (0)
+            - shear: shear stress magnitude
+            - vx: x-component of fluid velocity
+            - vy: y-component of fluid velocity
+            - wse: water surface elevation
+            - z (optional): z coordinates of the grid. Defaults to constant 0.
+            - vz (optional): z-component of fluid velocity. Defaults to constant 0.
+        """
+        suffix = pathlib.Path(self.fname2d).suffix
+        if suffix == ".vtk":
+            # Read 2D grid from vtk structured grid inputs
+            reader2d = vtk.vtkStructuredGridReader()
+            reader2d.SetFileName(self.fname2d)
+            reader2d.SetOutput(self.vtksgrid2d)
+            reader2d.Update()
+            # Check for required field arrays defined at the grid points
+            ptdata = self.vtksgrid2d.GetPointData()
+            names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
+            missing = [x for x in self.required_keys2d if x not in names]
+            if len(missing) > 0:
+                raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
+        elif suffix == ".npz":
+            # Read 2D grid arrays from NumPy .npz file and convert to VTK grid
+            npzfile = np.load(self.fname2d)
+            reqd = ["x", "y", "elev", "ibc", "shear", "vx", "vy", "wse"]
+            names = npzfile.files
+            missing = [x for x in reqd if x not in names]
+            if len(missing) > 0:
+                raise ValueError(
+                    f"Missing {missing} array(s) from the input 2D grid npz file"
+                )
+            x = npzfile["x"]
+            dims = x.shape
+            y = npzfile["y"]
+            if "z" in names:
+                z = npzfile["z"]
+            else:
+                z = np.zeros(dims)
+            elev = npzfile["elev"]
+            ibc = npzfile["ibc"]
+            shear = npzfile["shear"]
+            vx = npzfile["vx"]
+            vy = npzfile["vy"]
+            if "vz" in names:
+                vz = npzfile["vz"]
+            else:
+                vz = np.zeros(dims)
+            wse = npzfile["wse"]
+
+            # make sure they're all the same shape and 2D
+            ll = [x, y, z, elev, ibc, shear, vx, vy, vz, wse]
+            if not all(a.shape == dims for a in ll):
+                raise Exception(
+                    "input arrays in the 2D grid npz file must all be the same shape"
+                )
+            if not len(dims) == 2:
+                raise Exception("input arrays in the 2D grid npz file must be 2D")
+
+            # ravel the arrays
+            x = x.ravel()
+            y = y.ravel()
+            z = z.ravel()
+            elev = elev.ravel()
+            ibc = ibc.ravel()
+            shear = shear.ravel()
+            vx = vx.ravel()
+            vy = vy.ravel()
+            vz = vz.ravel()
+            wse = wse.ravel()
+
+            # make the coordinates
+            ptdata = np.stack([x, y, z]).T
+            vptdata = numpy_support.numpy_to_vtk(ptdata)
+            pts = vtk.vtkPoints()
+            pts.SetNumberOfPoints(x.size)
+            pts.SetData(vptdata)
+
+            # make the grid
+            grid = vtk.vtkStructuredGrid()
+            grid.SetDimensions((dims[1], dims[0], 1))
+            grid.SetPoints(pts)
+
+            # combine the velocity components
+            vel = np.stack([vx, vy, vz]).T
+
+            # add the fields to the grid
+            arr_list = [elev, ibc, shear, vel, wse]
+            name_list = self.required_keys2d
+            for arr, name in zip(arr_list, name_list):
+                vtkarr = numpy_support.numpy_to_vtk(arr)
+                vtkarr.SetName(name)
+                grid.GetPointData().AddArray(vtkarr)
+
+            # save to the class variable
+            self.vtksgrid2d = grid
+        else:
+            raise TypeError(
+                f"{pathlib.Path(self.fname2d).suffix} file type not supported for input 2D grid; expected .vtk or .npz"
+            )
 
     def read_3d_data(self):
-        """Read 3D structured grid data file."""
-        # Read 2D grid
-        reader3d = vtk.vtkStructuredGridReader()
-        reader3d.SetFileName(self.fname3d)
-        reader3d.SetOutput(self.vtksgrid3d)
-        reader3d.Update()
-        # Check for required field arrays defined at the grid points
-        ptdata = self.vtksgrid3d.GetPointData()
-        names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
-        missing = [x for x in self.required_keys3d if x not in names]
-        if len(missing) > 0:
-            raise ValueError(f"Missing {missing} array from the input 3D grid")
+        """Read 3D structured grid data file.
+
+        Loads 3D data onto a VTK structured grid. The structured grid can be directly supplied as a .vtk file,
+        or as a collection of 3D arrays in a NumPy .npz file. The filename is read from the self.fname3d variable,
+        saved during class initialization via the filename3d argument.
+
+        If a .npz file is supplied, then each expected field is a 3D array of the same shape. The (x, y, z) coordinates
+        of every node that defines the grid are supplied via the x, y, & z arguments. The 3D fluid velocity is the other expected
+        field, and it is defined at the grid points. The npz file must have been saved using the following keyword arguments:
+
+            - x: x coordinates of the grid
+            - y: y coordinates of the grid
+            - z: z coordinates of the grid
+            - vx: x-component of fluid velocity
+            - vy: y-component of fluid velocity
+            - vz: z-component of fluid velocity
+        """
+        suffix = pathlib.Path(self.fname3d).suffix
+        if suffix == ".vtk":
+            # Read 3D grid
+            reader3d = vtk.vtkStructuredGridReader()
+            reader3d.SetFileName(self.fname3d)
+            reader3d.SetOutput(self.vtksgrid3d)
+            reader3d.Update()
+            # Check for required field arrays defined at the grid points
+            ptdata = self.vtksgrid3d.GetPointData()
+            names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
+            missing = [x for x in self.required_keys3d if x not in names]
+            if len(missing) > 0:
+                raise ValueError(f"Missing {missing} array from the input 3D grid")
+        elif suffix == ".npz":
+            # Read 3D grid arrays from NumPy .npz file and convert to VTK grid
+            npzfile = np.load(self.fname3d)
+            reqd = ["x", "y", "z", "vx", "vy", "vz"]
+            names = npzfile.files
+            missing = [x for x in reqd if x not in names]
+            if len(missing) > 0:
+                raise ValueError(
+                    f"Missing {missing} array(s) from the input 3D grid npz file"
+                )
+
+            x = npzfile["x"]
+            dims = x.shape
+            y = npzfile["y"]
+            z = npzfile["z"]
+            vx = npzfile["vx"]
+            vy = npzfile["vy"]
+            vz = npzfile["vz"]
+
+            ll = [x, y, z, vx, vy, vz]
+            if not all(a.shape == dims for a in ll):
+                raise Exception(
+                    "input arrays in the 3D grid npz file must all be the same shape"
+                )
+            if not len(dims) == 3:
+                raise Exception("input arrays in the 3D grid npz file must be 3D")
+
+            # ravel the arrays
+            x = x.ravel()
+            y = y.ravel()
+            z = z.ravel()
+            vx = vx.ravel()
+            vy = vy.ravel()
+            vz = vz.ravel()
+
+            # make the coordinates
+            ptdata = np.stack([x, y, z]).T
+            vptdata = numpy_support.numpy_to_vtk(ptdata)
+            pts = vtk.vtkPoints()
+            pts.SetNumberOfPoints(x.size)
+            pts.SetData(vptdata)
+
+            # make the grid
+            grid = vtk.vtkStructuredGrid()
+            grid.SetDimensions(tuple(np.flip(dims)))
+            grid.SetPoints(pts)
+
+            # combine the velocity components and add to the grid
+            vel = np.stack([vx, vy, vz]).T
+            vtkvel = numpy_support.numpy_to_vtk(vel)
+            vtkvel.SetName("Velocity")
+            grid.GetPointData().AddArray(vtkvel)
+
+            # save to the class variable
+            self.vtksgrid3d = grid
+        else:
+            raise TypeError(
+                f"{pathlib.Path(self.fname3d).suffix} file type not supported for input 3D grid; expected .vtk or .npz"
+            )
 
     def reconstruct_filter_pipeline(self, nparts):
         """Reconstruct VTK probe filter pipeline objects.
@@ -392,11 +571,7 @@ class RiverGrid:
 
     @property
     def required_keys2d(self):
-        """Array names required in the input 2D grid.
-
-        Returns:
-            tuple
-        """
+        """tuple(str): array names required in the input 2D grid."""
         return (
             "Elevation",
             "IBC",
@@ -407,11 +582,7 @@ class RiverGrid:
 
     @property
     def required_keys3d(self):
-        """Array names required in the input 3D grid.
-
-        Returns:
-            tuple
-        """
+        """tuple(str): array names required in the input 3D grid."""
         return ("Velocity",)
 
     def update_2d_pipeline(self, px, py, idx=None):
@@ -451,18 +622,6 @@ class RiverGrid:
         self.pt3d.Modified()
         self.probe3d.Update()
 
-    def update_velocity_fields(self, tidx):
-        """Updates time-dependent field arrays on VTK structured grids.
-
-        Args:
-            tidx ([type]): [description]
-        """
-        # want this to be callable from every time index, including 0
-        # want it to support a different timestep than the particles timestep
-        # can all of the time-dependent velocity data be stored in the same vtk file, e.g. along a new dimension?
-        # or do we need to load a new file with every new time step?
-        # the answer to these questions will determine how we implement
-
     def write_hdf5(self, obj, name, data):
         """Write cell arrays to HDF5 object.
 
@@ -482,9 +641,9 @@ class RiverGrid:
             filexmf (file): open file to write
             time (float): current simulation time
             dims (tuple): integer values describing dimensions of the grid
-            names (list of strings): paths to datasets from the root directory in the HDF5 file
-            attrnames (list of strings): descriptive names corresponding to names
-            dtypes (list of strings): data types corresponding to names (either Float or Int)
+            names (list of str): paths to datasets from the root directory in the HDF5 file
+            attrnames (list of str): descriptive names corresponding to names
+            dtypes (list of str): data types corresponding to names (either Float or Int)
             center(str): Node for node-centered data, Cell for cell-centered data
         """
         filexmf.write(
@@ -643,20 +802,15 @@ class RiverGrid:
 
     @property
     def boundarycells(self):
-        """Get inflow/outflow boundary cells.
+        """ndarray: the inflow/outflow 2D boundary cells.
 
-        Returns:
-            [type]: [description]
+        A NumPy ndarray with ndims=1 that holds the indices of the upstream and downstream mesh boundary cells.
+        As currently implemented, upstream is the i=0 row and downstream is the i=nsc-1 row.
         """
         return self._boundarycells
 
     @boundarycells.setter
     def boundarycells(self, values):
-        """Set inflow/outflow boundary cells.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("boundarycells.setter: wrong type, must be NumPy ndarray")
         if values.ndim != 1:
@@ -677,7 +831,6 @@ class RiverGrid:
 
     @fname2d.setter
     def fname2d(self, values):
-        """Set 2d grid input filename."""
         # Check that input file exists
         inputfile = pathlib.Path(values)
         if not inputfile.exists():
@@ -691,7 +844,6 @@ class RiverGrid:
 
     @fname3d.setter
     def fname3d(self, values):
-        """Set 3d grid input filename."""
         # Check that input file exists
         inputfile = pathlib.Path(values)
         if not inputfile.exists():
@@ -708,7 +860,6 @@ class RiverGrid:
 
     @nn.setter
     def nn(self, values):
-        """Set the number of stream-normal points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nn.setter must be int")
@@ -727,7 +878,6 @@ class RiverGrid:
 
     @nnc.setter
     def nnc(self, values):
-        """Set the number of stream-normal cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nnc.setter must be int")
@@ -746,7 +896,6 @@ class RiverGrid:
 
     @ns.setter
     def ns(self, values):
-        """Set the number of stream-wise points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("ns.setter must be int")
@@ -765,7 +914,6 @@ class RiverGrid:
 
     @nsc.setter
     def nsc(self, values):
-        """Set the number of stream-wise cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nsc.setter must be int")
@@ -778,13 +926,12 @@ class RiverGrid:
     def nz(self):
         """int: the number of vertical points that define the grids.
 
-        For file writing reasons, ns must be >= 1.
+        For file writing reasons, nz must be >= 1.
         """
         return self._nz
 
     @nz.setter
     def nz(self, values):
-        """Set the number of vertical points that define the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nz.setter must be int")
@@ -797,13 +944,12 @@ class RiverGrid:
     def nzc(self):
         """int: the number of vertical cells defined by the grids.
 
-        For file writing reasons, ns must be >= 1.
+        For file writing reasons, nzc must be >= 1.
         """
         return self._nzc
 
     @nzc.setter
     def nzc(self, values):
-        """Set the number of vertical cells defined by the grids."""
         # must be basic Python integer type
         if not isinstance(values, int):
             raise TypeError("nzc.setter must be int")
@@ -822,7 +968,6 @@ class RiverGrid:
 
     @track3d.setter
     def track3d(self, values):
-        """Set track3d."""
         if not isinstance(values, int):
             raise TypeError("track3d.setter must be int")
         if values < 0 or values > 1:
@@ -832,15 +977,17 @@ class RiverGrid:
 
 # @jit(nopython=True)
 def is_sorted(arr):
-    """Using Numba, an efficient check that a 1D NumPy array is sorted in increasing order.
+    """An efficient check that a 1D NumPy array is sorted in increasing order.
+
+    Written to allow the use of Numba j.i.t. compiling, though not currently enabled.
 
     https://stackoverflow.com/questions/47004506/check-if-a-numpy-array-is-sorted
 
     Args:
-        arr ([type]): [description]
+        arr (ndarray): array to check
 
     Returns:
-        [type]: [description]
+        bool: True if arr is sorted in increasing order, False otherwise
     """
     for i in range(arr.size - 1):
         if arr[i + 1] < arr[i]:

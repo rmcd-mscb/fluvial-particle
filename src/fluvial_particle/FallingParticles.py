@@ -20,10 +20,10 @@ class FallingParticles(Particles):
             **kwargs (dict): additional keyword arguments  # noqa
 
         Keyword args:
-            radius (float): radius of the particles [m], scalar or NumPy array of length nparts, optional
-            rho (float): density of the particles [kg/m^3], scalar or NumPy array of length nparts, optional
-            c1 (float): viscous drag coefficient [-], scalar or NumPy array of length nparts, optional
-            c2 (float): turbulent wake drag coefficient [-], scalar or NumPy array of length nparts, optional
+            radius (float): radius of the particles [m], scalar or NumPy array of length nparts. Defaults to 0.0005
+            rho (float): density of the particles [kg/m^3], scalar or NumPy array of length nparts. Defaults to 2650.0
+            c1 (float): viscous drag coefficient [-], scalar or NumPy array of length nparts. Defaults to 20.0
+            c2 (float): turbulent wake drag coefficient [-], scalar or NumPy array of length nparts. Defaults to 1.1
         """
         super().__init__(nparts, x, y, z, rng, mesh, **kwargs)
         self.c1 = kwargs.get("c1", 20.0)
@@ -39,11 +39,11 @@ class FallingParticles(Particles):
         Args:
             nprints (int): size of first dimension, indexes printing time slices
             globalnparts (int): global number of particles, distributed across processors
-            comm (MPI communicator): only for parallel runs
-            fname (string): name of the HDF5 file
+            comm (MPI communicator): only for parallel runs. Defaults to None
+            fname (string): name of the HDF5 file. Defauts to "particles.h5"
 
         Returns:
-            parts_h5: new open HDF5 file object
+            h5py file object: the newly created and open HDF5 file
         """
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
         grp = parts_h5["properties"]
@@ -87,7 +87,7 @@ class FallingParticles(Particles):
             dt (float): time step
 
         Returns:
-            pz (float NumPy array): new elevation array
+            ndarray: new elevation array
         """
         z0 = self.bedelev + self.normdepth * self.depth
         zranwalk = self.zrnum * (2.0 * self.diffz * dt) ** 0.5
@@ -222,21 +222,15 @@ class FallingParticles(Particles):
 
     @property
     def c1(self):
-        """Get c1.
+        """np.float64 or ndarray: viscous drag coef. in Ferguson and Church (2004) terminal settling velocity equation.
 
-        Returns:
-            [type]: [description]
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
         """
         return self._c1
 
     @c1.setter
     def c1(self, values):
-        """Set c1.
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
@@ -251,21 +245,15 @@ class FallingParticles(Particles):
 
     @property
     def c2(self):
-        """Get c2.
+        """np.float64 or ndarray: turbulent wake drag coef. in Ferguson and Church (2004) terminal settling velocity equation.
 
-        Returns:
-            [type]: [description]
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
         """
         return self._c2
 
     @c2.setter
     def c2(self, values):
-        """Set c2.
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
@@ -280,21 +268,16 @@ class FallingParticles(Particles):
 
     @property
     def radius(self):
-        """Get radius.
+        """np.float64 or ndarray: radius of the particles in Ferguson and Church (2004) terminal settling velocity equation.
 
-        Returns:
-            [type]: [description]
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
+        All radius values must be greater than 0.
         """
         return self._radius
 
     @radius.setter
     def radius(self, values):
-        """Set radius.
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
@@ -312,21 +295,16 @@ class FallingParticles(Particles):
 
     @property
     def rho(self):
-        """Get rho.
+        """np.float64 or ndarray: density of the particles in Ferguson and Church (2004) terminal settling velocity equation.
 
-        Returns:
-            [type]: [description]
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
+        All rho values must be greater than 0.
         """
         return self._rho
 
     @rho.setter
     def rho(self, values):
-        """Set rho.
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:

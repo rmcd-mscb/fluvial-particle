@@ -24,13 +24,13 @@ class Particles:
             **kwargs (dict): additional keyword arguments  # noqa
 
         Keyword args:
-            Track3D (int): 1 if 3D model run, 0 else, optional
-            lev (float): lateral eddy viscosity, scalar, optional
-            beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3, optional
-            min_depth (float): minimum allowed depth that particles may enter, scalar, optional
-            vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar, optional
-            comm (mpi4py object): MPI communicator used in parallel execution, optional
-            PartStartTime (float): variable particle start times, defaults to simulation start time
+            Track3D (int): 1 if 3D model run, 0 else. Defaults to 1
+            lev (float): lateral eddy viscosity, scalar. Defaults to 0.25
+            beta (float): coefficients that scale diffusion, scalar or a tuple/list/numpy array of length 3. Defaults to 0.067
+            min_depth (float): minimum allowed depth that particles may enter, scalar. Defaults to 0.02
+            vertbound (float): bounds particle in fractional water column to [vertbound, 1-vertbound], scalar. Defaults to 0.01
+            comm (mpi4py object): MPI communicator used in parallel execution. Defaults to None
+            PartStartTime (float): variable particle start times. Defaults to the simulation start time
         """
         self.nparts = nparts
         self.x = np.copy(x)
@@ -90,7 +90,7 @@ class Particles:
     def calc_hdf5_chunksizes(self, nprints):
         """Calculate chunksizes for datasets in particles HDF5 output.
 
-        Designed to create chunks *close to* 1 MiB for 8 byte numbers
+        Designed to create chunks *close to* 1 MiB for 8 byte numbers.
         HDF5 org recommends chunks of size between 10 KiB - 1 MiB;
         Trials on Denali HPC show 1 MiB works better
 
@@ -98,8 +98,8 @@ class Particles:
             nprints (int): total number of printing time steps
 
         Returns:
-            chk1darrays (tuple): chunk size of datasets for 1D arrays
-            chkvelarray (tuple): chunk size of datasets for 2D velocity arrays
+            tuple(tuple, tuple): 1st tuple is chunk size of datasets for 1D arrays (len=2), 2nd tuple is
+            chunk size of datasets for 2D velocity arrays (len=3)
         """
         # Do the 1D particles arrays first, total write dimensions are (nprints, nparts)
         # 8 bytes per number means 1 MiB =  2^20 bytes = 2^17 numbers
@@ -141,7 +141,7 @@ class Particles:
             **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
 
         Returns:
-            parts_h5: new open HDF5 file object
+            h5py file object: the newly created and open HDF5 file
         """
         if comm is None:
             parts_h5 = h5py.File(fname, "w")  # Serial version
@@ -386,8 +386,8 @@ class Particles:
         """Validate initial 2D positions, set vertical postitions (optional), and interpolate mesh arrays.
 
         Args:
-            starttime (float): initial time of the simulation in seconds, default is 0.0
-            frac (float): starting position of particles within water column (scalar or NumPy array), optional
+            starttime (float): initial time of the simulation in seconds. Defaults to 0.0
+            frac (float): starting position of particles within water column (scalar or NumPy array). Defaults to None
         """
         self.validate_2d_pos(self.x, self.y)
         if self.in_bounds_mask is not None:
@@ -634,7 +634,7 @@ class Particles:
             dt (float): time step
 
         Returns:
-            pz (float NumPy array): new elevation array
+            ndarray: new elevation array
         """
         # Perturbations are assumed to start from the same fractional depth as last time
         z0 = self.bedelev + self.normdepth * self.depth
@@ -943,20 +943,14 @@ class Particles:
 
     @property
     def bedelev(self):
-        """Get bedelev.
+        """ndarray: NumPy array of particles' bed elevation.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._bedelev
 
     @bedelev.setter
     def bedelev(self, values):
-        """Set bedelev.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("bedelev.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -967,24 +961,19 @@ class Particles:
 
     @property
     def beta(self):
-        """Get beta.
+        """ndarray: diffusion scaling coefficient.
 
-        Returns:
-            [type]: [description]
+        beta accepts input as either a scalar float/np.floating, or a tuple/list/ndarray of size 3.
+        beta is saved as a 3D np.float64 ndarray corresponding to (x,y,z) components.
         """
         return self._beta
 
     @beta.setter
     def beta(self, values):
-        """Set beta. Accepts input as either a scalar, or a tuple/list/numpy array of size 3.
-
-        Args:
-            values ([type]): [description]
-        """
         acceptable = (float, tuple, list, np.ndarray)
         if not isinstance(values, acceptable):
             raise TypeError(
-                "beta.setter must be either a float scalar or tuple/list/numpy array of size 3"
+                "beta.setter must be either a float/np.floating scalar or tuple/list/ndarray of size 3"
             )
         temp = np.zeros((3,), dtype=np.float64)
         temp[:] = values
@@ -992,20 +981,14 @@ class Particles:
 
     @property
     def cellindex2d(self):
-        """Get cellindex2d.
+        """ndarray: the index of the 2D cell that each particle is currently in.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._cellindex2d
 
     @cellindex2d.setter
     def cellindex2d(self, values):
-        """Set cellindex2d.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("cellindex2d.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1016,20 +999,14 @@ class Particles:
 
     @property
     def cellindex3d(self):
-        """Get cellindex3d.
+        """ndarray: the index of the 3D cell that each particle is currently in.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._cellindex3d
 
     @cellindex3d.setter
     def cellindex3d(self, values):
-        """Set cellindex3d.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("cellindex3d.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1040,20 +1017,14 @@ class Particles:
 
     @property
     def depth(self):
-        """Get depth.
+        """ndarray: the water-column depth that each particle is currently in.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._depth
 
     @depth.setter
     def depth(self, values):
-        """Set depth.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("depth.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1064,20 +1035,14 @@ class Particles:
 
     @property
     def diffx(self):
-        """Get diffx.
+        """ndarray: the diffusion coefficient in the x-direction of each particle.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._diffx
 
     @diffx.setter
     def diffx(self, values):
-        """Set diffx.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("diffx.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1088,20 +1053,14 @@ class Particles:
 
     @property
     def diffy(self):
-        """Get diffy.
+        """ndarray: the diffusion coefficient in the y-direction of each particle.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._diffy
 
     @diffy.setter
     def diffy(self, values):
-        """Set diffy.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("diffy.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1112,20 +1071,14 @@ class Particles:
 
     @property
     def diffz(self):
-        """Get diffz.
+        """ndarray: the diffusion coefficient in the z-direction of each particle.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._diffz
 
     @diffz.setter
     def diffz(self, values):
-        """Set diffz.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("diffz.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1136,20 +1089,14 @@ class Particles:
 
     @property
     def htabvbed(self):
-        """Get htabvbed.
+        """ndarray: the elevation of each particle above the channel bed.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._htabvbed
 
     @htabvbed.setter
     def htabvbed(self, values):
-        """Set htabvbed.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("htabvbed.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1160,20 +1107,15 @@ class Particles:
 
     @property
     def in_bounds_mask(self):
-        """Get bounds mask.
+        """ndarray(bool): masks particles that are not in the 2D grid.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
+        Must have dtype=bool.
         """
         return self._in_bounds_mask
 
     @in_bounds_mask.setter
     def in_bounds_mask(self, values):
-        """Set bounds mask.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("in_bounds_mask requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1186,82 +1128,53 @@ class Particles:
 
     @property
     def lev(self):
-        """Get lev.
+        """np.float64: the constant lateral eddy viscosity.
 
-        Returns:
-            [type]: [description]
+        Must be a scalar, and it will be converted to np.float64.
         """
         return self._lev
 
     @lev.setter
     def lev(self, values):
-        """Set lev.
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, int):
-            values = np.float64(values)
-        if not isinstance(values, float):
+        if not isinstance(values, (int, float, np.floating)):
             raise TypeError("lev.setter must be a scalar")
-        self._lev = values
+        self._lev = np.float64(values)
 
     @property
     def mesh(self):
-        """Get mesh.
-
-        Returns:
-            [type]: [description]
-        """
+        """RiverGrid: the mesh containing the VTK grids and hydrodynamic data."""
         return self._mesh
 
     @mesh.setter
     def mesh(self, values):
-        """Set mesh.
-
-        Args:
-            values ([type]): [description]
-        """
         self._mesh = values
 
     @property
     def min_depth(self):
-        """Get min_depth.
+        """np.float64: the minimum water-column depth that particles may enter.
 
-        Returns:
-            [type]: [description]
+        Must be a scalar, and it will be converted to np.float64.
         """
         return self._min_depth
 
     @min_depth.setter
     def min_depth(self, values):
-        """Set min_depth.
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, int):
-            values = np.float64(values)
-        if not isinstance(values, float):
-            raise TypeError("min_depth must be a scalar")
-        self._min_depth = values
+        if not isinstance(values, (int, float, np.floating)):
+            raise TypeError("min_depth.setter must be a scalar")
+        self._min_depth = np.float64(values)
 
     @property
     def normdepth(self):
-        """Get normdepth.
+        """ndarray: the normalized depth of each particle.
 
-        Returns:
-            [type]: [description]
+        In other words, the fraction of the way from the channel bed to the particle's elevation.
+        In the range of (0, 1).
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._normdepth
 
     @normdepth.setter
     def normdepth(self, values):
-        """Set normdepth.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("normdepth.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1272,20 +1185,15 @@ class Particles:
 
     @property
     def nparts(self):
-        """Get nparts.
+        """int: the number of simulated particles.
 
-        Returns:
-            [type]: [description]
+        In parallel execution mode, this is the number of particles per CPU.
+        Must be a positive integer.
         """
         return self._nparts
 
     @nparts.setter
     def nparts(self, values):
-        """Set nparts.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, int):
             raise TypeError("nparts.setter must be int")
         if values < 1:
@@ -1294,21 +1202,16 @@ class Particles:
 
     @property
     def part_start_time(self):
-        """Get particle start time.
+        """np.float64 or ndarray: the starting simulation time of the particles.
 
-        Returns:
-            [type]: [description]
+        If a scalar, all particles will be activated when the simulation time exceeds part_start_time.
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
         """
         return self._part_start_time
 
     @part_start_time.setter
     def part_start_time(self, values):
-        """Set particle start time.
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
@@ -1324,38 +1227,26 @@ class Particles:
 
     @property
     def rng(self):
-        """Get rng.
+        """np.random.RandomState: NumPy random number generator.
 
-        Returns:
-            [type]: [description]
+        Generates random numbers for stochastic diffusion.
         """
         return self._rng
 
     @rng.setter
     def rng(self, values):
-        """Set rng.
-
-        Args:
-            values ([type]): [description]
-        """
         self._rng = values
 
     @property
     def shearstress(self):
-        """Get shearstress.
+        """ndarray: the shear stress interpolated from the mesh to each particle.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._shearstress
 
     @shearstress.setter
     def shearstress(self, values):
-        """Set shearstress.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("shearstress.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1366,20 +1257,15 @@ class Particles:
 
     @property
     def start_time_mask(self):
-        """Get time mask.
+        """ndarray(bool): masks particles that are active by (part_start_time <= current simulation time).
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
+        Must have dtype=bool.
         """
         return self._start_time_mask
 
     @start_time_mask.setter
     def start_time_mask(self, values):
-        """Set time mask.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("start_time_mask requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1392,20 +1278,14 @@ class Particles:
 
     @property
     def time(self):
-        """Get time.
+        """ndarray: the current simulation time.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._time
 
     @time.setter
     def time(self, values):
-        """Set time.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("time.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1416,20 +1296,14 @@ class Particles:
 
     @property
     def track3d(self):
-        """Get track3d.
+        """int: flag that indicates the dimension of the simulation.
 
-        Returns:
-            [type]: [description]
+        If 3D simulation, track3d=1. Else track3d=0.
         """
         return self._track3d
 
     @track3d.setter
     def track3d(self, values):
-        """Set track3d.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, int):
             raise TypeError("track3d.setter must be int")
         if values < 0 or values > 1:
@@ -1438,20 +1312,15 @@ class Particles:
 
     @property
     def ustar(self):
-        """Get ustar.
+        """ndarray: the shear velocity at each particle.
 
-        Returns:
-            [type]: [description]
+        Computed as the square root of shearstress / 1000 [kg/m^3].
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._ustar
 
     @ustar.setter
     def ustar(self, values):
-        """Set ustar.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("ustar.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1462,20 +1331,14 @@ class Particles:
 
     @property
     def velx(self):
-        """Get velx.
+        """ndarray: the fluid velocity x-component interpolated to each particle from the mesh.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._velx
 
     @velx.setter
     def velx(self, values):
-        """Set velx.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("velx.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1486,20 +1349,14 @@ class Particles:
 
     @property
     def vely(self):
-        """Get vely.
+        """ndarray: the fluid velocity y-component interpolated to each particle from the mesh.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._vely
 
     @vely.setter
     def vely(self, values):
-        """Set vely.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("vely.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1510,20 +1367,14 @@ class Particles:
 
     @property
     def velz(self):
-        """Get velz.
+        """ndarray: the fluid velocity z-component interpolated to each particle from the mesh.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._velz
 
     @velz.setter
     def velz(self, values):
-        """Set velz.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("velz.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1534,21 +1385,16 @@ class Particles:
 
     @property
     def vertbound(self):
-        """Get vertbound.
+        """np.float64: the fraction of the water column that buffers particles from the channel bed and water surface.
 
-        Returns:
-            [type]: [description]
+        Particles are bounded to [bedelev + vertbound * depth, wse - vertbound * depth].
+        Must be between 0.0 and 0.5.
         """
         return self._vertbound
 
     @vertbound.setter
     def vertbound(self, values):
-        """Set vertbound.
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, int) or isinstance(values, float):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         if not isinstance(values, np.float64):
             raise TypeError("vertbound.setter must be a scalar")
@@ -1569,20 +1415,14 @@ class Particles:
 
     @property
     def wse(self):
-        """Get wse.
+        """ndarray: the water surface elevation interpolated to each particle's 2D position.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._wse
 
     @wse.setter
     def wse(self, values):
-        """Set wse.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("wse.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1593,20 +1433,14 @@ class Particles:
 
     @property
     def x(self):
-        """Get x.
+        """ndarray: the x-coordinate of each particle.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._x
 
     @x.setter
     def x(self, values):
-        """Set x.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("x.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1617,20 +1451,14 @@ class Particles:
 
     @property
     def y(self):
-        """Get y.
+        """ndarray: the y-coordinate of each particle.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._y
 
     @y.setter
     def y(self, values):
-        """Set y.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("y.setter requires a NumPy array")
         if values.shape != (self.nparts,):
@@ -1641,20 +1469,14 @@ class Particles:
 
     @property
     def z(self):
-        """Get z.
+        """ndarray: the z-coordinate of each particle.
 
-        Returns:
-            [type]: [description]
+        Must be 1D, the same length as the number of particles (i.e. shape==(self.nparts,)).
         """
         return self._z
 
     @z.setter
     def z(self, values):
-        """Set z.
-
-        Args:
-            values ([type]): [description]
-        """
         if not isinstance(values, np.ndarray):
             raise TypeError("z.setter requires a NumPy array")
         if values.shape != (self.nparts,):

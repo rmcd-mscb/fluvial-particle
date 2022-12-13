@@ -29,7 +29,8 @@ class Settings(dict):
     def required_keys(self):
         """Attributes required in the options file.
 
-        Required keys are SimTime, dt, Track3D, PrintAtTick, file_name_2d, file_name_3d, NumPart, StartLoc
+        Returns:
+            list(str): list of the required keys: SimTime, dt, Track3D, PrintAtTick, file_name_2d, file_name_3d, NumPart, StartLoc
         """
         return (
             "SimTime",
@@ -44,7 +45,14 @@ class Settings(dict):
 
     @classmethod
     def read(cls, filename):
-        """Load user parameters from options file."""
+        """Load user parameters from options file.
+
+        Args:
+            filename (str): path to the options file
+
+        Returns:
+            Settings: dict-like object with user parameters stored as key: value pairs
+        """
         options = {}
         # Load user parameters
         with open(filename, "r") as f:
