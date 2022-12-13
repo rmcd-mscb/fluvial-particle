@@ -23,7 +23,7 @@ stages:
 
 .docker-template: &docker
   <<: *install-deps
-  image: condaforge/mambaforge:latest
+  image: condaforge/mambaforge:22.9.0-2
   stage: tests
 
 #test jobs -----------------------
