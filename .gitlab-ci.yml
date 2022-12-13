@@ -7,7 +7,7 @@ stages:
 .install-deps-template: &install-deps
   before_script:
     - ln -fs /usr/share/zoneinfo/UTC /etc/localtime
-    - cp DOIRootCA2.cer /usr/local/share/ca-certificates/extra/DOIRootCA2.crt
+    - cp DOIRootCA2.crt /usr/local/share/ca-certificates/extra/DOIRootCA2.crt
     - apt-get update
     - apt-get -y upgrade
     - apt-get -y install ca-certificates language-pack-en
