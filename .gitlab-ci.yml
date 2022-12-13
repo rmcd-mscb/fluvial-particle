@@ -10,6 +10,10 @@ stages:
     - cp DOIRootCA2.crt /usr/local/share/ca-certificates/.
     - apt-get update
     - apt-get -y upgrade
+    - >-
+      apt-get -y --fix-missing --no-install-recommends install gdal-bin
+      libgdal-dev software-properties-common curl unzip git-all make
+      build-essential wget
     - apt-get -y install ca-certificates language-pack-en
     - apt-get clean
     - update-ca-certificates
