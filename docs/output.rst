@@ -1,5 +1,5 @@
 ======================
-Output 
+Output
 ======================
 
 Model output is written to two HDF5 files: particles.h5 and cells.h5. The particles.h5 file can be written to independently in parallel during an MPI-enabled run. The cells.h5 file is written by a single core in a post-processing routine using the data in particles.h5, so both files contain output from the same time step values. The files are organized similarly, with a single-level of groups in the root folder that hold either grid-related data or data defined over the grids. These data can be visualized with Paraview's XDMF Reader by reading the .xmf files that are also written during model execution.

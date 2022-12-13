@@ -5,7 +5,12 @@ from .Particles import Particles
 
 
 class LarvalParticles(Particles):
-    """A larval fish subclass of Particles, a helper superclass for bottom- or top-swimmers."""
+    """A larval fish subclass of Particles, a helper superclass for bottom- or top-swimmers.
+
+    On its own, the LarvalParticles class does not implement any special swimming behavior (i.e. active-drift).
+    LarvalTopParticles will swim near the water surface.
+    LarvalBotParticles will swim near the channel bed.
+    """
 
     def __init__(self, nparts, x, y, z, rng, mesh, **kwargs):
         """Initialize instance of class LarvalParticles.
@@ -19,10 +24,9 @@ class LarvalParticles(Particles):
             mesh (RiverGrid): class instance of the river hydrodynamic data
             **kwargs (dict): additional keyword arguments  # noqa
 
-        Optional keyword arguments:
-            amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts, optional
-            period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts, optional
-            ttime (float): phase of swimmers, numpy array of length nparts, optional
+        Keyword args:
+            amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts. Defaults to 0.2
+            period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts. Defaluts to 60.0
         """
         super().__init__(nparts, x, y, z, rng, mesh, **kwargs)
         self.amp = kwargs.get("amp", 0.2)
@@ -38,11 +42,11 @@ class LarvalParticles(Particles):
         Args:
             nprints (int): size of first dimension, indexes printing time slices
             globalnparts (int): global number of particles, distributed across processors
-            comm (MPI communicator): only for parallel runs
-            fname (string): name of the HDF5 file
+            comm (MPI communicator): only for parallel runs. Defaults to None
+            fname (string): name of the HDF5 file. Defaults to "particles.h5"
 
         Returns:
-            parts_h5: new open HDF5 file object
+            h5py file object: the newly created and open HDF5 file
         """
         parts_h5 = super().create_hdf5(nprints, globalnparts, comm=comm, fname=fname)
         grp = parts_h5["properties"]
@@ -182,21 +186,15 @@ class LarvalParticles(Particles):
 
     @property
     def amp(self):
-        """[summary].
+        """np.float64 or ndarray: amplitude of sinusoid swimming behavior as depth fraction.
 
-        Returns:
-            [type]: [description]
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
         """
         return self._amp
 
     @amp.setter
     def amp(self, values):
-        """[summary].
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
@@ -211,21 +209,15 @@ class LarvalParticles(Particles):
 
     @property
     def period(self):
-        """[summary].
+        """np.float64 or ndarray: period of sinusoid swimming behavior.
 
-        Returns:
-            [type]: [description]
+        If an ndarray, must be 1D and the same length as the number of simulated particles.
         """
         return self._period
 
     @period.setter
     def period(self, values):
-        """[summary].
-
-        Args:
-            values ([type]): [description]
-        """
-        if isinstance(values, (int, np.int32, np.int64, float, np.float32, np.float64)):
+        if isinstance(values, (int, float, np.integer, np.floating)):
             values = np.float64(values)
         elif isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
@@ -240,20 +232,11 @@ class LarvalParticles(Particles):
 
     @property
     def ttime(self):
-        """[summary].
-
-        Returns:
-            [type]: [description]
-        """
+        """ndarray: phase of swimmers, must be same length as the number of simulated particles."""
         return self._ttime
 
     @ttime.setter
     def ttime(self, values):
-        """[summary].
-
-        Args:
-            values ([type]): [description]
-        """
         if isinstance(values, np.ndarray) and values.size == self.nparts:
             if values.dtype == np.float64:
                 pass
@@ -267,7 +250,7 @@ class LarvalParticles(Particles):
 
 
 class LarvalBotParticles(LarvalParticles):
-    """A subclass of LarvalParticles for larvae that swim near bottom of water column."""
+    """A subclass of LarvalParticles for larvae that swim in the bottom of water column."""
 
     def perturb_z(self, dt):
         """Project particles vertical trajectory, sinusoidal bed-swimmer.
@@ -276,7 +259,7 @@ class LarvalBotParticles(LarvalParticles):
             dt (float): time step
 
         Returns:
-            pz (float NumPy array): new elevation array
+            ndarray: new elevation array
         """
         amplitude = self.depth * self.amp
         time = self.time + dt
@@ -287,7 +270,7 @@ class LarvalBotParticles(LarvalParticles):
 
 
 class LarvalTopParticles(LarvalParticles):
-    """A subclass of LarvalParticles for larvae that swim near top of water column."""
+    """A subclass of LarvalParticles for larvae that swim in the top of water column."""
 
     def perturb_z(self, dt):
         """Project particles vertical trajectory, sinusoidal top-swimmer.
@@ -296,7 +279,7 @@ class LarvalTopParticles(LarvalParticles):
             dt (float): time step
 
         Returns:
-            pz (float NumPy array): new elevation array
+            ndarray: new elevation array
         """
         amplitude = self.depth * self.amp
         time = self.time + dt

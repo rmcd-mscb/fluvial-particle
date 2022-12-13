@@ -29,20 +29,20 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
      bash ./Miniconda3-latest-Linux-x86_64.sh
 
    Be sure to specify a location on your Caldera path when asked where to install conda, e.g. :bash:`/caldera/projects/your/path/miniconda3/`
-   
+
    When asked by the installer if you would like it to initialize Miniconda3, answer "no". Instead, once installation completes, initialize with
-   
+
     .. code:: bash
 
      /path/to/miniconda3/bin/conda init
-    
+
    You may need to log out and back in -- remember to repeat step 1!
- 
+
 
 3. Create the conda environment with Python 3.9, then activate using source (this is equivalent to running conda activate fluvial-mpi but is more robust).
 
     .. code:: bash
-     
+
      conda create -n fluvial-mpi python=3.9 poetry
      source /caldera/path/to/miniconda3/bin/activate fluvial-mpi
 
@@ -112,5 +112,5 @@ An example SLURM submission script follows that runs on a single compute node wi
  export OMP_NUM_THREADS=1
 
  source /caldera/projects/css/sas/arc/aprescott/miniconda3/bin/activate fluvial-mpi
- 
+
  srun fluvial_particle_mpi user_options.py .

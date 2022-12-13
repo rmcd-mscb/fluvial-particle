@@ -189,7 +189,9 @@ def docs_build(session: Session) -> None:
     install_conda_env_yaml(session)
     args = session.posargs or ["docs", "docs/_build/html"]
     session.install("e", ".", "--no-deps")
-    session.install("sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser")
+    session.install(
+        "sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser", "sphinx-autobuild"
+    )
 
     build_dir = Path("docs", "_build/html")
     if build_dir.exists():

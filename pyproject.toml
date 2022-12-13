@@ -19,7 +19,7 @@ fluvial_particle_mpi = "fluvial_particle:track_mpi"
 [tool.poetry.dependencies]
 python = "^3.9"
 h5py = "^3.7.0"
-vtk = ">=9.1"
+vtk = "~9.1"
 
 [tool.poetry.dev-dependencies]
 black = "^22.3.0"

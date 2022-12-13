@@ -1,9 +1,6 @@
 .. include:: ../README.md
    :parser: myst_parser.docutils_
 
-_Contributor Guide: contributing.html
-_Usage: usage.html
-
 .. toctree::
    :hidden:
    :maxdepth: 1
@@ -17,6 +14,6 @@ _Usage: usage.html
    hpcinstall
    reference
    contributing
-   codeofconduct
+   Code of Conduct <codeofconduct>
    License <license>
-   Changelog <https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/HISTORY.rst>
+   Changelog <https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/HISTORY.md>

@@ -1,9 +1,9 @@
 """Options file for fluvial particle model."""
-from fluvial_particle.LarvalParticles import LarvalTopParticles
+from fluvial_particle.Particles import Particles
 
 # Paths to 3D and 2D mesh files
-file_name_3d = "./tests/data/Result_FM_MEander_1_long_3D1_new.vtk"
-file_name_2d = "./tests/data/Result_FM_MEander_1_long_2D1.vtk"
+file_name_3d = "./tests/data/Result_FM_MEander_1_long_3D1_new.npz"
+file_name_2d = "./tests/data/Result_FM_MEander_1_long_2D1.npz"
 
 SimTime = 60.0  # maximum simulation time [seconds]
 dt = 0.25  # simulation time step [seconds]
@@ -22,12 +22,10 @@ startfrac = 0.5
 # StartLoc = "./tests/data/varsrc.csv"
 
 # Particle type for the simulation
-ParticleType = LarvalTopParticles  # noqa
+ParticleType = Particles  # noqa
 
 # Optional Particles keyword arguments
 beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient
 lev = 0.00025  # reach-averaged lateral eddy viscosity
 min_depth = 0.02  # minimum depth cells may enter [meters]
 vertbound = 0.01  # depth fraction that bounds particles at bed and water surface
-amp = 0.2
-period = 60.0
