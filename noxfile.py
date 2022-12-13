@@ -5,7 +5,8 @@ from pathlib import Path
 from textwrap import dedent
 
 import nox
-from nox.sessions import Session
+from nox_poetry import Session
+from nox_poetry import session
 
 
 package = "fluvial_particle"
