@@ -19,6 +19,7 @@ stages:
     - mamba init bash
     - source ~/.bashrc
     - source activate base
+    - mamba config --set ssl_verify /etc/ssl/certs/ca-certificates.crt
     - which python
     - poetry config virtualenvs.create false
     - poetry install
