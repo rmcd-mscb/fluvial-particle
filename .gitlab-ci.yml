@@ -13,7 +13,7 @@ stages:
     - >-
       apt-get -y --fix-missing --no-install-recommends install gdal-bin
       libgdal-dev software-properties-common curl unzip git-all make
-      build-essential wget
+      build-essential wget ffmpeg libsm6 libxext6
     - apt-get -y install ca-certificates language-pack-en
     - apt-get clean
     - update-ca-certificates
@@ -30,11 +30,9 @@ stages:
     - mamba init bash
     - source ~/.bashrc
     - source activate base
-
     - which python
     - poetry config virtualenvs.create false
     - poetry install
-    - pre-commit install --install-hooks
 
 .docker-template: &docker
   <<: *install-deps
