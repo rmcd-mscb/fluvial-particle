@@ -6,6 +6,7 @@
    :maxdepth: 1
    :titlesonly:
 
+   README
    usage
    optionsfile
    example
