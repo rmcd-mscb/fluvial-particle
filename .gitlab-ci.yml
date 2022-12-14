@@ -7,10 +7,24 @@ stages:
 .install-deps-template: &install-deps
   before_script:
     - ln -fs /usr/share/zoneinfo/UTC /etc/localtime
+    - cp DOIRootCA2.crt /usr/local/share/ca-certificates/.
     - apt-get update
     - apt-get -y upgrade
-    - apt-get -y install gdal-bin libgdal-dev libstdc++6 libgl1-mesa-glx
-    - apt-get -y install ffmpeg libsm6 libxext6
+    - >-
+      apt-get -y --fix-missing --no-install-recommends install gdal-bin
+      libgdal-dev software-properties-common curl unzip git-all make
+      build-essential wget ffmpeg libsm6 libxext6
+    - apt-get -y install ca-certificates language-pack-en
+    - apt-get clean
+    - update-ca-certificates
+    - export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+    - export CURL_CA_BUNDLE="${SSL_CERT_FILE}";
+    - export GIT_SSL_CAINFO="${SSL_CERT_FILE}";
+    - export PIP_CERT="${SSL_CERT_FILE}";
+    - export REQUESTS_CA_BUNDLE="${SSL_CERT_FILE}";
+    - export NODE_EXTRA_CA_CERTS="${SSL_CERT_FILE}";
+    - export NPM_CONFIG_CAFILE="${SSL_CERT_FILE}";
+    - mamba config --set ssl_verify /etc/ssl/certs/ca-certificates.crt
     - mamba update -n base mamba
     - mamba env update -n base --file environment.yml
     - mamba init bash
@@ -19,11 +33,10 @@ stages:
     - which python
     - poetry config virtualenvs.create false
     - poetry install
-    - pre-commit install --install-hooks
 
 .docker-template: &docker
   <<: *install-deps
-  image: condaforge/mambaforge:latest
+  image: condaforge/mambaforge:22.9.0-2
   stage: tests
 
 #test jobs -----------------------
