@@ -34,7 +34,7 @@ nox = "^2022.1.7"
 pep8-naming = "^0.12.1"
 pre-commit = "^2.19.0"
 pre-commit-hooks = "^4.2.0"
-safety = "^1.10.3"
+safety = ">=2.2.0"
 mypy = "^0.960"
 pytest = "^7.1.2"
 coverage = {extras = ["toml"], version = "^6.4"}
@@ -50,6 +50,9 @@ reorder-python-imports = "^3.1.0"
 ipython = "^8.4.0"
 bump2version = "^1.0.1"
 bandit = "^1.7.4"
+
+[tool.poetry.group.dev.dependencies]
+safety = ">=2.2.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
