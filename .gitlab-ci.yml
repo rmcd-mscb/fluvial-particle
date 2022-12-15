@@ -40,20 +40,20 @@ stages:
   stage: tests
 
 #test jobs -----------------------
-# check-code:
-#   <<: *docker
-#   script: nox -s pre-commit
+check-code:
+  <<: *docker
+  script: nox -s pre-commit
 
-# check-safety:
-#   <<: *docker
-#   script:
-#     - nox -s safety
+check-safety:
+  <<: *docker
+  script:
+    - nox -s safety
 
-# coverage-check:
-#   <<: *docker
-#   script:
-#     - nox -s tests
-#     - nox -s coverage
+coverage-check:
+  <<: *docker
+  script:
+    - nox -s tests
+    - nox -s coverage
 
 # check-typing:
 #   <<: *docker
