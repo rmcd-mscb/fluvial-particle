@@ -444,7 +444,7 @@ class RiverGrid:
             # add the fields to the grid
             arr_list = [elev, ibc, shear, vel, wse]
             name_list = self.required_keys2d
-            for arr, name in zip(arr_list, name_list):
+            for arr, name in zip(arr_list, name_list):  # noqa: B905
                 vtkarr = numpy_support.numpy_to_vtk(arr)
                 vtkarr.SetName(name)
                 grid.GetPointData().AddArray(vtkarr)
@@ -654,10 +654,10 @@ class RiverGrid:
                 <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>"""
         )
         if dtypes is not None:
-            for i, j, k in zip(names, attrnames, dtypes):
+            for i, j, k in zip(names, attrnames, dtypes):  # noqa: B905
                 self.write_hdf5_xmf_attr(filexmf, dims, i, j, center, k)
         else:
-            for i, j in zip(names, attrnames):
+            for i, j in zip(names, attrnames):  # noqa: B905
                 self.write_hdf5_xmf_attr(filexmf, dims, i, j, center)
         filexmf.write(
             """
