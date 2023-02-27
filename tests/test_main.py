@@ -29,6 +29,82 @@ def run_simulation(argdict: dict) -> None:
     [
         (
             {
+                "settings_file": "./tests/data/user_options_straight_test.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight",
+        ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_straight_varsrc.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight_varsrc_fixed",
+        ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_straight_falling.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight_falling",
+        ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_straight_larvalbot.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight_larvalbot",
+        ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_straight_larvaltop.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight_larvaltop",
+        ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_straight_checkpoint.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight_checkpoint",
+        ),
+    ],
+)
+def test_particle_straight(argdict: dict, test_out_path: str) -> None:
+    """Test basic particle-tracking."""
+    with TemporaryDirectory() as tmpdirname:
+        argdict["output_directory"] = tmpdirname
+        run_simulation(argdict)
+        # get particle output file
+        new_file = get_h5file(str(argdict.get("output_directory")) + "/particles.h5")
+        new_nts = get_num_timesteps(new_file)
+        new_points = get_points(new_file, new_nts - 1, twod=True)
+        print(type(new_points), new_points.shape)
+        test_file = get_h5file(f"{test_out_path}/particles.h5")
+        test_nts = get_num_timesteps(test_file)
+        test_points = get_points(test_file, test_nts - 1, twod=True)
+
+        assert_allclose(test_points, new_points)
+
+
+@pytest.mark.parametrize(
+    "argdict, test_out_path",
+    [
+        (
+            {
                 "settings_file": "./tests/data/user_options_test.py",
                 "output_directory": "./tests/data/output",
                 "seed": 3654125,

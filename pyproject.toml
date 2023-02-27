@@ -53,6 +53,7 @@ bandit = "^1.7.4"
 
 [tool.poetry.group.dev.dependencies]
 safety = ">=2.2.0"
+gitpython = ">=3.1.30"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
