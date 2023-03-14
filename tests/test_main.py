@@ -83,12 +83,12 @@ def run_simulation(argdict: dict) -> None:
         ),
         (
             {
-                "settings_file": "./tests/data/user_options_npz.py",
+                "settings_file": "./tests/data/user_options_straight_npz.py",
                 "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },
-            "./tests/data/output_fixed",
+            "./tests/data/output_straight",
         ),
     ],
     ids=(
