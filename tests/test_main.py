@@ -134,12 +134,8 @@ def test_track_serial(run, request, testdir):
     This test inspired by https://stackoverflow.com/a/13500346
     """
     # First get the paths to the input grids
-    grid2d_file = join(
-        request.fspath.dirname, "data", "Result_straight_2d_1.vtk"
-    )
-    grid3d_file = join(
-        request.fspath.dirname, "data", "Result_straight_3d_1.vtk"
-    )
+    grid2d_file = join(request.fspath.dirname, "data", "Result_straight_2d_1.vtk")
+    grid3d_file = join(request.fspath.dirname, "data", "Result_straight_3d_1.vtk")
     # Create user options as list of strings
     arg_list = [
         "from fluvial_particle.Particles import Particles",

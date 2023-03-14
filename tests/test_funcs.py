@@ -56,7 +56,10 @@ def test_create_parser():
     """Test the argparse factory method."""
     parser = create_parser()
 
-    test_1 = ["./tests/data/user_options_straight_test.py", "./tests/data/output_straight"]
+    test_1 = [
+        "./tests/data/user_options_straight_test.py",
+        "./tests/data/output_straight",
+    ]
     ns_1 = parser.parse_args(test_1)
 
     test_2 = [
@@ -68,7 +71,9 @@ def test_create_parser():
     ]
     ns_2 = parser.parse_args(test_2)
 
-    assert_string_equal(ns_1.settings_file, "./tests/data/user_options_straight_test.py")
+    assert_string_equal(
+        ns_1.settings_file, "./tests/data/user_options_straight_test.py"
+    )
     assert_string_equal(ns_1.output_directory, "./tests/data/output_straight")
     assert_equal(ns_1.no_postprocess, True)
     assert_equal(ns_1.seed, None)
@@ -141,4 +146,6 @@ def test_support():
 
     assert_equal(test_keys, ["coordinates", "properties"])
     assert_equal(test_nts, 4)
-    assert_equal(test_points[-1, :], [34.11209947262923, 0.3878199351536123, 9.736577084886918])
+    assert_equal(
+        test_points[-1, :], [34.11209947262923, 0.3878199351536123, 9.736577084886918]
+    )
