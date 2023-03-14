@@ -135,10 +135,10 @@ def test_track_serial(run, request, testdir):
     """
     # First get the paths to the input grids
     grid2d_file = join(
-        request.fspath.dirname, "data", "Result_FM_MEander_1_long_2D1.vtk"
+        request.fspath.dirname, "data", "Result_straight_2d_1.vtk"
     )
     grid3d_file = join(
-        request.fspath.dirname, "data", "Result_FM_MEander_1_long_3D1_new.vtk"
+        request.fspath.dirname, "data", "Result_straight_3d_1.vtk"
     )
     # Create user options as list of strings
     arg_list = [
@@ -150,7 +150,7 @@ def test_track_serial(run, request, testdir):
         "dt = 0.25",
         "PrintAtTick = 20.0",
         "NumPart = 20",
-        "StartLoc = (6.14, 9.09, 10.3)",
+        "StartLoc = (5.0, 0.0, 9.5)",
         "startfrac = 0.5",
         "ParticleType = Particles",
         "lev = 0.00025",
