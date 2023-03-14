@@ -38,15 +38,6 @@ def run_simulation(argdict: dict) -> None:
         ),
         (
             {
-                "settings_file": "./tests/data/user_options_straight_varsrc.py",
-                "output_directory": "./tests/data/output",
-                "seed": 3654125,
-                "no_postprocess": True,
-            },
-            "./tests/data/output_straight_varsrc_fixed",
-        ),
-        (
-            {
                 "settings_file": "./tests/data/user_options_straight_falling.py",
                 "output_directory": "./tests/data/output",
                 "seed": 3654125,
@@ -74,6 +65,15 @@ def run_simulation(argdict: dict) -> None:
         ),
         (
             {
+                "settings_file": "./tests/data/user_options_straight_varsrc.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight_varsrc",
+        ),
+        (
+            {
                 "settings_file": "./tests/data/user_options_straight_checkpoint.py",
                 "output_directory": "./tests/data/output",
                 "seed": 3654125,
@@ -93,15 +93,15 @@ def run_simulation(argdict: dict) -> None:
     ],
     ids=(
         "Particles simulation",
-        "simulate with variable start times",
         "FallingParticles simulation",
         "LarvalBotParticles simulation",
         "LarvalTopParticles simulation",
+        "simulate with variable start times",
         "simulate from checkpoint",
         "simulate with npz input meshes",
     ),
 )
-def test_particle_straight(argdict: dict, test_out_path: str) -> None:
+def test_particle(argdict: dict, test_out_path: str) -> None:
     """Test basic particle-tracking."""
     with TemporaryDirectory() as tmpdirname:
         argdict["output_directory"] = tmpdirname
