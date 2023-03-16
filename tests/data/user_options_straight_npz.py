@@ -2,7 +2,7 @@
 from fluvial_particle.Particles import Particles
 
 # Paths to 3D and 2D mesh files
-file_name_3d = "./tests/data/Result_straight_3d_1.npz"
+file_name_3d = "./tests/data/Result_straight_3d_1_new.npz"
 file_name_2d = "./tests/data/Result_straight_2d_1.npz"
 
 SimTime = 60.0  # maximum simulation time [seconds]

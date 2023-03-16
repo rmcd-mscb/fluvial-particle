@@ -1,4 +1,4 @@
-name: fluvial-particle
+name: fluvial-particle-nb
 channels:
   - conda-forge
 dependencies:
