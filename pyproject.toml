@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fluvial-particle"
-version = "0.0.3-dev1"
+version = "0.0.3"
 description = "Lagrangian particle-tracking for fluvial environments."
 authors = ["Richard McDonald <rmcd@usgs.gov>"]
 license = "LICENSE.md"
