@@ -3,7 +3,7 @@
     "name": "fluvial-particle",
     "organization": "U.S. Geological Survey",
     "description": "Lagrangian particle-tracking code for 2d/3d hydraulic models.",
-    "version": "0.0.3-dev0",
+    "version": "0.0.3",
     "status": "Development",
 
     "permissions": {
@@ -11,14 +11,14 @@
       "licenses": [
         {
           "name": "CC0 1.0",
-          "URL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/0.0.1/LICENSE.md"
+          "URL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/0.0.3/LICENSE.md"
         }
       ]
     },
 
     "homepageURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
-    "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/0.0.1/fluvparticle-0.0.1.zip",
-    "disclaimerURL": "https://code.usgs.gov/wma/fluvparticle/-/raw/0.0.1/DISCLAIMER.md",
+    "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/0.0.3/fluvparticle-0.0.3.zip",
+    "disclaimerURL": "https://code.usgs.gov/wma/fluvparticle/-/raw/0.0.3/DISCLAIMER.md",
     "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle.git",
     "vcs": "git",
 

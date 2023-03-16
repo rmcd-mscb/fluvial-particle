@@ -79,4 +79,4 @@ Validate Inventory:
       --type "provisional"
       --token "${GIT_TOKEN_CUSTOM}"
   tags:
-      - chs-shared
+    - chs-shared
