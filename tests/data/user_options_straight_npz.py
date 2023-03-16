@@ -2,8 +2,8 @@
 from fluvial_particle.Particles import Particles
 
 # Paths to 3D and 2D mesh files
-file_name_3d = "./tests/data/Result_FM_MEander_1_long_3D1_new.npz"
-file_name_2d = "./tests/data/Result_FM_MEander_1_long_2D1.npz"
+file_name_3d = "./tests/data/Result_straight_3d_1.npz"
+file_name_2d = "./tests/data/Result_straight_2d_1.npz"
 
 SimTime = 60.0  # maximum simulation time [seconds]
 dt = 0.25  # simulation time step [seconds]
@@ -14,12 +14,8 @@ Track3D = 1  # 1 to use 3D velocity field, 0 to use 2D velocity field
 NumPart = 20  # Number of particles to simulate per processor
 
 # Starting locations: give tuple for exact point, or path to a checkpoint HDF5 file
-# StartLoc = "tests/test/particles.h5"
-# StartIdx = 45  # optional time slice index to pull data from, defaults to -1
-# StartLoc = (490.0, -4965.0, 530.0)
 StartLoc = (5, 0, 9.5)
 startfrac = 0.5
-# StartLoc = "./tests/data/varsrc.csv"
 
 # Particle type for the simulation
 ParticleType = Particles  # noqa

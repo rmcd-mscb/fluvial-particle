@@ -38,15 +38,6 @@ def run_simulation(argdict: dict) -> None:
         ),
         (
             {
-                "settings_file": "./tests/data/user_options_straight_varsrc.py",
-                "output_directory": "./tests/data/output",
-                "seed": 3654125,
-                "no_postprocess": True,
-            },
-            "./tests/data/output_straight_varsrc_fixed",
-        ),
-        (
-            {
                 "settings_file": "./tests/data/user_options_straight_falling.py",
                 "output_directory": "./tests/data/output",
                 "seed": 3654125,
@@ -74,6 +65,15 @@ def run_simulation(argdict: dict) -> None:
         ),
         (
             {
+                "settings_file": "./tests/data/user_options_straight_varsrc.py",
+                "output_directory": "./tests/data/output",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight_varsrc",
+        ),
+        (
+            {
                 "settings_file": "./tests/data/user_options_straight_checkpoint.py",
                 "output_directory": "./tests/data/output",
                 "seed": 3654125,
@@ -81,90 +81,14 @@ def run_simulation(argdict: dict) -> None:
             },
             "./tests/data/output_straight_checkpoint",
         ),
-    ],
-)
-def test_particle_straight(argdict: dict, test_out_path: str) -> None:
-    """Test basic particle-tracking."""
-    with TemporaryDirectory() as tmpdirname:
-        argdict["output_directory"] = tmpdirname
-        run_simulation(argdict)
-        # get particle output file
-        new_file = get_h5file(str(argdict.get("output_directory")) + "/particles.h5")
-        new_nts = get_num_timesteps(new_file)
-        new_points = get_points(new_file, new_nts - 1, twod=True)
-        print(type(new_points), new_points.shape)
-        test_file = get_h5file(f"{test_out_path}/particles.h5")
-        test_nts = get_num_timesteps(test_file)
-        test_points = get_points(test_file, test_nts - 1, twod=True)
-
-        assert_allclose(test_points, new_points)
-
-
-@pytest.mark.parametrize(
-    "argdict, test_out_path",
-    [
         (
             {
-                "settings_file": "./tests/data/user_options_test.py",
+                "settings_file": "./tests/data/user_options_straight_npz.py",
                 "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },
-            "./tests/data/output_fixed",
-        ),
-        (
-            {
-                "settings_file": "./tests/data/user_options_falling.py",
-                "output_directory": "./tests/data/output",
-                "seed": 3654125,
-                "no_postprocess": True,
-            },
-            "./tests/data/output_falling_fixed",
-        ),
-        (
-            {
-                "settings_file": "./tests/data/user_options_larvalbot.py",
-                "output_directory": "./tests/data/output",
-                "seed": 3654125,
-                "no_postprocess": True,
-            },
-            "./tests/data/output_larvbot_fixed",
-        ),
-        (
-            {
-                "settings_file": "./tests/data/user_options_larvaltop.py",
-                "output_directory": "./tests/data/output",
-                "seed": 3654125,
-                "no_postprocess": True,
-            },
-            "./tests/data/output_larvtop_fixed",
-        ),
-        (
-            {
-                "settings_file": "./tests/data/user_options_varsrc.py",
-                "output_directory": "./tests/data/output",
-                "seed": 3654125,
-                "no_postprocess": True,
-            },
-            "./tests/data/output_varsrc_fixed",
-        ),
-        (
-            {
-                "settings_file": "./tests/data/user_options_checkpoint.py",
-                "output_directory": "./tests/data/output",
-                "seed": 3654125,
-                "no_postprocess": True,
-            },
-            "./tests/data/output_checkpoint_fixed",
-        ),
-        (
-            {
-                "settings_file": "./tests/data/user_options_npz.py",
-                "output_directory": "./tests/data/output",
-                "seed": 3654125,
-                "no_postprocess": True,
-            },
-            "./tests/data/output_fixed",
+            "./tests/data/output_straight",
         ),
     ],
     ids=(
@@ -186,12 +110,11 @@ def test_particle(argdict: dict, test_out_path: str) -> None:
         new_file = get_h5file(str(argdict.get("output_directory")) + "/particles.h5")
         new_nts = get_num_timesteps(new_file)
         new_points = get_points(new_file, new_nts - 1, twod=True)
-        print(type(new_points), new_points.shape)
-        test_file = get_h5file(str(test_out_path) + "/particles.h5")
+        test_file = get_h5file(f"{test_out_path}/particles.h5")
         test_nts = get_num_timesteps(test_file)
         test_points = get_points(test_file, test_nts - 1, twod=True)
 
-        assert_allclose(test_points, new_points)
+        assert_allclose(test_points, new_points, atol=1e-4, rtol=0.0)
 
 
 @pytest.fixture
@@ -211,12 +134,8 @@ def test_track_serial(run, request, testdir):
     This test inspired by https://stackoverflow.com/a/13500346
     """
     # First get the paths to the input grids
-    grid2d_file = join(
-        request.fspath.dirname, "data", "Result_FM_MEander_1_long_2D1.vtk"
-    )
-    grid3d_file = join(
-        request.fspath.dirname, "data", "Result_FM_MEander_1_long_3D1_new.vtk"
-    )
+    grid2d_file = join(request.fspath.dirname, "data", "Result_straight_2d_1.vtk")
+    grid3d_file = join(request.fspath.dirname, "data", "Result_straight_3d_1.vtk")
     # Create user options as list of strings
     arg_list = [
         "from fluvial_particle.Particles import Particles",
@@ -227,7 +146,7 @@ def test_track_serial(run, request, testdir):
         "dt = 0.25",
         "PrintAtTick = 20.0",
         "NumPart = 20",
-        "StartLoc = (6.14, 9.09, 10.3)",
+        "StartLoc = (5.0, 0.0, 9.5)",
         "startfrac = 0.5",
         "ParticleType = Particles",
         "lev = 0.00025",

@@ -14,12 +14,8 @@ Track3D = 1  # 1 to use 3D velocity field, 0 to use 2D velocity field
 NumPart = 20  # Number of particles to simulate per processor
 
 # Starting locations: give tuple for exact point, or path to a checkpoint HDF5 file
-# StartLoc = "tests/test/particles.h5"
-# StartIdx = 45  # optional time slice index to pull data from, defaults to -1
-# StartLoc = (490.0, -4965.0, 530.0)
 StartLoc = (5.0, 0.0, 10.1)
 startfrac = 0.5
-# StartLoc = "./tests/data/varsrc.csv"
 
 # Particle type for the simulation
 ParticleType = LarvalTopParticles  # noqa

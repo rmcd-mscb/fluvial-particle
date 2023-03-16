@@ -4,7 +4,7 @@ channels:
   - conda-forge
 dependencies:
   - python>=3.9,<3.10
-  - h5py=3.6.0=mpi_mpich_py39ha1f86df_0
+  - h5py=*=mpi_*
   - vtk>=9.1
   - pip
   # Production dependencies defined here (as well as in requirements.txt)
