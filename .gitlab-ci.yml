@@ -14,7 +14,7 @@ stages:
       apt-get -y --fix-missing --no-install-recommends install gdal-bin
       libgdal-dev software-properties-common curl unzip git-all make
       build-essential wget ffmpeg libsm6 libxext6
-    - apt-get -y install ca-certificates language-pack-en
+    - apt-get -y install ca-certificates
     - apt-get clean
     - update-ca-certificates
     - export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
@@ -68,3 +68,14 @@ check-tests:
 #   <<: *docker
 #   script:
 #     - nox -s typeguard
+Validate Inventory:
+  stage: validate
+  image: ${INTERNAL_REGISTRY}software/software-management:latest
+  script:
+    - software-management review
+      --project "${CI_PROJECT_PATH}"
+      --ref "${CI_COMMIT_BRANCH}"
+      --type "provisional"
+      --token "${GIT_TOKEN_CUSTOM}"
+  tags:
+      - chs-shared
