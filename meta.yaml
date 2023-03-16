@@ -1,6 +1,6 @@
 package:
   name: fluvial-particle
-  version: 0.0.3-dev0
+  version: 0.0.3-dev1
 
 source:
   path: src
