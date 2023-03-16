@@ -3,6 +3,7 @@
 
 stages:
   - tests
+  - validate
 
 .install-deps-template: &install-deps
   before_script:
