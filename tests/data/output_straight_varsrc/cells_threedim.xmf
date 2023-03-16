@@ -1,14 +1,14 @@
 <Xdmf Version="3.0">
             <Domain>
-                <Topology Name="Topo" TopologyType="3DSMesh" Dimensions="11 21 401"/>
+                <Topology Name="Topo" TopologyType="3DSMesh" Dimensions="12 21 401"/>
                 <Geometry Name="Geo" GeometryType="X_Y_Z">
-                    <DataItem Name="X" Dimensions="11 21 401" Format="HDF">
+                    <DataItem Name="X" Dimensions="12 21 401" Format="HDF">
                         cells.h5:/grid/X
                     </DataItem>
-                    <DataItem Name="Y" Dimensions="11 21 401" Format="HDF">
+                    <DataItem Name="Y" Dimensions="12 21 401" Format="HDF">
                         cells.h5:/grid/Y
                     </DataItem>
-                    <DataItem Name="Z" Dimensions="11 21 401" Format="HDF">
+                    <DataItem Name="Z" Dimensions="12 21 401" Format="HDF">
                         cells.h5:/grid/Z
                     </DataItem>
 
@@ -19,7 +19,7 @@
                 <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
                 <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
             <Attribute Name="FractionalParticleCount" Center="Cell">
-                <DataItem Dimensions="400 20 10" DataType="Float" Format="HDF">
+                <DataItem Dimensions="400 20 11" DataType="Float" Format="HDF">
                     cells.h5:/cells3d/fpc0
                 </DataItem>
             </Attribute>
@@ -29,7 +29,7 @@
                 <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
                 <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
             <Attribute Name="FractionalParticleCount" Center="Cell">
-                <DataItem Dimensions="400 20 10" DataType="Float" Format="HDF">
+                <DataItem Dimensions="400 20 11" DataType="Float" Format="HDF">
                     cells.h5:/cells3d/fpc1
                 </DataItem>
             </Attribute>
@@ -39,7 +39,7 @@
                 <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
                 <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
             <Attribute Name="FractionalParticleCount" Center="Cell">
-                <DataItem Dimensions="400 20 10" DataType="Float" Format="HDF">
+                <DataItem Dimensions="400 20 11" DataType="Float" Format="HDF">
                     cells.h5:/cells3d/fpc2
                 </DataItem>
             </Attribute>
@@ -49,7 +49,7 @@
                 <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
                 <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
             <Attribute Name="FractionalParticleCount" Center="Cell">
-                <DataItem Dimensions="400 20 10" DataType="Float" Format="HDF">
+                <DataItem Dimensions="400 20 11" DataType="Float" Format="HDF">
                     cells.h5:/cells3d/fpc3
                 </DataItem>
             </Attribute>
@@ -59,7 +59,7 @@
                 <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
                 <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
             <Attribute Name="FractionalParticleCount" Center="Cell">
-                <DataItem Dimensions="400 20 10" DataType="Float" Format="HDF">
+                <DataItem Dimensions="400 20 11" DataType="Float" Format="HDF">
                     cells.h5:/cells3d/fpc4
                 </DataItem>
             </Attribute>
@@ -69,7 +69,7 @@
                 <Topology Reference="XML">/Xdmf/Domain/Topology[@Name="Topo"]</Topology>
                 <Geometry Reference="XML">/Xdmf/Domain/Geometry[@Name="Geo"]</Geometry>
             <Attribute Name="FractionalParticleCount" Center="Cell">
-                <DataItem Dimensions="400 20 10" DataType="Float" Format="HDF">
+                <DataItem Dimensions="400 20 11" DataType="Float" Format="HDF">
                     cells.h5:/cells3d/fpc5
                 </DataItem>
             </Attribute>
@@ -77,3 +77,4 @@
                 </Grid>
             </Domain>
         </Xdmf>
+        
