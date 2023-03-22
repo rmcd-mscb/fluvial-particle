@@ -17,7 +17,7 @@
     },
 
     "homepageURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
-    "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/main/fluvparticle-0.0.3.zip",
+    "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/main/fluvparticle-main.zip",
     "disclaimerURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/main/DISCLAIMER.md",
     "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle.git",
     "vcs": "git",
