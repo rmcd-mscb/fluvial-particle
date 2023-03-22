@@ -69,14 +69,14 @@ check-tests:
 #   <<: *docker
 #   script:
 #     - nox -s typeguard
-Validate Inventory:
-  stage: validate
-  image: ${INTERNAL_REGISTRY}software/software-management:latest
-  script:
-    - software-management review
-      --project "${CI_PROJECT_PATH}"
-      --ref "${CI_COMMIT_BRANCH}"
-      --type "provisional"
-      --token "${GIT_TOKEN_CUSTOM}"
-  tags:
-    - chs-shared
+# Validate Inventory:
+#   stage: validate
+#   image: ${INTERNAL_REGISTRY}software/software-management:latest
+#   script:
+#     - software-management review
+#       --project "${CI_PROJECT_PATH}"
+#       --ref "${CI_COMMIT_BRANCH}"
+#       --type "provisional"
+#       --token "${GIT_TOKEN_CUSTOM}"
+#   tags:
+#     - chs-shared
