@@ -30,7 +30,6 @@ def run_simulation(argdict: dict) -> None:
         (
             {
                 "settings_file": "./tests/data/user_options_straight_test.py",
-                "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },
@@ -39,7 +38,6 @@ def run_simulation(argdict: dict) -> None:
         (
             {
                 "settings_file": "./tests/data/user_options_straight_falling.py",
-                "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },
@@ -48,7 +46,6 @@ def run_simulation(argdict: dict) -> None:
         (
             {
                 "settings_file": "./tests/data/user_options_straight_larvalbot.py",
-                "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },
@@ -57,7 +54,6 @@ def run_simulation(argdict: dict) -> None:
         (
             {
                 "settings_file": "./tests/data/user_options_straight_larvaltop.py",
-                "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },
@@ -66,7 +62,6 @@ def run_simulation(argdict: dict) -> None:
         (
             {
                 "settings_file": "./tests/data/user_options_straight_varsrc.py",
-                "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },
@@ -75,7 +70,6 @@ def run_simulation(argdict: dict) -> None:
         (
             {
                 "settings_file": "./tests/data/user_options_straight_checkpoint.py",
-                "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },
@@ -84,7 +78,6 @@ def run_simulation(argdict: dict) -> None:
         (
             {
                 "settings_file": "./tests/data/user_options_straight_npz.py",
-                "output_directory": "./tests/data/output",
                 "seed": 3654125,
                 "no_postprocess": True,
             },

@@ -8,7 +8,7 @@
                             1 1 1
                             1 1 400
                         </DataItem>
-                        <DataItem Name="X" Dimensions="11 21 401" Format="HDF">
+                        <DataItem Name="X" Dimensions="12 21 401" Format="HDF">
                             cells.h5:/grid/X
                         </DataItem>
                     </DataItem>
