@@ -1,4 +1,5 @@
 """Helper functions for tests."""
+
 from typing import Optional
 
 import h5py

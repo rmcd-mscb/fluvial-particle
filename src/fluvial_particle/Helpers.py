@@ -1,4 +1,5 @@
 """General helper functions."""
+
 import argparse
 import pathlib
 from os import getpid
@@ -18,10 +19,10 @@ def checkcommandarguments():
 
     inputfile = pathlib.Path(argdict["settings_file"])
     if not inputfile.exists():
-        raise Exception(f"Cannot find settings file {inputfile}")
+        raise FileNotFoundError(f"Cannot find settings file {inputfile}")
     outdir = pathlib.Path(argdict["output_directory"])
     if not outdir.is_dir():
-        raise Exception(f"Output directory {outdir} does not exist")
+        raise NotADirectoryError(f"Output directory {outdir} does not exist")
 
     return argdict
 
@@ -31,19 +32,24 @@ def convert_grid_hdf5tovtk(
 ):
     """Convert an HDF5 RiverGrid mesh output file into a time series of VTKStructuredGrid files.
 
+    This function reads a specified HDF5 file containing grid data and converts it into multiple VTK files, either in
+    2D or 3D format, based on the user's preference. The output files are named using a specified prefix and are saved
+    in the designated output directory.
+
     Args:
-        h5fname (str): path to the RiverGrid HDF5 output file
-        output_dir (str): directory to write output VTK files
-        output_prefix (str, optional): shared name of the output VTK files, a suffix like "00.vtk" will be appended to each one.
-            Defaults to "cells".
-        output_threed (bool, optional): if True, output files will be on 3D grids. If False, output will be 2D. Defaults to True.
+        h5fname (str): Path to the RiverGrid HDF5 output file.
+        output_dir (str): Directory to write output VTK files.
+        output_prefix (str, optional): Shared name of the output VTK files. A suffix like 00.vtk will be appended
+            to each one. Defaults to cells.
+        output_threed (bool, optional): If True, output files will be on 3D grids. If False, output will be 2D.
+            Defaults to True.
 
     Raises:
-        Exception: if the output directory output_dir does not exist
+        NotADirectoryError: If the output directory output_dir does not exist.
     """
     outdir = pathlib.Path(output_dir)
     if not outdir.is_dir():
-        raise Exception(f"Output directory {outdir} does not exist")
+        raise NotADirectoryError(f"Output directory {outdir} does not exist")
 
     with h5py.File(h5fname, "r") as h5f:
         grid = h5f["grid"]
@@ -96,15 +102,15 @@ def convert_particles_hdf5tocsv(h5fname, output_dir, output_prefix="particles"):
     Args:
         h5fname (str): path to the Particles HDF5 output file
         output_dir (str): directory to write output csv files
-        output_prefix (str, optional): shared name of the output csv files, a suffix like "00.csv" will be appended to each one.
-            Defaults to "particles".
+        output_prefix (str, optional): shared name of the output csv files, a suffix like "00.csv" will be appended
+            to each one. Defaults to "particles".
 
     Raises:
-        Exception: if the output directory output_dir does not exist
+        NotADirectoryError: if the output directory output_dir does not exist
     """
     outdir = pathlib.Path(output_dir)
     if not outdir.is_dir():
-        raise Exception(f"Output directory {outdir} does not exist")
+        raise NotADirectoryError(f"Output directory {outdir} does not exist")
 
     with h5py.File(h5fname, "r") as h5f:
         coords = h5f["coordinates"]
@@ -206,13 +212,13 @@ def get_prng(timer, comm=None, seed=None):
     """Generate a random seed using time and the process id, then create and return the random number generator.
 
     Args:
-        timer (time.time or MPI.Wtime): object that controls the timing; time.time for serial execution, MPI.Wtime for parallel
+        timer (time.time or MPI.Wtime): object that controls the timing; time.time for serial execution, MPI.Wtime
+            for parallel
         comm (MPI.Intracomm): MPI communicator for parallel execution. Defaults to None
         seed (int): random seed
 
     Returns:
         np.random.RandomState: the random number generator
-
     """
     if seed is None:
         seed = np.int64(np.abs(((timer() * 181) * ((getpid() - 83) * 359)) % 104729))
@@ -220,28 +226,36 @@ def get_prng(timer, comm=None, seed=None):
     if comm is None:
         print(f"Using seed {seed}", flush=True)
 
-    prng = np.random.RandomState(seed)
-    return prng
+    return np.random.RandomState(seed)
 
 
 def load_checkpoint(fname, tidx, start, end, comm=None):
     """Load initial positions from a checkpoint HDF5 file.
 
+    This function retrieves the starting positions of particles from a specified checkpoint file in HDF5
+    format. It supports parallel execution using MPI, allowing for efficient data loading across multiple
+    processors.
+
     Args:
-        fname (str): path to checkpoint HDF5 file
-        tidx (int): outer index of HDF5 datasets
-        start (int): starting index of this processor's assigned space
-        end (int): ending index (non-inclusive)
-        comm (mpi4py communicator, optional): for parallel runs.
+        fname (str): Path to the checkpoint HDF5 file.
+        tidx (int): Outer index of HDF5 datasets, indicating the specific time step to load.
+        start (int): Starting index of this processor's assigned space.
+        end (int): Ending index (non-inclusive) for the data slice.
+        comm (mpi4py communicator, optional): MPI communicator for parallel runs. If None, the function runs in a
+            single process.
 
     Returns:
-        Tuple(ndarray, ndarray, ndarray, int): the (x,y,z) starting positions of the particles and the simulation start time
+        Tuple(ndarray, ndarray, ndarray, int): A tuple containing the (x, y, z) starting positions of the
+            particles and the simulation start time.
+
+    Raises:
+        FileNotFoundError: If the specified HDF5 file does not exist.
     """
     if comm is None or comm.Get_rank() == 0:
         print("Loading initial particle positions from a checkpoint HDF5 file")
     inputfile = pathlib.Path(fname)
     if not inputfile.exists():
-        raise Exception(f"Cannot find load_checkpoint HDF5 file: {fname}")
+        raise FileNotFoundError(f"Cannot find load_checkpoint HDF5 file: {fname}")
     if comm is None:
         h5file = h5py.File(fname, "r")
     else:
@@ -280,17 +294,18 @@ def load_variable_source(
 
     Raises:
         FileNotFoundError: the path to the input CSV given in fname is not valid
-        Exception: the input did not contain 5 columns per row
+        ValueError: the input did not contain 5 columns per row
 
     Returns:
-        Tuple(ndarray, ndarray, ndarray, ndarray): each output ndarray is 1D and has length equal to the summed numpart column
+        Tuple(ndarray, ndarray, ndarray, ndarray): each output ndarray is 1D and has length equal to the summed numpart
+        column
     """
     inputfile = pathlib.Path(fname)
     if not inputfile.exists():
         raise FileNotFoundError(f"Cannot find variable source file: {fname}")
     data = np.genfromtxt(inputfile, delimiter=",")
-    if not data.shape[1] == 5:
-        raise Exception(
+    if data.shape[1] != 5:
+        raise ValueError(
             (
                 "Expected 5 columns in variable source file"
                 "(start_time, x, y, z, numpart)"

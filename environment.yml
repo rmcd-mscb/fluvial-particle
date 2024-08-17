@@ -3,9 +3,9 @@ name: fluvial-particle
 channels:
   - conda-forge
 dependencies:
-  - python>=3.9,<3.12
+  - python>=3.10,<4.0
   - mamba
-  - vtk>=9.1
+  - vtk>=9.3.1
   - poetry
   - pip
   # Production dependencies defined here (as well as in requirements.txt)
