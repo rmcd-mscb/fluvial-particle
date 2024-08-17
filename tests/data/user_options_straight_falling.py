@@ -1,4 +1,5 @@
 """Options file for fluvial particle model."""
+
 from fluvial_particle.FallingParticles import FallingParticles
 
 # Paths to 3D and 2D mesh files

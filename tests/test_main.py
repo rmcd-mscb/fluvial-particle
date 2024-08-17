@@ -1,4 +1,5 @@
 """Test cases for the __main__ module."""
+
 import time
 from os.path import join
 from tempfile import TemporaryDirectory

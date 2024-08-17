@@ -1,4 +1,5 @@
 """Nox sessions."""
+
 import shutil
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ from nox_poetry import session
 
 
 package = "fluvial_particle"
-python_versions = ["3.9"]
+python_versions = ["3.10"]
 nox.needs_version = ">= 2021.6.6"
 nox.options.sessions = (
     "pre-commit",
@@ -27,7 +28,7 @@ nox.options.default_venv_backend = "conda"
 def install_conda_env_yaml(session: nox.Session) -> None:
     "Shortcut for installing conda env with yaml file"
     print(session.virtualenv.location)
-    session._run(
+    session.run(
         "mamba",
         "env",
         "update",
@@ -39,7 +40,7 @@ def install_conda_env_yaml(session: nox.Session) -> None:
         "--prune",
     )
     print("finished conda install")
-    session._run("poetry", "install", "-vv")
+    session.run("poetry", "install", "-vv")
     # session.install("e", ".", "--no-deps")
     print("finished package install")
 

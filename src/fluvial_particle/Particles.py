@@ -1,4 +1,5 @@
 """Particles Class module."""
+
 import h5py
 import numpy as np
 from vtk.util import numpy_support  # type:ignore
@@ -148,9 +149,9 @@ class Particles:
         else:
             parts_h5 = h5py.File(fname, "w", driver="mpio", comm=comm)  # MPI version
 
-        parts_h5.attrs[
-            "Description"
-        ] = f"Output of the fluvial particle tracking model simulated with the {type(self).__name__} class."
+        parts_h5.attrs["Description"] = (
+            f"Output of the fluvial particle tracking model simulated with the {type(self).__name__} class."
+        )
         grpc = parts_h5.create_group("coordinates")
         grpc.attrs["Description"] = "Position x,y,z of particles at printing time steps"
 
@@ -281,25 +282,25 @@ class Particles:
     def create_hdf5_xdmf(self, output_directory, n_prints, globalnparts):
         """Creates the particles XDMF file for visualizations in Paraview.
 
-        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name particles.h5.
+        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name
+        particles.h5.
 
         Args:
             output_directory (string): path to output directory
             n_prints (int): total number of printing steps
             globalnparts (int): number of particles across all processors
         """
-        parts_h5 = h5py.File(output_directory + "//particles.h5", "r")
-        parts_xmf = open(output_directory + "//particles.xmf", "w")
-        self.write_hdf5_xmf_header(parts_xmf)
-        grpc = parts_h5["coordinates"]
-        time = grpc["time"]
-        gen = [t for t in time if not np.isnan(t)]
-        for i in range(len(gen)):
-            t = gen[i].item(0)  # this returns a python scalar, for use in f-strings
-            self.write_hdf5_xmf(parts_xmf, t, n_prints, globalnparts, i)
-        self.write_hdf5_xmf_footer(parts_xmf)
-        parts_h5.close()
-        parts_xmf.close()
+        parts_h5 = h5py.File(f"{output_directory}//particles.h5", "r")
+        with open(f"{output_directory}//particles.xmf", "w") as parts_xmf:
+            self.write_hdf5_xmf_header(parts_xmf)
+            grpc = parts_h5["coordinates"]
+            time = grpc["time"]
+            gen = [t for t in time if not np.isnan(t)]
+            for i in range(len(gen)):
+                t = gen[i].item(0)  # this returns a python scalar, for use in f-strings
+                self.write_hdf5_xmf(parts_xmf, t, n_prints, globalnparts, i)
+            self.write_hdf5_xmf_footer(parts_xmf)
+            parts_h5.close()
 
     def deactivate_particles(self, idx):
         """Turn off particles that have left the river domain.
@@ -383,16 +384,37 @@ class Particles:
                 py[b] = self.y[b]
 
     def initial_validation(self, starttime=0.0, frac=None):
-        """Validate initial 2D positions, set vertical postitions (optional), and interpolate mesh arrays.
+        """Perform validation.
+
+        Perform validation of initial 2D positions, set vertical positions if provided,
+        and interpolate mesh arrays for the simulation.
+
+        This method validates the initial particle positions in 2D space, ensures that
+        the particles are within the boundaries of the 2D grid, interpolates the necessary
+        mesh field values, and sets the vertical positions of the particles based on the
+        `frac` parameter if provided. It also sets the simulation's start time and handles
+        the initial interpolation of the 3D velocity field.
 
         Args:
-            starttime (float): initial time of the simulation in seconds. Defaults to 0.0
-            frac (float): starting position of particles within water column (scalar or NumPy array). Defaults to None
+            starttime (float): Initial time of the simulation in seconds. Defaults to 0.0.
+            frac (float or np.ndarray, optional):
+                Specifies the vertical starting position of the particles as a fraction of the water column depth. If
+                provided, it can be a scalar or a NumPy array, with 0.0 representing the bed elevation and 1.0
+                representing the water surface. Defaults to None.
+
+        Raises:
+            ValueError: If none of the initial points are within the 2D grid, an exception is raised.
+
+        Notes:
+            - If `frac` is provided, the vertical positions (`z`) are calculated based on the
+                bed elevation and water depth.
+            - Mesh arrays and 2D and 3D field values are interpolated to ensure the simulation
+                starts with valid data.
         """
         self.validate_2d_pos(self.x, self.y)
         if self.in_bounds_mask is not None:
             if ~self.in_bounds_mask.any():
-                raise Exception(
+                raise ValueError(
                     "No initial points in the 2D grid; check starting location(s)"
                 )
             numvalidpts = self.mesh.probe2d.GetValidPoints().GetNumberOfTuples()
@@ -731,7 +753,8 @@ class Particles:
     def write_hdf5_xmf(self, filexmf, time, nprints, nparts, tidx):
         """Write the body of the particles XDMF file for visualizations in Paraview.
 
-        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name particles.h5.
+        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name
+        particles.h5.
 
         Args:
             filexmf (file): open file to write

@@ -1,4 +1,5 @@
 """Options file for fluvial particle model."""
+
 from fluvial_particle.LarvalParticles import LarvalBotParticles
 
 # Paths to 3D and 2D mesh files

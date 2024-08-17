@@ -1,4 +1,5 @@
 """FallingParticles Class module."""
+
 import numpy as np
 
 from .Particles import Particles
@@ -137,7 +138,8 @@ class FallingParticles(Particles):
     def write_hdf5_xmf(self, filexmf, time, nprints, nparts, tidx):
         """Write the body of the particles XDMF file for visualizations in Paraview.
 
-        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name particles.h5.
+        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name
+        particles.h5.
 
         Args:
             filexmf (file): open file to write
@@ -222,9 +224,10 @@ class FallingParticles(Particles):
 
     @property
     def c1(self):
-        """np.float64 or ndarray: viscous drag coef. in Ferguson and Church (2004) terminal settling velocity equation.
+        """np.float64 or ndarray.
 
-        If an ndarray, must be 1D and the same length as the number of simulated particles.
+        Viscous drag coef. in Ferguson and Church (2004) terminal settling velocity equation.If an ndarray,
+        must be 1D and the same length as the number of simulated particles.
         """
         return self._c1
 
@@ -245,9 +248,10 @@ class FallingParticles(Particles):
 
     @property
     def c2(self):
-        """np.float64 or ndarray: turbulent wake drag coef. in Ferguson and Church (2004) terminal settling velocity equation.
+        """np.float64 or ndarray.
 
-        If an ndarray, must be 1D and the same length as the number of simulated particles.
+        Turbulent wake drag coef. in Ferguson and Church (2004) terminal settling velocity
+        equation. If an ndarray, must be 1D and the same length as the number of simulated particles.
         """
         return self._c2
 
@@ -268,9 +272,10 @@ class FallingParticles(Particles):
 
     @property
     def radius(self):
-        """np.float64 or ndarray: radius of the particles in Ferguson and Church (2004) terminal settling velocity equation.
+        """np.float64 or ndarray.
 
-        If an ndarray, must be 1D and the same length as the number of simulated particles.
+        Radius of the particles in Ferguson and Church (2004) terminal settling velocity
+        equation. If an ndarray, must be 1D and the same length as the number of simulated particles.
         All radius values must be greater than 0.
         """
         return self._radius
@@ -295,9 +300,10 @@ class FallingParticles(Particles):
 
     @property
     def rho(self):
-        """np.float64 or ndarray: density of the particles in Ferguson and Church (2004) terminal settling velocity equation.
+        """np.float64 or ndarray.
 
-        If an ndarray, must be 1D and the same length as the number of simulated particles.
+        Density of the particles in Ferguson and Church (2004) terminal settling velocity
+        equation. If an ndarray, must be 1D and the same length as the number of simulated particles.
         All rho values must be greater than 0.
         """
         return self._rho

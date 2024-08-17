@@ -36,17 +36,20 @@ repos:
         language: system
         types: [python]
         require_serial: true
-      - id: reorder-python-imports
-        name: Reorder python imports
-        entry: reorder-python-imports
-        language: system
-        types: [python]
         args:
-          [
-            --application-directories=src,
-            --py38-plus,
-            --exit-zero-even-if-changed,
-          ]
+          - "--ignore=B907,RST301,RST201,RST203,W503,E203"
+          - "--docstring-convention=google"
+      # - id: reorder-python-imports
+      #   name: Reorder python imports
+      #   entry: reorder-python-imports
+      #   language: system
+      #   types: [python]
+      #   args:
+      #     [
+      #       --application-directories=src,
+      #       --py38-plus,
+      #       --exit-zero-even-if-changed,
+      #     ]
       - id: trailing-whitespace
         name: Trim Trailing Whitespace
         entry: trailing-whitespace-fixer

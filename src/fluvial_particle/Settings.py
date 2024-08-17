@@ -1,4 +1,5 @@
 """Settings file, subclass of dictionary."""
+
 from .FallingParticles import FallingParticles
 from .LarvalParticles import LarvalBotParticles
 from .LarvalParticles import LarvalTopParticles
@@ -30,7 +31,8 @@ class Settings(dict):
         """Attributes required in the options file.
 
         Returns:
-            list(str): list of the required keys: SimTime, dt, Track3D, PrintAtTick, file_name_2d, file_name_3d, NumPart, StartLoc
+            list(str): list of the required keys: SimTime, dt, Track3D, PrintAtTick, file_name_2d, file_name_3d,
+            NumPart, StartLoc
         """
         return (
             "SimTime",

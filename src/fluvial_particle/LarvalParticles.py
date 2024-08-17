@@ -1,4 +1,5 @@
 """LarvalParticles Class module."""
+
 import numpy as np
 
 from .Particles import Particles
@@ -25,8 +26,10 @@ class LarvalParticles(Particles):
             **kwargs (dict): additional keyword arguments  # noqa
 
         Keyword args:
-            amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts. Defaults to 0.2
-            period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts. Defaluts to 60.0
+            amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts.
+            Defaults to 0.2
+            period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts.
+            Defaluts to 60.0
         """
         super().__init__(nparts, x, y, z, rng, mesh, **kwargs)
         self.amp = kwargs.get("amp", 0.2)
@@ -104,7 +107,8 @@ class LarvalParticles(Particles):
     def write_hdf5_xmf(self, filexmf, time, nprints, nparts, tidx):
         """Write the body of the particles XDMF file for visualizations in Paraview.
 
-        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name particles.h5.
+        Note that this implementation assumes the HDF5 file will be in the same directory as filexmf with the name
+        particles.h5.
 
         Args:
             filexmf (file): open file to write

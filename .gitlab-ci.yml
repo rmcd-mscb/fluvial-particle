@@ -25,7 +25,7 @@ stages:
     - export REQUESTS_CA_BUNDLE="${SSL_CERT_FILE}";
     - export NODE_EXTRA_CA_CERTS="${SSL_CERT_FILE}";
     - export NPM_CONFIG_CAFILE="${SSL_CERT_FILE}";
-    - mamba config --set ssl_verify /etc/ssl/certs/ca-certificates.crt
+    - conda config --set ssl_verify /etc/ssl/certs/ca-certificates.crt
     - mamba update -n base mamba
     - mamba env update -n base --file environment.yml
     - mamba init bash
@@ -37,7 +37,7 @@ stages:
 
 .docker-template: &docker
   <<: *install-deps
-  image: condaforge/mambaforge:22.9.0-2
+  image: condaforge/miniforge3:latest
   stage: tests
 
 #test jobs -----------------------

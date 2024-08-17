@@ -29,6 +29,11 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         argvars (dict): dictionary holding command line argument variables
         timer (time object): does timing
         comm (MPI intracomm object): for parallel runs only, MPI communicator
+
+    Raises:
+        FileNotFoundError: The StartLoc file does not exist
+        ValueError: StartLoc must be tuple or HDF5 checkpoint file path
+        ValueError: Simulation start time must be less than end time
     """
     t0 = timer()
 
@@ -85,7 +90,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         filepath = pathlib.Path(settings["StartLoc"])
 
         if not filepath.exists():
-            raise Exception(f"The StartLoc file ({str}) does not exist")
+            raise FileNotFoundError(f"The StartLoc file ({str}) does not exist")
 
         suffix = filepath.suffix
         if suffix == ".h5":
@@ -101,7 +106,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
             settings["PartStartTime"] = pstime
 
     else:
-        raise Exception("StartLoc must be tuple or HDF5 checkpoint file path")
+        raise ValueError("StartLoc must be tuple or HDF5 checkpoint file path")
 
     # Get NumPy random state
     rng = get_prng(timer, comm, seed)
@@ -116,7 +121,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
 
     # Calc simulation and printing times
     if starttime >= endtime:
-        raise Exception(
+        raise ValueError(
             f"Simulation start time must be less than end time; current values: {starttime}, {endtime}"
         )
     times = np.arange(starttime + dt, endtime + dt, dt)
@@ -159,7 +164,8 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         else:
             print("Velocity field will be interpolated from 2D grid", flush=True)
         print(
-            f"Simulation start time is {starttime}, maximum end time is {endtime}, using timesteps of {dt} (all in seconds).",
+            f"Simulation start time is {starttime}, maximum end time is {endtime}, \
+            using timesteps of {dt} (all in seconds).",
             flush=True,
         )
 
@@ -198,7 +204,8 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
                     time_per_time = np.float64(e / i)
                     eta = str(timedelta(seconds=((n_times - i) * time_per_time)))
                     print(
-                        f"Remaining time steps {n_times - i - 1}/{n_times} || Elapsed Time: {elapsed} h:m:s || ETA {eta} h:m:s",
+                        f"Remaining time steps {n_times - i - 1}/{n_times} || Elapsed Time: {elapsed} \
+                        h:m:s || ETA {eta} h:m:s",
                         flush=True,
                     )
 
