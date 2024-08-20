@@ -9,4 +9,4 @@ python:
 build:
   os: ubuntu-22.04
   tools:
-    python: "mambaforge-latest"
+    python: "3.10"
