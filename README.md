@@ -34,7 +34,7 @@ Prohibitively large or long simulation problems can be made tractable with the h
 
 ## Installation
 
-This package uses [poetry](https://python-poetry.org/) for installation and dependency management. It is recommended to use a conda environment.
+This package uses [uv](https://github.com/astral-sh/uv) for fast dependency installation and [hatchling](https://hatch.pypa.io/) for building. It is recommended to use a conda environment.
 
 First, create the fluvial-particle conda environment using the environment.yml file:
 
@@ -43,10 +43,16 @@ conda env create -f environment.yml
 conda activate fluvial-particle
 ```
 
-Next, use poetry to install the package dependencies and _fluvial-particle_ itself:
+Next, install uv if you don't have it already:
 
 ```shell
-poetry install
+pip install uv
+```
+
+Then use uv to install the package and its dependencies:
+
+```shell
+uv pip install -e .
 ```
 
 The success of the installation can be tested with pytest:

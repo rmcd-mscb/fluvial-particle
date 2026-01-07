@@ -1,68 +1,79 @@
-[tool.poetry]
+[project]
 name = "fluvial-particle"
 version = "0.0.3"
 description = "Lagrangian particle-tracking for fluvial environments."
-authors = ["Richard McDonald <rmcd@usgs.gov>"]
-license = "LICENSE.md"
+authors = [
+    {name = "Richard McDonald", email = "rmcd@usgs.gov"}
+]
+license = {file = "LICENSE.md"}
 readme = "README.md"
-homepage = "https://code.usgs.gov/wma/nhgf/fluvparticle"
-repository = "https://code.usgs.gov/wma/nhgf/fluvparticle"
-documentation = "https://fluvial-particle.readthedocs.io/en/latest/"
-packages = [
-    {include = "fluvial_particle", from="src"}
+requires-python = ">=3.10,<4.0"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 
-[tool.poetry.scripts]
+dependencies = [
+    "h5py>=3.7.0",
+    "vtk>=9.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.0.0",
+    "darglint>=1.8.1",
+    "flake8>=7.0.1",
+    "flake8-bandit>=4.0.0",
+    "flake8-bugbear>=24.4.25",
+    "flake8-docstrings>=1.6.0",
+    "flake8-rst-docstrings>=0.3.0",
+    "nox>=2024.4.15",
+    "pep8-naming>=0.12.1",
+    "pre-commit>=3.0.0",
+    "pre-commit-hooks>=4.2.0",
+    "safety>=2.2.0",
+    "mypy>=1.0.1",
+    "pytest>=7.1.2",
+    "coverage[toml]>=7.4",
+    "Pygments>=2.12.0",
+    "typeguard>=2.13.3",
+    "xdoctest>=1.0.0",
+    "Sphinx>=7.0.0",
+    "sphinx-click>=6.0.0",
+    "sphinx-autobuild>=2024.4.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "myst-parser>=4.0.0",
+    "reorder-python-imports>=3.1.0",
+    "ipython>=8.10.0",
+    "bump2version>=1.0.1",
+    "bandit>=1.7.4",
+    "gitpython>=3.1.30",
+    "pydocstyle>=6.3.0",
+]
+
+[project.scripts]
 fluvial_particle = "fluvial_particle:track_serial"
 fluvial_particle_mpi = "fluvial_particle:track_mpi"
 
-[tool.poetry.dependencies]
-python = ">=3.10,<4.0"
-h5py = "^3.7.0"
-vtk = "^9.1"
-nox-poetry = "^1.0.2"
-
-[tool.poetry.dev-dependencies]
-black = "^24.0.0"
-darglint = "^1.8.1"
-flake8 = "^7.0.1"
-flake8-bandit = "^4.0.0"
-flake8-bugbear = "^24.4.25"
-flake8-docstrings = "^1.6.0"
-flake8-rst-docstrings = "^0.3.0"
-nox = "^2024.4.15"
-pep8-naming = "^0.12.1"
-pre-commit = "^3.0.0"
-pre-commit-hooks = "^4.2.0"
-safety = ">=2.2.0"
-mypy = "^1.0.1"
-pytest = "^7.1.2"
-coverage = {extras = ["toml"], version = "^7.4"}
-Pygments = "^2.12.0"
-typeguard = "^2.13.3"
-xdoctest = "^1.0.0"
-Sphinx = "^7.0.0"
-sphinx-click = "^6.0.0"
-sphinx-autobuild = "^2024.4.0"
-sphinx-rtd-theme = "^2.0.0"
-myst-parser = "^4.0.0"
-reorder-python-imports = "^3.1.0"
-ipython = "^8.10.0"
-bump2version = "^1.0.1"
-bandit = "^1.7.4"
-
-[tool.poetry.group.dev.dependencies]
-safety = ">=2.2.0"
-gitpython = ">=3.1.30"
-pydocstyle = "^6.3.0"
+[project.urls]
+Homepage = "https://code.usgs.gov/wma/nhgf/fluvparticle"
+Repository = "https://code.usgs.gov/wma/nhgf/fluvparticle"
+Documentation = "https://fluvial-particle.readthedocs.io/en/latest/"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fluvial_particle"]
 
 [tool.black]
 line-length = 88
-target-version = ["py39"]
+target-version = ["py310"]
 
 [tool.coverage.paths]
 source = ["src", "*/site-packages"]

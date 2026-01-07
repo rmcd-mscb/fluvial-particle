@@ -6,8 +6,6 @@ from pathlib import Path
 from textwrap import dedent
 
 import nox
-from nox_poetry import Session
-from nox_poetry import session
 
 
 package = "fluvial_particle"
@@ -26,7 +24,7 @@ nox.options.default_venv_backend = "conda"
 
 
 def install_conda_env_yaml(session: nox.Session) -> None:
-    "Shortcut for installing conda env with yaml file"
+    """Shortcut for installing conda env with yaml file"""
     print(session.virtualenv.location)
     session.run(
         "mamba",
@@ -40,12 +38,12 @@ def install_conda_env_yaml(session: nox.Session) -> None:
         "--prune",
     )
     print("finished conda install")
-    session.run("poetry", "install", "-vv")
-    # session.install("e", ".", "--no-deps")
+    # Install the package with uv
+    session.run("uv", "pip", "install", "-e", ".", "--system")
     print("finished package install")
 
 
-def activate_virtualenv_in_precommit_hooks(session: Session) -> None:
+def activate_virtualenv_in_precommit_hooks(session: nox.Session) -> None:
     """Activate virtualenv in hooks installed by pre-commit.
 
     This function patches git hooks installed by pre-commit to activate the
@@ -97,7 +95,7 @@ def activate_virtualenv_in_precommit_hooks(session: Session) -> None:
 
 
 @nox.session(name="pre-commit", python="3.9")
-def precommit(session: Session) -> None:
+def precommit(session: nox.Session) -> None:
     """Lint using pre-commit."""
     install_conda_env_yaml(session)
     args = session.posargs or ["run", "--all-files", "--show-diff-on-failure"]
@@ -120,7 +118,7 @@ def precommit(session: Session) -> None:
 
 
 @nox.session(python="3.9")
-def safety(session: Session) -> None:
+def safety(session: nox.Session) -> None:
     """Scan dependencies for insecure packages."""
     install_conda_env_yaml(session)
     session.install("safety", ".")
@@ -128,7 +126,7 @@ def safety(session: Session) -> None:
 
 
 @nox.session(python=python_versions)
-def mypy(session: Session) -> None:
+def mypy(session: nox.Session) -> None:
     """Type-check using mypy."""
     install_conda_env_yaml(session)
     args = session.posargs or ["src", "tests", "docs/conf.py"]
@@ -140,7 +138,7 @@ def mypy(session: Session) -> None:
 
 
 @nox.session(python=python_versions, venv_backend="conda")
-def tests(session: Session) -> None:
+def tests(session: nox.Session) -> None:
     """Run the test suite."""
     install_conda_env_yaml(session)
     session.install(".")
@@ -153,7 +151,7 @@ def tests(session: Session) -> None:
 
 
 @nox.session(python=python_versions, venv_backend="conda")
-def coverage(session: Session) -> None:
+def coverage(session: nox.Session) -> None:
     """Produce the coverage report."""
     install_conda_env_yaml(session)
     args = session.posargs or ["report"]
@@ -167,7 +165,7 @@ def coverage(session: Session) -> None:
 
 
 @nox.session(python=python_versions)
-def typeguard(session: Session) -> None:
+def typeguard(session: nox.Session) -> None:
     """Runtime type checking using Typeguard."""
     install_conda_env_yaml(session)
     session.install(".")
@@ -176,7 +174,7 @@ def typeguard(session: Session) -> None:
 
 
 @nox.session(python=python_versions)
-def xdoctest(session: Session) -> None:
+def xdoctest(session: nox.Session) -> None:
     """Run examples with xdoctest."""
     install_conda_env_yaml(session)
     args = session.posargs or ["all"]
@@ -186,7 +184,7 @@ def xdoctest(session: Session) -> None:
 
 
 @nox.session(name="docs-build", python="3.9", venv_backend="conda")
-def docs_build(session: Session) -> None:
+def docs_build(session: nox.Session) -> None:
     """Build the documentation."""
     install_conda_env_yaml(session)
     args = session.posargs or ["docs", "docs/_build/html"]
@@ -203,7 +201,7 @@ def docs_build(session: Session) -> None:
 
 
 @nox.session(python="3.9")
-def docs(session: Session) -> None:
+def docs(session: nox.Session) -> None:
     """Build and serve the documentation with live reloading on file changes."""
     install_conda_env_yaml(session)
     args = session.posargs or ["--open-browser", "docs", "docs/_build"]
