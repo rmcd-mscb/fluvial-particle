@@ -23,7 +23,7 @@ class LarvalParticles(Particles):
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            **kwargs (dict): additional keyword arguments  # noqa
+            **kwargs (dict): additional keyword arguments  # noqa: E501
 
         Keyword Args:
             amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts.

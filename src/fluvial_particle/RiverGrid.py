@@ -5,7 +5,7 @@ import pathlib
 import h5py
 import numpy as np
 import vtk
-from vtk.util import numpy_support  # type:ignore
+from vtk.util import numpy_support  # type: ignore[import]
 
 
 # from numba import jit
@@ -97,7 +97,7 @@ class RiverGrid:
             nprints (int): number of printing time steps
             time (NumPy ndarray): array of print times
             fname (str): file name of output HDF5 file
-            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
+            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa: E501
 
         Returns:
             h5py file object: the newly created and open HDF5 file
@@ -181,7 +181,7 @@ class RiverGrid:
             output_directory (str): path to output directory
             n_prints (int): total number of printing time steps
             globalnparts (int): number of particles across all processors
-            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
+            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa: E501
         """
         # Open Particles HDF5 file for printing steps and cell locations
         parts_h5 = h5py.File(f"{output_directory}//particles.h5", "r")

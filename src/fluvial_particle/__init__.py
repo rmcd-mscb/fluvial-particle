@@ -21,7 +21,7 @@ from .RiverGrid import RiverGrid
 from .Settings import Settings
 
 
-def simulate(settings, argvars, timer, comm=None):  # noqa
+def simulate(settings, argvars, timer, comm=None):
     """Run the fluvial particle simulation.
 
     Args:

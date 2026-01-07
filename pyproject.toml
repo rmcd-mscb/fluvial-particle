@@ -124,12 +124,14 @@ ignore = [
     "SIM115",  # open-file-with-context-handler (some cases need manual management)
     "PLC0415", # import-outside-top-level (needed for optional MPI import)
     "PLW2901", # redefined-loop-name (intentional in some cases)
+    "UP038",   # isinstance with tuple (needed for numpy type compatibility)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401", "D104"]  # Unused imports, missing docstring
+"__init__.py" = ["F401", "D104", "PLR0912"]  # Unused imports, missing docstring, too many branches
 "noxfile.py" = ["D", "S"]         # Skip docstring and security checks
 "tests/**/*.py" = ["D", "S101", "PLR2004"]  # Skip docstrings, allow assert and magic values
+"verify_environment.py" = ["PERF203"]  # Allow try-except in loop for module checking
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

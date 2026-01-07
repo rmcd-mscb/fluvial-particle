@@ -61,6 +61,6 @@ class Settings(dict):
         # Load user parameters
         with pathlib.Path(filename).open(encoding="utf-8") as f:
             f = "\n".join(f.readlines())
-            exec(f, global_dict, options)  # noqa
+            exec(f, global_dict, options)  # noqa: S102 # nosec B102 - Intentional exec for user config loading
 
         return cls(**options)

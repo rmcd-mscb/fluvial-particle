@@ -18,7 +18,7 @@ NumPart = 20  # Number of particles to simulate per processor
 StartLoc = "./tests/data/varsrc_straight.csv"
 
 # Particle type for the simulation
-ParticleType = Particles  # noqa
+ParticleType = Particles  # noqa: F401
 
 # Optional Particles keyword arguments
 beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient

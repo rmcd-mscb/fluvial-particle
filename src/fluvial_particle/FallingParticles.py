@@ -18,7 +18,7 @@ class FallingParticles(Particles):
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            **kwargs (dict): additional keyword arguments  # noqa
+            **kwargs (dict): additional keyword arguments  # noqa: E501
 
         Keyword Args:
             radius (float): radius of the particles [m], scalar or NumPy array of length nparts. Defaults to 0.0005
@@ -41,7 +41,7 @@ class FallingParticles(Particles):
             nprints (int): size of first dimension, indexes printing time slices
             globalnparts (int): global number of particles, distributed across processors
             comm (MPI communicator): only for parallel runs. Defaults to None
-            fname (string): name of the HDF5 file. Defauts to "particles.h5"
+            fname (string): name of the HDF5 file. Defaults to "particles.h5"
 
         Returns:
             h5py file object: the newly created and open HDF5 file

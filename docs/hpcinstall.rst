@@ -54,7 +54,7 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
      git clone https://github.com/mpi4py/mpi4py.git
      cd mpi4py
      python setup.py build --mpicc="$(which cc) -shared"
-     pyton setup.py install
+     python setup.py install
      cd ..
 
    You can check the mpi4py was installed correctly with the following lines, where <path to python installs> is the path to the site-packages directory given by the first command.

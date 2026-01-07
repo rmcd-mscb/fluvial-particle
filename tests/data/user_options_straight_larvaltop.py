@@ -19,7 +19,7 @@ StartLoc = (5.0, 0.0, 10.1)
 startfrac = 0.5
 
 # Particle type for the simulation
-ParticleType = LarvalTopParticles  # noqa
+ParticleType = LarvalTopParticles  # noqa: F401
 
 # Optional Particles keyword arguments
 beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient

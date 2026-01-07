@@ -278,7 +278,7 @@ def load_variable_source(
         #. numpart (int): the number of particles to activate
 
     Each row will add additional particles to the simulation.
-    For example, if a given row in the CSV file is “10.0, 6.14, 9.09, 10.3, 100”, then 100 particles will be iniated
+    For example, if a given row in the CSV file is "10.0, 6.14, 9.09, 10.3, 100", then 100 particles will be initiated
     from the point (6.14, 9.09, 10.3) starting at a simulation time of 10.0 seconds.
 
     Args:

@@ -4,7 +4,7 @@ import pathlib
 
 import h5py
 import numpy as np
-from vtk.util import numpy_support  # type:ignore
+from vtk.util import numpy_support  # type: ignore[import]
 
 
 class Particles:
@@ -24,7 +24,7 @@ class Particles:
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            **kwargs (dict): additional keyword arguments  # noqa
+            **kwargs (dict): additional keyword arguments  # noqa: E501
 
         Keyword Args:
             Track3D (int): 1 if 3D model run, 0 else. Defaults to 1
@@ -138,7 +138,7 @@ class Particles:
             globalnparts (int): global number of particles, distributed across processors
             comm (MPI communicator): only for parallel runs
             fname (string): name of the HDF5 file
-            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa
+            **dset_kwargs (dict): HDF5 dataset keyword arguments, e.g. compression filter # noqa: E501
 
         Returns:
             h5py file object: the newly created and open HDF5 file
@@ -301,7 +301,7 @@ class Particles:
         self._bedelev[idx] = np.nan
         self._wse[idx] = np.nan
         self._normdepth[idx] = np.nan
-        self._cellindex2d[idx] = -1  # integer dtypes cant be nan
+        self._cellindex2d[idx] = -1  # integer dtypes can't be nan
         self._cellindex3d[idx] = -1
         self._velx[idx] = np.nan
         self._vely[idx] = np.nan

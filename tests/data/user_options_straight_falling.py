@@ -19,7 +19,7 @@ StartLoc = (5.0, 0.0, 10.1)
 startfrac = 0.5
 
 # Particle type for the simulation
-ParticleType = FallingParticles  # noqa
+ParticleType = FallingParticles  # noqa: F401
 radius = 0.0005  # optional keyword argument for FallingParticles subclass
 
 # Optional Particles keyword arguments

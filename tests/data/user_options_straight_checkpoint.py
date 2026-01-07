@@ -19,7 +19,7 @@ StartLoc = "./tests/data/output_straight/particles.h5"
 StartIdx = 2
 
 # Particle type for the simulation
-ParticleType = Particles  # noqa
+ParticleType = Particles  # noqa: F401
 
 # Optional Particles keyword arguments
 beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient
