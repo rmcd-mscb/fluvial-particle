@@ -25,6 +25,7 @@ jobs:
           - { python-version: "3.13", os: ubuntu-latest, session: "safety" }
           # - { python-version: "3.13", os: ubuntu-latest, session: "mypy" }
           - { python-version: "3.13", os: ubuntu-latest, session: "tests" }
+          - { python-version: "3.13", os: macos-latest, session: "tests" }
           # - { python-version: "3.13", os: windows-latest, session: "tests" }  # Disabled: Windows HDF5 file locking issues
           # - { python-version: "3.13", os: ubuntu-latest, session: "typeguard" }
           # - { python-version: "3.13", os: ubuntu-latest, session: "xdoctest" }
