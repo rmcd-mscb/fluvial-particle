@@ -19,7 +19,7 @@ StartLoc = (5, 0, 9.5)
 startfrac = 0.5
 
 # Particle type for the simulation
-ParticleType = Particles  # noqa
+ParticleType = Particles  # noqa: F401
 
 # Optional Particles keyword arguments
 beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient

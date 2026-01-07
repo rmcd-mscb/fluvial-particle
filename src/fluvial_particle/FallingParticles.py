@@ -18,9 +18,9 @@ class FallingParticles(Particles):
             z (float): z-coordinate of each particle, numpy array of length nparts
             rng (Numpy object): random number generator
             mesh (RiverGrid): class instance of the river hydrodynamic data
-            **kwargs (dict): additional keyword arguments  # noqa
+            **kwargs (dict): additional keyword arguments  # noqa: E501
 
-        Keyword args:
+        Keyword Args:
             radius (float): radius of the particles [m], scalar or NumPy array of length nparts. Defaults to 0.0005
             rho (float): density of the particles [kg/m^3], scalar or NumPy array of length nparts. Defaults to 2650.0
             c1 (float): viscous drag coefficient [-], scalar or NumPy array of length nparts. Defaults to 20.0
@@ -41,7 +41,7 @@ class FallingParticles(Particles):
             nprints (int): size of first dimension, indexes printing time slices
             globalnparts (int): global number of particles, distributed across processors
             comm (MPI communicator): only for parallel runs. Defaults to None
-            fname (string): name of the HDF5 file. Defauts to "particles.h5"
+            fname (string): name of the HDF5 file. Defaults to "particles.h5"
 
         Returns:
             h5py file object: the newly created and open HDF5 file
@@ -55,9 +55,7 @@ class FallingParticles(Particles):
         grp.create_dataset("c2", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grp["c2"].attrs["Description"] = "Turbulent wake drag coefficient"
         grp["c2"].attrs["Units"] = "None"
-        grp.create_dataset(
-            "radius", (1, globalnparts), dtype=np.float64, fillvalue=np.nan
-        )
+        grp.create_dataset("radius", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grp["radius"].attrs["Description"] = "Particle radii"
         grp["radius"].attrs["Units"] = "meters"
         grp.create_dataset("rho", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
@@ -173,9 +171,7 @@ class FallingParticles(Particles):
             fname,
             "/properties/cellidx3d",
         )
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth"
-        )
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth")
         self.write_hdf5_xmf_scalarattribute(
             filexmf,
             nprints,
@@ -205,18 +201,10 @@ class FallingParticles(Particles):
         )
 
         # Subclass attributes, time invariant
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, 1, nparts, 0, "c1", fname, "/properties/c1"
-        )
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, 1, nparts, 0, "c2", fname, "/properties/c2"
-        )
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, 1, nparts, 0, "Radius", fname, "/properties/radius"
-        )
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, 1, nparts, 0, "Density", fname, "/properties/rho"
-        )
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "c1", fname, "/properties/c1")
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "c2", fname, "/properties/c2")
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "Radius", fname, "/properties/radius")
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "Density", fname, "/properties/rho")
 
         self.write_hdf5_xmf_gridfooter(filexmf)
 
@@ -241,9 +229,7 @@ class FallingParticles(Particles):
             else:
                 values = values.astype(np.float64)
         else:
-            raise Exception(
-                "c1 must be either scalar or NumPy array with length = number of particles"
-            )
+            raise Exception("c1 must be either scalar or NumPy array with length = number of particles")
         self._c1 = values
 
     @property
@@ -265,9 +251,7 @@ class FallingParticles(Particles):
             else:
                 values = values.astype(np.float64)
         else:
-            raise Exception(
-                "c2 must be either scalar or NumPy array with length = number of particles"
-            )
+            raise Exception("c2 must be either scalar or NumPy array with length = number of particles")
         self._c2 = values
 
     @property
@@ -290,9 +274,7 @@ class FallingParticles(Particles):
             else:
                 values = values.astype(np.float64)
         else:
-            raise Exception(
-                "radius must be either scalar or NumPy array with length = number of particles"
-            )
+            raise Exception("radius must be either scalar or NumPy array with length = number of particles")
         if np.any(values <= 0):
             raise ValueError("radius must be positive number")
 
@@ -318,9 +300,7 @@ class FallingParticles(Particles):
             else:
                 values = values.astype(np.float64)
         else:
-            raise Exception(
-                "rho must be either scalar or NumPy array with length = number of particles"
-            )
+            raise Exception("rho must be either scalar or NumPy array with length = number of particles")
         if np.any(values <= 0):
             raise ValueError("rho must be positive number")
 

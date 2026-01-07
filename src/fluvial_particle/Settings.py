@@ -1,9 +1,11 @@
 """Settings file, subclass of dictionary."""
 
+import pathlib
+
 from .FallingParticles import FallingParticles
-from .LarvalParticles import LarvalBotParticles
-from .LarvalParticles import LarvalTopParticles
+from .LarvalParticles import LarvalBotParticles, LarvalTopParticles
 from .Particles import Particles
+
 
 # New Particles subclasses must be added to global_dict before they can be used
 global_dict = {
@@ -21,7 +23,7 @@ class Settings(dict):
         """Check that options file has all required keys."""
         missing = [x for x in self.required_keys if x not in kwargs]
         if len(missing) > 0:
-            raise ValueError("Missing {} from the user parameter file".format(missing))
+            raise ValueError(f"Missing {missing} from the user parameter file")
 
         for key, value in kwargs.items():
             self[key] = value
@@ -57,8 +59,8 @@ class Settings(dict):
         """
         options = {}
         # Load user parameters
-        with open(filename, "r") as f:
+        with pathlib.Path(filename).open(encoding="utf-8") as f:
             f = "\n".join(f.readlines())
-            exec(f, global_dict, options)  # noqa
+            exec(f, global_dict, options)  # noqa: S102 # nosec B102 - Intentional exec for user config loading
 
         return cls(**options)

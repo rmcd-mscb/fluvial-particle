@@ -5,9 +5,9 @@ __email__ = "rmcd@usgs.gov"
 __version__ = "0.0.3"
 
 
-from datetime import timedelta
 import pathlib
 import time
+from datetime import timedelta
 
 import numpy as np
 
@@ -17,11 +17,11 @@ from .Helpers import (
     load_checkpoint,
     load_variable_source,
 )
-from .Settings import Settings
 from .RiverGrid import RiverGrid
+from .Settings import Settings
 
 
-def simulate(settings, argvars, timer, comm=None):  # noqa
+def simulate(settings, argvars, timer, comm=None):
     """Run the fluvial particle simulation.
 
     Args:
@@ -96,11 +96,9 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         if suffix == ".h5":
             # Particle positions loaded from an HDF5 file
             tidx = -1
-            if "StartIdx" in settings.keys():
+            if "StartIdx" in settings:
                 tidx = settings["StartIdx"]
-            x, y, z, starttime = load_checkpoint(
-                settings["StartLoc"], tidx, start, end, comm
-            )
+            x, y, z, starttime = load_checkpoint(settings["StartLoc"], tidx, start, end, comm)
         elif suffix == ".csv":
             pstime, x, y, z = load_variable_source(settings["StartLoc"])
             settings["PartStartTime"] = pstime
@@ -115,15 +113,13 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     particles = particles(npart, x, y, z, rng, river, **settings)
 
     frac = None
-    if "startfrac" in settings.keys():
+    if "startfrac" in settings:
         frac = settings["startfrac"]
     particles.initial_validation(starttime=starttime, frac=frac)
 
     # Calc simulation and printing times
     if starttime >= endtime:
-        raise ValueError(
-            f"Simulation start time must be less than end time; current values: {starttime}, {endtime}"
-        )
+        raise ValueError(f"Simulation start time must be less than end time; current values: {starttime}, {endtime}")
     times = np.arange(starttime + dt, endtime + dt, dt)
     n_times = times.size
     print_inc = np.max([np.int32(print_inc_time / dt), 1])  # bound below
@@ -137,11 +133,9 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     # Create HDF5 particles dataset; collective in MPI
     fname = output_directory + "//particles.h5"
     dset_kwargs = {}
-    if "hdf5_dataset_kwargs" in settings.keys():
+    if "hdf5_dataset_kwargs" in settings:
         dset_kwargs = settings["hdf5_dataset_kwargs"]
-    parts_h5 = particles.create_hdf5(
-        n_prints, globalnparts, fname=fname, comm=comm, **dset_kwargs
-    )
+    parts_h5 = particles.create_hdf5(n_prints, globalnparts, fname=fname, comm=comm, **dset_kwargs)
 
     if comm is not None:
         comm.Barrier()
@@ -175,21 +169,18 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         particles.move(times[i], dt)
 
         # Check that there are still active particles
-        if particles.in_bounds_mask is not None:
-            if ~np.any(particles.in_bounds_mask):
-                if comm is None:
-                    print(
-                        f"No active particles remain; exiting loop at time T={times[i]}",
-                        flush=True,
-                    )
-                break
+        if particles.in_bounds_mask is not None and ~np.any(particles.in_bounds_mask):
+            if comm is None:
+                print(
+                    f"No active particles remain; exiting loop at time T={times[i]}",
+                    flush=True,
+                )
+            break
 
         # Write to HDF5
         tidx = np.searchsorted(print_times, times[i])
         if print_times[tidx] == times[i]:
-            particles.write_hdf5(
-                parts_h5, np.int32(i / print_inc) + 1, start, end, times[i], rank
-            )
+            particles.write_hdf5(parts_h5, np.int32(i / print_inc) + 1, start, end, times[i], rank)
 
             if master:
                 e = timer() - t0
@@ -218,7 +209,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
     if master:
         particles.create_hdf5_xdmf(output_directory, n_prints, globalnparts)
         print(
-            f"Finished simulation in {str(timedelta(seconds=timer() - t0))} h:m:s",
+            f"Finished simulation in {timedelta(seconds=timer() - t0)!s} h:m:s",
             flush=True,
         )
 
@@ -230,7 +221,7 @@ def simulate(settings, argvars, timer, comm=None):  # noqa
         comm.Barrier()
 
     if master:
-        print(f"Finished in {str(timedelta(seconds=timer()-t0))} h:m:s", flush=True)
+        print(f"Finished in {timedelta(seconds=timer() - t0)!s} h:m:s", flush=True)
 
 
 def track_serial():

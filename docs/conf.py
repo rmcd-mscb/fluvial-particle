@@ -1,11 +1,12 @@
 """Sphinx configuration."""
 
-import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(".."))
-sys.path.insert(0, os.path.abspath("../../"))
+
+sys.path.insert(0, str(Path("..").resolve()))
+sys.path.insert(0, str(Path("../..").resolve()))
 
 project = "Fluvial Particle"
 author = "Richard McDonald"

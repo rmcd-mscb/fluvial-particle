@@ -1,14 +1,25 @@
 ---
+# Conda environment for fluvial-particle
+# This file contains ONLY dependencies that benefit from conda:
+# - Compiled C/C++ libraries (VTK, HDF5)
+# - NumPy with MKL optimizations
+# All pure Python dependencies come from pyproject.toml via uv
+
 name: fluvial-particle
 channels:
   - conda-forge
 dependencies:
-  - python>=3.10,<4.0
-  - mamba
-  - vtk>=9.3.1
-  - poetry
+  # Python interpreter (constrained to versions with VTK support)
+  - python>=3.10,<3.14
+
+  # Package manager (needed for uv to work)
   - pip
-  # Production dependencies defined here (as well as in requirements.txt)
-  - click
-  - h5py
-  - numpy
+
+  # Compiled dependencies - better from conda than pip
+  - vtk>=9.3.1 # Complex C++ visualization library
+  - h5py>=3.7.0 # HDF5 with C bindings
+  - numpy>=1.20 # NumPy with MKL optimizations
+
+
+  # Note: All other dependencies (click, ruff, pytest, etc.) will be
+  # installed from pyproject.toml using: uv pip install -e .[dev]

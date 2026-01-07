@@ -1,7 +1,5 @@
 """Helper functions for tests."""
 
-from typing import Optional
-
 import h5py
 import numpy as np
 
@@ -30,9 +28,7 @@ def get_num_timesteps(f: h5py._hl.files.File) -> int:
     return f["coordinates"]["x"].shape[0]
 
 
-def get_points(
-    f: h5py._hl.files.File, time: int, twod: Optional[bool] = False
-) -> np.ndarray:
+def get_points(f: h5py._hl.files.File, time: int, twod: bool | None = False) -> np.ndarray:
     """Get point coordinates at time-step time.
 
     Args:
@@ -50,5 +46,4 @@ def get_points(
     z = f["coordinates"]["z"][time, :]
     if not twod:
         return np.stack([x, y, z]).T
-    else:
-        return np.stack([x, y, 0.5 * np.ones(x.size)]).T
+    return np.stack([x, y, 0.5 * np.ones(x.size)]).T

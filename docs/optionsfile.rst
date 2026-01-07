@@ -25,11 +25,11 @@ Required keyword arguments
 
 **StartLoc**, tuple or str: Indicates the starting location of the particles, can be given as a tuple of length 3 or as a string. Particles can be initialized from a single point, from an existing HDF5 file of particle locations, or from a time-delayed collection of points specified in a CSV file.
 
-* tuple (x, y, z): all particles will be iniated from the same point
-* str: path to a file from which thes starting positions will be loaded; either an HDF5 or CSV file
+* tuple (x, y, z): all particles will be initiated from the same point
+* str: path to a file from which these starting positions will be loaded; either an HDF5 or CSV file
 
  - ".h5" suffix: the starting locations will be loaded from the HDF5 file as a checkpoint file generated from a previous *fluvial-particle* simulation. The checkpoint file must have the same *total* number of particles as the current simulation, i.e. summed across all CPU cores. By default, data are loaded from the final entry in the HDF5 file, but a particular index to slice into along the time dimension (axis 0) can be provided with the *StartIdx* optional keyword argument.
- - ".csv" suffix: the starting locations will be loaded from a CSV file with 5 columns: start_time, x, y, z, numpart. For example, if a given row in the CSV file is "10.0, 6.14, 9.09, 10.3, 100", then 100 particles will be iniated from the point (6.14, 9.09, 10.3) starting at a simulation time of 10.0 seconds.
+ - ".csv" suffix: the starting locations will be loaded from a CSV file with 5 columns: start_time, x, y, z, numpart. For example, if a given row in the CSV file is "10.0, 6.14, 9.09, 10.3, 100", then 100 particles will be initiated from the point (6.14, 9.09, 10.3) starting at a simulation time of 10.0 seconds.
 
 **ParticleType**: The type of particles to simulate, either the Particles class or a subclass (e.g. LarvalBotParticles). This argument should not be placed inside quotes or brackets of any kind.
 

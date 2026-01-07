@@ -1,18 +1,17 @@
 """Test cases for the __main__ module."""
 
+import pathlib
 import time
 from os.path import join
 from tempfile import TemporaryDirectory
 
 import pytest
-from numpy.testing import assert_allclose
-from numpy.testing import assert_equal
+from numpy.testing import assert_allclose, assert_equal
 
-from .support import get_h5file
-from .support import get_num_timesteps
-from .support import get_points
 from fluvial_particle import simulate
 from fluvial_particle.Settings import Settings
+
+from .support import get_h5file, get_num_timesteps, get_points
 
 
 pytest_plugins = ["pytester"]  # allows testing of command-line applications
@@ -116,7 +115,7 @@ def run(testdir):
     """Runs fluvial_particle from command line."""
 
     def do_run(*args):
-        args = ["fluvial_particle"] + list(args)
+        args = ["fluvial_particle", *list(args)]
         return testdir.run(*args)
 
     return do_run
@@ -147,7 +146,7 @@ def test_track_serial(run, request, testdir):
     ]
     # Create a new options file in the test directory
     settings_file = join(testdir.tmpdir, "options.py")
-    with open(settings_file, "w") as f:
+    with pathlib.Path(settings_file).open("w", encoding="utf-8") as f:
         for line in arg_list:
             f.write(f"{line}\n")
     # Run fluvial_particle from the command-line

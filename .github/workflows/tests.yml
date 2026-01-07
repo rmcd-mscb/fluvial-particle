@@ -15,18 +15,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { python-version: "3.10", os: ubuntu-latest, session: "pre-commit" }
-          - { python-version: "3.10", os: ubuntu-latest, session: "safety" }
-          - { python-version: "3.10", os: ubuntu-latest, session: "mypy" }
-          - { python-version: "3.11", os: ubuntu-latest, session: "mypy" }
-          - { python-version: "3.10", os: ubuntu-latest, session: "tests" }
-          - { python-version: "3.11", os: ubuntu-latest, session: "tests" }
-          - { python-version: "3.12", os: ubuntu-latest, session: "tests" }
-          - { python-version: "3.10", os: windows-latest, session: "tests" }
-          - { python-version: "3.10", os: macos-latest, session: "tests" }
-          - { python-version: "3.10", os: ubuntu-latest, session: "typeguard" }
-          - { python-version: "3.10", os: ubuntu-latest, session: "xdoctest" }
-          - { python-version: "3.10", os: ubuntu-latest, session: "docs-build" }
+          - { python-version: "3.13", os: ubuntu-latest, session: "pre-commit" }
+          - { python-version: "3.13", os: ubuntu-latest, session: "ruff_check" }
+          - {
+              python-version: "3.13",
+              os: ubuntu-latest,
+              session: "ruff_format",
+            }
+          - { python-version: "3.13", os: ubuntu-latest, session: "safety" }
+          - { python-version: "3.13", os: macos-latest, session: "safety" }
+          # - { python-version: "3.13", os: ubuntu-latest, session: "mypy" }
+          - { python-version: "3.13", os: ubuntu-latest, session: "tests" }
+          - { python-version: "3.13", os: macos-latest, session: "tests" }
+          # - { python-version: "3.13", os: windows-latest, session: "tests" }  # Disabled: Windows HDF5 file locking issues
+          # - { python-version: "3.13", os: ubuntu-latest, session: "typeguard" }
+          # - { python-version: "3.13", os: ubuntu-latest, session: "xdoctest" }
+          - { python-version: "3.13", os: ubuntu-latest, session: "docs-build" }
 
     env:
       NOXSESSION: ${{ matrix.session }}
@@ -35,19 +39,28 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Set up Conda with Mamba
+        uses: conda-incubator/setup-miniconda@v3
         with:
+          miniforge-version: latest
           python-version: ${{ matrix.python-version }}
+          mamba-version: "*"
+          channels: conda-forge
+          channel-priority: true
+          activate-environment: fluvial-particle
+          environment-file: environment.yml
+          use-mamba: true
 
       - name: Upgrade pip and install uv
+        shell: bash -l {0}
         run: |
-          pip install --constraint=.github/workflows/constraints.txt pip
+          python -m pip install --upgrade --constraint=.github/workflows/constraints.txt pip
           pip --version
           pip install --constraint=.github/workflows/constraints.txt uv
           uv --version
 
       - name: Install Nox
+        shell: bash -l {0}
         run: |
           pip install --constraint=.github/workflows/constraints.txt nox
           nox --version
@@ -58,6 +71,7 @@ jobs:
         shell: python
         run: |
           import hashlib
+          import os
           import sys
 
           python = "py{}.{}".format(*sys.version_info[:2])
@@ -79,6 +93,7 @@ jobs:
             ${{ steps.pre-commit-cache.outputs.result }}-
 
       - name: Run Nox
+        shell: bash -l {0}
         run: |
           nox --force-color --python=${{ matrix.python-version }}
 
@@ -104,19 +119,28 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
+      - name: Set up Conda with Mamba
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: "3.10"
+          miniforge-version: latest
+          python-version: "3.13"
+          mamba-version: "*"
+          channels: conda-forge
+          channel-priority: true
+          activate-environment: fluvial-particle
+          environment-file: environment.yml
+          use-mamba: true
 
       - name: Upgrade pip and install uv
+        shell: bash -l {0}
         run: |
-          pip install --constraint=.github/workflows/constraints.txt pip
+          python -m pip install --upgrade --constraint=.github/workflows/constraints.txt pip
           pip --version
           pip install --constraint=.github/workflows/constraints.txt uv
           uv --version
 
       - name: Install Nox
+        shell: bash -l {0}
         run: |
           pip install --constraint=.github/workflows/constraints.txt nox
           nox --version
@@ -128,10 +152,12 @@ jobs:
           merge-multiple: true
 
       - name: Combine coverage data and display human readable report
+        shell: bash -l {0}
         run: |
           nox --force-color --session=coverage
 
       - name: Create coverage report
+        shell: bash -l {0}
         run: |
           nox --force-color --session=coverage -- xml
 

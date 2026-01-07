@@ -9,10 +9,12 @@ import nox
 
 
 package = "fluvial_particle"
-python_versions = ["3.10"]
+python_versions = ["3.13"]
 nox.needs_version = ">= 2021.6.6"
 nox.options.sessions = (
     "pre-commit",
+    "ruff_check",
+    "ruff_format",
     "safety",
     "mypy",
     "tests",
@@ -25,11 +27,13 @@ nox.options.default_venv_backend = "conda"
 
 def install_conda_env_yaml(session: nox.Session) -> None:
     """Shortcut for installing conda env with yaml file"""
+    # Set up conda environment with dependencies from environment.yml
     print(session.virtualenv.location)
     session.run(
         "mamba",
         "env",
         "update",
+        "--yes",
         "--verbose",
         "--prefix",
         session.virtualenv.location,
@@ -70,9 +74,7 @@ def activate_virtualenv_in_precommit_hooks(session: nox.Session) -> None:
 
         text = hook.read_text()
         bindir = repr(session.bin)[1:-1]  # strip quotes
-        if not (
-            Path("A") == Path("a") and bindir.lower() in text.lower() or bindir in text
-        ):
+        if not ((Path("A") == Path("a") and bindir.lower() in text.lower()) or bindir in text):
             continue
 
         lines = text.splitlines()
@@ -94,30 +96,40 @@ def activate_virtualenv_in_precommit_hooks(session: nox.Session) -> None:
         hook.write_text("\n".join(lines))
 
 
-@nox.session(name="pre-commit", python="3.9")
+@nox.session(name="pre-commit", python="3.13")
 def precommit(session: nox.Session) -> None:
-    """Lint using pre-commit."""
+    """Lint using pre-commit (includes ruff, mypy, security checks, etc.)."""
     install_conda_env_yaml(session)
     args = session.posargs or ["run", "--all-files", "--show-diff-on-failure"]
     session.install(
-        "black",
-        "darglint",
-        "flake8",
-        "flake8-bandit",
-        "flake8-bugbear",
-        "flake8-docstrings",
-        "flake8-rst-docstrings",
-        "pep8-naming",
+        "ruff",
         "pre-commit",
         "pre-commit-hooks",
-        "reorder-python-imports",
     )
     session.run("pre-commit", *args)
     if args and args[0] == "install":
         activate_virtualenv_in_precommit_hooks(session)
 
 
-@nox.session(python="3.9")
+@nox.session(python=python_versions)
+def ruff_check(session: nox.Session) -> None:
+    """Run ruff linter."""
+    install_conda_env_yaml(session)
+    session.install("ruff")
+    args = session.posargs or ["check", "src", "tests", "noxfile.py"]
+    session.run("ruff", *args)
+
+
+@nox.session(python=python_versions)
+def ruff_format(session: nox.Session) -> None:
+    """Check ruff formatting."""
+    install_conda_env_yaml(session)
+    session.install("ruff")
+    args = session.posargs or ["format", "--check", "src", "tests", "noxfile.py"]
+    session.run("ruff", *args)
+
+
+@nox.session(python="3.13")
 def safety(session: nox.Session) -> None:
     """Scan dependencies for insecure packages."""
     install_conda_env_yaml(session)
@@ -183,15 +195,13 @@ def xdoctest(session: nox.Session) -> None:
     session.run("python", "-m", "xdoctest", package, *args)
 
 
-@nox.session(name="docs-build", python="3.9", venv_backend="conda")
+@nox.session(name="docs-build", python="3.13", venv_backend="conda")
 def docs_build(session: nox.Session) -> None:
     """Build the documentation."""
     install_conda_env_yaml(session)
     args = session.posargs or ["docs", "docs/_build/html"]
     session.install("e", ".", "--no-deps")
-    session.install(
-        "sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser", "sphinx-autobuild"
-    )
+    session.install("sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser", "sphinx-autobuild")
 
     build_dir = Path("docs", "_build/html")
     if build_dir.exists():
@@ -200,7 +210,7 @@ def docs_build(session: nox.Session) -> None:
     session.run("sphinx-build", *args)
 
 
-@nox.session(python="3.9")
+@nox.session(python="3.13")
 def docs(session: nox.Session) -> None:
     """Build and serve the documentation with live reloading on file changes."""
     install_conda_env_yaml(session)
