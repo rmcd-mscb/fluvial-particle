@@ -9,8 +9,8 @@ name: fluvial-particle
 channels:
   - conda-forge
 dependencies:
-  # Python interpreter
-  - python>=3.10,<4.0
+  # Python interpreter (constrained to versions with VTK support)
+  - python>=3.10,<3.14
 
   # Package manager (needed for uv to work)
   - pip
