@@ -39,10 +39,14 @@ class RiverGrid:
             self.fname3d = filename3d
             self.vtksgrid3d = vtk.vtkStructuredGrid()
             self.read_3d_data()
-            self.ns, self.nn, self.nz = self.vtksgrid3d.GetDimensions()
+            dims = [0, 0, 0]
+            self.vtksgrid3d.GetDimensions(dims)
+            self.ns, self.nn, self.nz = dims
         else:
             self.track3d = 0
-            self.ns, self.nn, self.nz = self.vtksgrid2d.GetDimensions()
+            dims = [0, 0, 0]
+            self.vtksgrid2d.GetDimensions(dims)
+            self.ns, self.nn, self.nz = dims
         self.nsc = self.ns - 1
         self.nnc = self.nn - 1
         self.nzc = self.nz - 1
