@@ -60,12 +60,13 @@ repos:
         args: [--remove]
       - id: name-tests-test # Test files should match test_*.py
         args: [--pytest-test-first]
-        exclude: ^tests/(support|data)/
+        exclude: ^tests/(support\.py|data/)
 
       # JSON/YAML formatting
-      - id: pretty-format-json
-        args: [--autofix, --no-sort-keys, --indent=2]
-        exclude: ^tests/data/
+      # Disabled: causes circular formatting issues
+      # - id: pretty-format-json
+      #   args: [--autofix, --no-sort-keys, --indent=2]
+      #   exclude: ^tests/data/
 
   # ============================================================================
   # Type checking with mypy
@@ -130,21 +131,23 @@ repos:
   # ============================================================================
   # Markdown and general formatting
   # ============================================================================
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
-    hooks:
-      - id: prettier
-        types_or: [yaml, markdown, json]
-        exclude: ^(tests/data/)
+  # Disabled: conflicts with pretty-format-json, causing circular formatting
+  # - repo: https://github.com/pre-commit/mirrors-prettier
+  #   rev: v3.1.0
+  #   hooks:
+  #     - id: prettier
+  #       types_or: [yaml, markdown, json]
+  #       exclude: ^(tests/data/)
 
   # ============================================================================
   # Notebook cleaning (if using Jupyter notebooks)
   # ============================================================================
-  - repo: https://github.com/kynan/nbstripout
-    rev: 0.8.1
-    hooks:
-      - id: nbstripout
-        args: [--extra-keys, metadata.kernelspec metadata.language_info.version]
+  # Disabled: causes circular formatting issues with notebooks
+  # - repo: https://github.com/kynan/nbstripout
+  #   rev: 0.8.1
+  #   hooks:
+  #     - id: nbstripout
+  #       args: [--extra-keys, metadata.kernelspec metadata.language_info.version]
 
   # ============================================================================
   # Spell checking

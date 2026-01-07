@@ -106,8 +106,6 @@ def precommit(session: nox.Session) -> None:
         "pre-commit",
         "pre-commit-hooks",
     )
-    # Skip auto-formatting hooks in CI - they should be run locally before committing
-    session.env["SKIP"] = "prettier,nbstripout,pretty-format-json"
     session.run("pre-commit", *args)
     if args and args[0] == "install":
         activate_virtualenv_in_precommit_hooks(session)
