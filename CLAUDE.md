@@ -113,16 +113,26 @@ conda run -n fluvial-particle sphinx-build docs docs/_build
 ```
 
 ### Version Bumping
+
+The project uses `bump-my-version` to manage version numbers across multiple files:
+- `pyproject.toml` - Project metadata
+- `src/fluvial_particle/__init__.py` - Python package version
+- `.bumpversion.cfg` - Legacy config file
+- `code.json` - USGS code metadata
+- `meta.yaml` - Conda package metadata
+
 ```bash
 # Patch version (0.0.3 -> 0.0.4)
-conda run -n fluvial-particle bump-my-version bump patch
+conda run -n fluvial-particle uv run bump-my-version bump patch
 
 # Minor version (0.0.4 -> 0.1.0)
-conda run -n fluvial-particle bump-my-version bump minor
+conda run -n fluvial-particle uv run bump-my-version bump minor
 
 # Major version (0.1.0 -> 1.0.0)
-conda run -n fluvial-particle bump-my-version bump major
+conda run -n fluvial-particle uv run bump-my-version bump major
 ```
+
+**Note**: bump-my-version automatically commits changes and creates git tags.
 
 ## Why This Approach?
 
