@@ -48,7 +48,7 @@ jobs:
       - name: Upgrade pip and install uv
         shell: bash -l {0}
         run: |
-          pip install --constraint=.github/workflows/constraints.txt pip
+          python -m pip install --upgrade --constraint=.github/workflows/constraints.txt pip
           pip --version
           pip install --constraint=.github/workflows/constraints.txt uv
           uv --version
@@ -127,7 +127,7 @@ jobs:
       - name: Upgrade pip and install uv
         shell: bash -l {0}
         run: |
-          pip install --constraint=.github/workflows/constraints.txt pip
+          python -m pip install --upgrade --constraint=.github/workflows/constraints.txt pip
           pip --version
           pip install --constraint=.github/workflows/constraints.txt uv
           uv --version
