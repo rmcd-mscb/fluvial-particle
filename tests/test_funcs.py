@@ -6,21 +6,20 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import vtk
-from numpy.testing import assert_allclose
-from numpy.testing import assert_equal
-from numpy.testing import assert_string_equal
+from numpy.testing import assert_allclose, assert_equal, assert_string_equal
 from vtk.util import numpy_support
 
-from .support import get_h5file
-from .support import get_num_timesteps
-from .support import get_points
-from fluvial_particle.Helpers import convert_grid_hdf5tovtk
-from fluvial_particle.Helpers import convert_particles_hdf5tocsv
-from fluvial_particle.Helpers import create_parser
-from fluvial_particle.Helpers import get_prng
-from fluvial_particle.Helpers import load_checkpoint
-from fluvial_particle.Helpers import load_variable_source
+from fluvial_particle.Helpers import (
+    convert_grid_hdf5tovtk,
+    convert_particles_hdf5tocsv,
+    create_parser,
+    get_prng,
+    load_checkpoint,
+    load_variable_source,
+)
 from fluvial_particle.Settings import Settings
+
+from .support import get_h5file, get_num_timesteps, get_points
 
 
 def test_conversions(request):
@@ -72,9 +71,7 @@ def test_create_parser():
     ]
     ns_2 = parser.parse_args(test_2)
 
-    assert_string_equal(
-        ns_1.settings_file, "./tests/data/user_options_straight_test.py"
-    )
+    assert_string_equal(ns_1.settings_file, "./tests/data/user_options_straight_test.py")
     assert_string_equal(ns_1.output_directory, "./tests/data/output_straight")
     assert_equal(ns_1.no_postprocess, True)
     assert_equal(ns_1.seed, None)
@@ -131,9 +128,7 @@ def test_settings_module():
 
     assert_equal(options["dt"], 0.25)
     assert_equal(options["NumPart"], 20)
-    assert_string_equal(
-        options["file_name_2d"], "./tests/data/Result_straight_2d_1.vtk"
-    )
+    assert_string_equal(options["file_name_2d"], "./tests/data/Result_straight_2d_1.vtk")
 
 
 def test_support():
@@ -147,6 +142,4 @@ def test_support():
 
     assert_equal(test_keys, ["coordinates", "properties"])
     assert_equal(test_nts, 4)
-    assert_equal(
-        test_points[-1, :], [34.11210153322322, 0.3878199353097108, 9.73657708285166]
-    )
+    assert_equal(test_points[-1, :], [34.11210153322322, 0.3878199353097108, 9.73657708285166])

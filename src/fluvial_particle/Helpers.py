@@ -3,7 +3,6 @@
 import argparse
 import pathlib
 from os import getpid
-from typing import Tuple
 
 import h5py
 import numpy as np
@@ -27,9 +26,7 @@ def checkcommandarguments():
     return argdict
 
 
-def convert_grid_hdf5tovtk(
-    h5fname, output_dir, output_prefix="cells", output_threed=True
-):
+def convert_grid_hdf5tovtk(h5fname, output_dir, output_prefix="cells", output_threed=True):
     """Convert an HDF5 RiverGrid mesh output file into a time series of VTKStructuredGrid files.
 
     This function reads a specified HDF5 file containing grid data and converts it into multiple VTK files, either in
@@ -137,7 +134,7 @@ def convert_particles_hdf5tocsv(h5fname, output_dir, output_prefix="particles"):
         for j in range(n_prints):
             csv_out = output_prefix + f"{j:0{n_digits}d}" + ".csv"
             csv_out = "/".join([output_dir, csv_out])
-            with open(csv_out, "w") as f:
+            with pathlib.Path(csv_out).open("w", encoding="utf-8") as f:
                 # write header first using "w" flag to overwrite existing file
                 header = [
                     "time",
@@ -155,27 +152,25 @@ def convert_particles_hdf5tocsv(h5fname, output_dir, output_prefix="particles"):
                     "water_surface_elevation",
                 ]
                 f.write(", ".join(header) + "\n")
-            with open(csv_out, "a") as f:
+            with pathlib.Path(csv_out).open("a", encoding="utf-8") as f:
                 # now write data to same file in append mode
                 idx = np.s_[j, :]
                 t = time[idx] + np.zeros(x[idx].shape)
-                data = np.stack(
-                    [
-                        t,
-                        x[idx],
-                        y[idx],
-                        z[idx],
-                        bedelev[idx],
-                        cellidx2d[idx],
-                        cellidx3d[idx],
-                        depth[idx],
-                        htbabvbed[idx],
-                        vx[idx],
-                        vy[idx],
-                        vz[idx],
-                        wse[idx],
-                    ]
-                ).T
+                data = np.stack([
+                    t,
+                    x[idx],
+                    y[idx],
+                    z[idx],
+                    bedelev[idx],
+                    cellidx2d[idx],
+                    cellidx3d[idx],
+                    depth[idx],
+                    htbabvbed[idx],
+                    vx[idx],
+                    vy[idx],
+                    vz[idx],
+                    wse[idx],
+                ]).T
                 np.savetxt(f, data, delimiter=",")
 
 
@@ -256,10 +251,7 @@ def load_checkpoint(fname, tidx, start, end, comm=None):
     inputfile = pathlib.Path(fname)
     if not inputfile.exists():
         raise FileNotFoundError(f"Cannot find load_checkpoint HDF5 file: {fname}")
-    if comm is None:
-        h5file = h5py.File(fname, "r")
-    else:
-        h5file = h5py.File(fname, "r", driver="mpio", comm=comm)
+    h5file = h5py.File(fname, "r") if comm is None else h5py.File(fname, "r", driver="mpio", comm=comm)
 
     grp = h5file["coordinates"]
     x = grp["x"][tidx, start:end]
@@ -274,7 +266,7 @@ def load_checkpoint(fname, tidx, start, end, comm=None):
 
 def load_variable_source(
     fname: str,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Load variable source data.
 
     Input file must be a comma separated values file with 5 columns:
@@ -305,12 +297,7 @@ def load_variable_source(
         raise FileNotFoundError(f"Cannot find variable source file: {fname}")
     data = np.genfromtxt(inputfile, delimiter=",")
     if data.shape[1] != 5:
-        raise ValueError(
-            (
-                "Expected 5 columns in variable source file"
-                "(start_time, x, y, z, numpart)"
-            )
-        )
+        raise ValueError("Expected 5 columns in variable source file(start_time, x, y, z, numpart)")
     numparts = np.int64(np.sum(data[:, 4]))
     pstime = np.zeros(numparts, dtype=np.int64)
     x = np.zeros(numparts, dtype=np.float64)

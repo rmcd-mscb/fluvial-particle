@@ -25,7 +25,7 @@ class LarvalParticles(Particles):
             mesh (RiverGrid): class instance of the river hydrodynamic data
             **kwargs (dict): additional keyword arguments  # noqa
 
-        Keyword args:
+        Keyword Args:
             amp (float): amplitude of sinusoid as depth fraction, scalar or NumPy array of length nparts.
             Defaults to 0.2
             period (float): period of swimming to compute ttime, scalar or NumPy array of length nparts.
@@ -57,14 +57,10 @@ class LarvalParticles(Particles):
         grp.create_dataset("amp", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grp["amp"].attrs["Description"] = "amplitude of sinusoid, as fraction of depth"
         grp["amp"].attrs["Units"] = "None"
-        grp.create_dataset(
-            "period", (1, globalnparts), dtype=np.float64, fillvalue=np.nan
-        )
+        grp.create_dataset("period", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grp["period"].attrs["Description"] = "period of sinusoid"
         grp["period"].attrs["Units"] = "seconds"
-        grp.create_dataset(
-            "ttime", (1, globalnparts), dtype=np.float64, fillvalue=np.nan
-        )
+        grp.create_dataset("ttime", (1, globalnparts), dtype=np.float64, fillvalue=np.nan)
         grp["ttime"].attrs["Description"] = "temporal phase shift of swimmers"
         grp["ttime"].attrs["Units"] = "seconds"
         return parts_h5
@@ -142,9 +138,7 @@ class LarvalParticles(Particles):
             fname,
             "/properties/cellidx3d",
         )
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth"
-        )
+        self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth")
         self.write_hdf5_xmf_scalarattribute(
             filexmf,
             nprints,
@@ -174,15 +168,9 @@ class LarvalParticles(Particles):
         )
 
         # Subclass attributes, time invariant
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, 1, nparts, 0, "Amplitude", fname, "/properties/amp"
-        )
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, 1, nparts, 0, "Period", fname, "/properties/period"
-        )
-        self.write_hdf5_xmf_scalarattribute(
-            filexmf, 1, nparts, 0, "TimePhase", fname, "/properties/ttime"
-        )
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "Amplitude", fname, "/properties/amp")
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "Period", fname, "/properties/period")
+        self.write_hdf5_xmf_scalarattribute(filexmf, 1, nparts, 0, "TimePhase", fname, "/properties/ttime")
 
         self.write_hdf5_xmf_gridfooter(filexmf)
 
@@ -206,9 +194,7 @@ class LarvalParticles(Particles):
             else:
                 values = values.astype(np.float64)
         else:
-            raise Exception(
-                "amp must be either scalar or NumPy array with length = number of particles"
-            )
+            raise Exception("amp must be either scalar or NumPy array with length = number of particles")
         self._amp = values
 
     @property
@@ -229,9 +215,7 @@ class LarvalParticles(Particles):
             else:
                 values = values.astype(np.float64)
         else:
-            raise Exception(
-                "period must be either scalar or NumPy array with length = number of particles"
-            )
+            raise Exception("period must be either scalar or NumPy array with length = number of particles")
         self._period = values
 
     @property
@@ -247,9 +231,7 @@ class LarvalParticles(Particles):
             else:
                 values = values.astype(np.float64)
         else:
-            raise TypeError(
-                "ttime must be NumPy array with length = number of particles"
-            )
+            raise TypeError("ttime must be NumPy array with length = number of particles")
         self._ttime = values
 
 

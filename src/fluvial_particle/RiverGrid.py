@@ -7,6 +7,7 @@ import numpy as np
 import vtk
 from vtk.util import numpy_support  # type:ignore
 
+
 # from numba import jit
 
 
@@ -33,9 +34,7 @@ class RiverGrid:
         self.read_2d_data()
         if track3d:
             if filename3d is None:
-                raise ValueError(
-                    "track3d is 1 but no filename provided for input 3D grid"
-                )
+                raise ValueError("track3d is 1 but no filename provided for input 3D grid")
             self.track3d = 1
             self.fname3d = filename3d
             self.vtksgrid3d = vtk.vtkStructuredGrid()
@@ -99,10 +98,7 @@ class RiverGrid:
         Returns:
             h5py file object: the newly created and open HDF5 file
         """
-        if self.track3d:
-            vtkcoords = self.vtksgrid3d.GetPoints().GetData()
-        else:
-            vtkcoords = self.vtksgrid2d.GetPoints().GetData()
+        vtkcoords = self.vtksgrid3d.GetPoints().GetData() if self.track3d else self.vtksgrid2d.GetPoints().GetData()
         coords = numpy_support.vtk_to_numpy(vtkcoords)
         x = coords[:, 0]
         y = coords[:, 1]
@@ -186,8 +182,8 @@ class RiverGrid:
         # Open Particles HDF5 file for printing steps and cell locations
         parts_h5 = h5py.File(f"{output_directory}//particles.h5", "r")
 
-        with open(f"{output_directory}//cells_onedim.xmf", "w") as cells1d_xmf:
-            cells2d_xmf = open(f"{output_directory}//cells_twodim.xmf", "w")
+        with pathlib.Path(f"{output_directory}//cells_onedim.xmf").open("w", encoding="utf-8") as cells1d_xmf:
+            cells2d_xmf = pathlib.Path(f"{output_directory}//cells_twodim.xmf").open("w", encoding="utf-8")
 
             self.write_hdf5_xmf_header1d(cells1d_xmf)
             self.write_hdf5_xmf_header2d(cells2d_xmf)
@@ -198,16 +194,14 @@ class RiverGrid:
             time = grpc["time"]
             nsc = self.nsc
             num2dcells = self.vtksgrid2d.GetNumberOfCells()
-            cells_h5 = self.create_hdf5(
-                n_prints, time, f"{output_directory}//cells.h5", **dset_kwargs
-            )
+            cells_h5 = self.create_hdf5(n_prints, time, f"{output_directory}//cells.h5", **dset_kwargs)
             numpartin2dcell = np.zeros(num2dcells, dtype=np.int64)
             # totpartincell = np.zeros(num2dcells, dtype=np.int64)
             numpartin1dcell = np.zeros(nsc, dtype=np.int64)
 
             if self.track3d:
                 num3dcells = self.vtksgrid3d.GetNumberOfCells()
-                cells3d_xmf = open(f"{output_directory}//cells_threedim.xmf", "w")
+                cells3d_xmf = pathlib.Path(f"{output_directory}//cells_threedim.xmf").open("w", encoding="utf-8")
                 self.write_hdf5_xmf_header3d(cells3d_xmf)
                 numpartin3dcell = np.zeros(num3dcells, dtype=np.int64)
 
@@ -383,33 +377,23 @@ class RiverGrid:
             names = npzfile.files
             missing = [x for x in reqd if x not in names]
             if len(missing) > 0:
-                raise ValueError(
-                    f"Missing {missing} array(s) from the input 2D grid npz file"
-                )
+                raise ValueError(f"Missing {missing} array(s) from the input 2D grid npz file")
             x = npzfile["x"]
             dims = x.shape
             y = npzfile["y"]
-            if "z" in names:
-                z = npzfile["z"]
-            else:
-                z = np.zeros(dims)
+            z = npzfile["z"] if "z" in names else np.zeros(dims)
             elev = npzfile["elev"]
             ibc = npzfile["ibc"]
             shear = npzfile["shear"]
             vx = npzfile["vx"]
             vy = npzfile["vy"]
-            if "vz" in names:
-                vz = npzfile["vz"]
-            else:
-                vz = np.zeros(dims)
+            vz = npzfile["vz"] if "vz" in names else np.zeros(dims)
             wse = npzfile["wse"]
 
             # make sure they're all the same shape and 2D
             ll = [x, y, z, elev, ibc, shear, vx, vy, vz, wse]
             if not all(a.shape == dims for a in ll):
-                raise Exception(
-                    "input arrays in the 2D grid npz file must all be the same shape"
-                )
+                raise Exception("input arrays in the 2D grid npz file must all be the same shape")
             if not len(dims) == 2:
                 raise Exception("input arrays in the 2D grid npz file must be 2D")
 
@@ -494,9 +478,7 @@ class RiverGrid:
             names = npzfile.files
             missing = [x for x in reqd if x not in names]
             if len(missing) > 0:
-                raise ValueError(
-                    f"Missing {missing} array(s) from the input 3D grid npz file"
-                )
+                raise ValueError(f"Missing {missing} array(s) from the input 3D grid npz file")
 
             x = npzfile["x"]
             dims = x.shape
@@ -508,9 +490,7 @@ class RiverGrid:
 
             ll = [x, y, z, vx, vy, vz]
             if not all(a.shape == dims for a in ll):
-                raise Exception(
-                    "input arrays in the 3D grid npz file must all be the same shape"
-                )
+                raise Exception("input arrays in the 3D grid npz file must all be the same shape")
             if not len(dims) == 3:
                 raise Exception("input arrays in the 3D grid npz file must be 3D")
 
@@ -632,9 +612,7 @@ class RiverGrid:
         """
         obj[name][...] = data
 
-    def write_hdf5_xmf(
-        self, filexmf, time, dims, names, attrnames, dtypes=None, center="Cell"
-    ):
+    def write_hdf5_xmf(self, filexmf, time, dims, names, attrnames, dtypes=None, center="Cell"):
         """Body for cell-centered time series data.
 
         Args:
@@ -814,13 +792,9 @@ class RiverGrid:
         if not isinstance(values, np.ndarray):
             raise TypeError("boundarycells.setter: wrong type, must be NumPy ndarray")
         if values.ndim != 1:
-            raise ValueError(
-                "boundarycells.setter: ndims must equal 1 for use in np.sortedsearch()"
-            )
+            raise ValueError("boundarycells.setter: ndims must equal 1 for use in np.sortedsearch()")
         if not is_sorted(values):
-            print(
-                "RiverGrid: boundarycells.setter array must be sorted to use binary search; sorting in-place"
-            )
+            print("RiverGrid: boundarycells.setter array must be sorted to use binary search; sorting in-place")
             values.sort()
         self._boundarycells = values
 
@@ -864,8 +838,7 @@ class RiverGrid:
         if not isinstance(values, int):
             raise TypeError("nn.setter must be int")
         # for file writing reasons, must be >= 1
-        if values < 1:
-            values = 1
+        values = max(values, 1)
         self._nn = values
 
     @property
@@ -882,8 +855,7 @@ class RiverGrid:
         if not isinstance(values, int):
             raise TypeError("nnc.setter must be int")
         # for file writing reasons, must be >= 1
-        if values < 1:
-            values = 1
+        values = max(values, 1)
         self._nnc = values
 
     @property
@@ -900,8 +872,7 @@ class RiverGrid:
         if not isinstance(values, int):
             raise TypeError("ns.setter must be int")
         # for file writing reasons, must be >= 1
-        if values < 1:
-            values = 1
+        values = max(values, 1)
         self._ns = values
 
     @property
@@ -918,8 +889,7 @@ class RiverGrid:
         if not isinstance(values, int):
             raise TypeError("nsc.setter must be int")
         # for file writing reasons, must be >= 1
-        if values < 1:
-            values = 1
+        values = max(values, 1)
         self._nsc = values
 
     @property
@@ -936,8 +906,7 @@ class RiverGrid:
         if not isinstance(values, int):
             raise TypeError("nz.setter must be int")
         # for file writing reasons, must be >= 1
-        if values < 1:
-            values = 1
+        values = max(values, 1)
         self._nz = values
 
     @property
@@ -954,8 +923,7 @@ class RiverGrid:
         if not isinstance(values, int):
             raise TypeError("nzc.setter must be int")
         # for file writing reasons, must be >= 1
-        if values < 1:
-            values = 1
+        values = max(values, 1)
         self._nzc = values
 
     @property
@@ -989,7 +957,4 @@ def is_sorted(arr):
     Returns:
         bool: True if arr is sorted in increasing order, False otherwise
     """
-    for i in range(arr.size - 1):
-        if arr[i + 1] < arr[i]:
-            return False
-    return True
+    return all(arr[i + 1] >= arr[i] for i in range(arr.size - 1))
