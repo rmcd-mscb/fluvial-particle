@@ -1,12 +1,30 @@
 version: 2
+
+# Build documentation with Sphinx
 sphinx:
   configuration: docs/conf.py
+  fail_on_warning: false
+
+# Build all formats (PDF, ePub, HTML)
 formats: all
+
+# Python environment configuration
 python:
   install:
+    # Install documentation dependencies
     - requirements: docs/requirements.txt
-    - path: .
+    # Install the package itself (needed for autodoc to import modules)
+    - method: pip
+      path: .
+      extra_requirements:
+        - dev
+
+# Build environment
 build:
   os: ubuntu-22.04
   tools:
-    python: "3.10"
+    python: "3.12"
+  # Install system dependencies (VTK, HDF5, etc. are available via apt)
+  apt_packages:
+    - libhdf5-dev
+    - libvtk9-dev

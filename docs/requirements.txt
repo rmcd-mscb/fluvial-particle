@@ -1,6 +1,5 @@
-sphinx
-sphinx-click
-sphinx-rtd-theme
-sphinx-autobuild
-myst-parser
-docutils==0.17
+sphinx>=7.0.0
+sphinx-click>=6.0.0
+sphinx-rtd-theme>=2.0.0
+sphinx-autobuild>=2024.4.0
+myst-parser>=4.0.0

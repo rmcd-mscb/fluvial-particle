@@ -7,10 +7,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("..").resolve()))
 sys.path.insert(0, str(Path("../..").resolve()))
+sys.path.insert(0, str(Path("../src").resolve()))
 
 project = "Fluvial Particle"
 author = "Richard McDonald"
 copyright = f"{datetime.now().year}, {author}"
+
+# Get version from package
+try:
+    from fluvial_particle import __version__
+
+    version = __version__
+    release = __version__
+except ImportError:
+    version = "0.0.4"
+    release = "0.0.4"
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",

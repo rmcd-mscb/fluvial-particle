@@ -6,7 +6,6 @@
    :maxdepth: 1
    :titlesonly:
 
-   README
    usage
    optionsfile
    example
@@ -17,4 +16,4 @@
    contributing
    Code of Conduct <codeofconduct>
    License <license>
-   Changelog <https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/HISTORY.md>
+   Changelog <https://github.com/rmcd-mscb/fluvial-particle/blob/main/HISTORY.md>

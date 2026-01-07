@@ -108,9 +108,46 @@ conda run -n fluvial-particle pre-commit run --all-files
 ```
 
 ### Building Documentation
+
 ```bash
-conda run -n fluvial-particle sphinx-build docs docs/_build
+# Build HTML documentation locally
+conda run -n fluvial-particle sphinx-build docs docs/_build/html
+
+# Build with auto-rebuild on file changes (development mode)
+conda run -n fluvial-particle sphinx-autobuild docs docs/_build/html
+
+# Clean previous build
+rm -rf docs/_build
 ```
+
+### ReadTheDocs Setup
+
+The project is configured to automatically build documentation on ReadTheDocs from this GitHub repository.
+
+**Configuration files:**
+- `.readthedocs.yml` - ReadTheDocs build configuration
+- `docs/conf.py` - Sphinx configuration
+- `docs/requirements.txt` - Documentation dependencies
+
+**Setting up a new ReadTheDocs project:**
+
+1. Go to https://readthedocs.org/
+2. Log in with your GitHub account
+3. Click "Import a Project"
+4. Select `rmcd-mscb/fluvial-particle` from your GitHub repositories
+5. Configure project settings:
+   - **Name**: fluvial-particle
+   - **Repository URL**: https://github.com/rmcd-mscb/fluvial-particle
+   - **Default branch**: main
+6. The build will automatically use `.readthedocs.yml` configuration
+7. Enable "Build pull requests" in Admin → Advanced Settings for PR previews
+
+**Manual build trigger:**
+- Go to your ReadTheDocs project dashboard
+- Click "Build Version" to manually trigger a documentation build
+
+**Documentation URL:**
+- https://fluvial-particle.readthedocs.io/en/latest/
 
 ### Version Bumping
 
