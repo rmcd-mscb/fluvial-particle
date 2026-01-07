@@ -5,7 +5,6 @@
     "description": "Lagrangian particle-tracking code for 2d/3d hydraulic models.",
     "version": "main",
     "status": "Development",
-
     "permissions": {
       "usageType": "openSource",
       "licenses": [
@@ -15,24 +14,18 @@
         }
       ]
     },
-
     "homepageURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
     "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/main/fluvparticle-main.zip",
     "disclaimerURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/main/DISCLAIMER.md",
     "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle.git",
     "vcs": "git",
-
     "laborHours": 0,
-
     "tags": ["Lagrangian", "particle-tracking", "hydraulic", "fluvial"],
-
     "languages": ["python"],
-
     "contact": {
       "name": "Richard McDonald",
       "email": "rmcd@usgs.gov"
     },
-
     "date": {
       "metadataLastUpdated": "2023-03-23"
     }
@@ -43,7 +36,6 @@
     "description": "Lagrangian particle-tracking code for 2d/3d hydraulic models.",
     "version": "0.0.3",
     "status": "Development",
-
     "permissions": {
       "usageType": "openSource",
       "licenses": [
@@ -53,24 +45,18 @@
         }
       ]
     },
-
     "homepageURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
     "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/0.0.3/fluvparticle-0.0.3.zip",
     "disclaimerURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/0.0.3/DISCLAIMER.md",
     "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle.git",
     "vcs": "git",
-
     "laborHours": 0,
-
     "tags": ["Lagrangian", "particle-tracking", "hydraulic", "fluvial"],
-
     "languages": ["python"],
-
     "contact": {
       "name": "Richard McDonald",
       "email": "rmcd@usgs.gov"
     },
-
     "date": {
       "metadataLastUpdated": "2023-03-23"
     }

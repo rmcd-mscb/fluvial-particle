@@ -46,18 +46,22 @@
 **Current Coverage: 60% minimum**
 
 - [ ] **Increase test coverage** to 80%+ for critical modules
+
   - Focus on `Particles.py`, `RiverGrid.py`, and `Helpers.py`
   - Add tests for edge cases: empty particle sets, zero timesteps, boundary conditions
 
 - [ ] **Add property-based testing** with `hypothesis` for numerical algorithms
+
   - Test particle advection with randomized inputs
   - Verify conservation laws and physical constraints
 
 - [ ] **Add performance regression tests** to detect slowdowns
+
   - Benchmark critical operations (interpolation, diffusion)
   - Alert on >10% performance degradation
 
 - [ ] **Add stress tests** for memory usage with large particle counts
+
   - Test with 10⁶, 10⁷, 10⁸ particles
   - Verify memory scaling is linear
 
@@ -68,19 +72,23 @@
 ### 2. Performance Enhancements
 
 - [ ] **GPU acceleration** via CuPy or Numba
+
   - Target: 10-100x speedup for particle advection/diffusion
   - Particularly beneficial for `move()` and `interp_fields()` methods
   - Consider CUDA kernels for VTK interpolation alternative
 
 - [ ] **JIT compilation** with Numba for hot loops
+
   - Annotate performance-critical functions in `Particles.py`
   - Focus on `calc_diffusion_coefs()` and array operations
 
 - [ ] **Optimize interpolation** by caching VTK probe results
+
   - Spatial hashing for nearby particles
   - Reuse probe filter objects across timesteps
 
 - [ ] **Implement adaptive timestep** based on local velocity gradients
+
   - Courant–Friedrichs–Lewy (CFL) condition
   - Automatic timestep adjustment for accuracy/performance
 
@@ -93,17 +101,20 @@
 #### High Priority
 
 - [ ] **Particle-particle interactions**
+
   - Collision detection for dense particle clouds
   - K-d tree or octree spatial indexing
   - Schooling behavior for larvae (Reynolds flocking rules)
 
 - [ ] **Time-varying velocity fields**
+
   - Support loading multiple timesteps of hydrodynamic data
   - Temporal interpolation between velocity snapshots
   - Memory-efficient streaming of large datasets
   - Support for NetCDF/ADCIRC time series
 
 - [ ] **Particle sources & sinks**
+
   - Continuous injection at specified locations/times
   - Particle removal at domain boundaries or zones
   - Source strength variations (tidal, diurnal patterns)
@@ -117,17 +128,20 @@
 #### Medium Priority
 
 - [ ] **3D visualization tools**
+
   - Built-in ParaView state file (.pvsm) generation
   - Automated rendering scripts for animations
   - Trajectory streamlines and density plots
 
 - [ ] **Statistical analysis module**
+
   - Particle residence time calculations
   - Dispersion coefficient estimation (Fickian vs. anomalous)
   - Connectivity matrices between regions
   - Exposure time analysis for ecological applications
 
 - [ ] **Support for unstructured meshes**
+
   - Currently requires structured VTK grids
   - Would enable more complex river geometries
   - Support for ANUGA, SELFE/SCHISM, ADCIRC formats
@@ -140,11 +154,13 @@
 #### Low Priority
 
 - [ ] **Web-based configuration GUI** for non-programmers
+
   - Flask/FastAPI backend
   - React frontend with form validation
   - Job submission and monitoring
 
 - [ ] **Real-time visualization** during simulation
+
   - WebSocket streaming to browser
   - Progress monitoring and early termination
 
@@ -156,6 +172,7 @@
 ### 4. Code Architecture Improvements
 
 - [ ] **Refactor `Particles.py` (1,509 lines)**
+
   - Split into multiple modules:
     - `advection.py` - Velocity interpolation and advection
     - `diffusion.py` - Stochastic diffusion calculations
@@ -163,6 +180,7 @@
     - `boundary.py` - Boundary condition handling
 
 - [ ] **Add abstract base class** for particle types
+
   ```python
   from abc import ABC, abstractmethod
 
@@ -177,20 +195,24 @@
   ```
 
 - [ ] **Dependency injection** for RNG to improve testability
+
   - Pass `numpy.random.Generator` objects instead of global state
   - Enable reproducible testing with fixed seeds
 
 - [ ] **Configuration validation** with Pydantic
+
   - Type-safe settings with automatic validation
   - Better error messages for invalid configurations
   - JSON schema generation for documentation
 
 - [ ] **Logging framework** using `logging` module
+
   - Replace print statements with proper logging
   - Configurable log levels (DEBUG, INFO, WARNING, ERROR)
   - Log file output with rotation
 
 - [ ] **Add dataclasses** for structured parameter groups
+
   ```python
   from dataclasses import dataclass
 
@@ -204,24 +226,28 @@
 ### 5. Documentation Enhancements
 
 - [ ] **Tutorial notebooks** showing:
+
   - How to create custom particle subclasses
   - Coupling with hydrodynamic models (Delft3D, TELEMAC, HEC-RAS)
   - Post-processing and visualization workflows with ParaView
   - Sensitivity analysis and parameter calibration
 
 - [ ] **Performance tuning guide**
+
   - Optimal particle count per MPI rank
   - Memory usage estimation formulas
   - Scaling efficiency on different HPC architectures
   - Profiling and optimization tips
 
 - [ ] **Contributing guide** (CONTRIBUTING.md)
+
   - Code style requirements (Black, Flake8)
   - How to add new particle types
   - Pull request process
   - Testing requirements
 
 - [ ] **Example gallery** with real-world case studies
+
   - White sturgeon larvae in Columbia River
   - Sediment transport in meandering channels
   - Pollutant dispersion scenarios
@@ -234,6 +260,7 @@
 ### 6. Infrastructure & DevOps
 
 - [ ] **Refactor to use uv and hatchling instead of Poetry**
+
   - Modern, faster dependency resolver with `uv`
   - Hatchling provides simpler, standards-based build backend
   - Benefits:
@@ -248,25 +275,30 @@
     - Update documentation (installation instructions)
 
 - [ ] **Fix ReadTheDocs build** (noted in commit 797d908)
+
   - Check Sphinx configuration
   - Verify environment.yml dependencies
   - Test local build with `sphinx-build`
 
 - [ ] **Add benchmarking suite** with `pytest-benchmark`
+
   - Track performance over time
   - Compare different algorithms
   - CI/CD integration for regression detection
 
 - [ ] **Automated releases** via GitHub Actions
+
   - Publish to PyPI on git tag
   - Generate release notes from commits
   - Build and upload documentation
 
 - [ ] **Conda-forge recipe** for easier installation
+
   - Simplify dependencies (VTK, mpi4py)
   - Support multiple platforms (Linux, macOS, Windows)
 
 - [ ] **Docker container** for reproducible environments
+
   - Base image with all dependencies
   - Example: `docker run -v $(pwd):/data fluvial-particle config.py`
 
@@ -277,16 +309,19 @@
 ### 7. Scientific Enhancements
 
 - [ ] **Validate against analytical solutions**
+
   - Taylor-Green vortex for 2D advection
   - Gaussian plume for diffusion
   - Quantify numerical errors and convergence rates
 
 - [ ] **Comparison with other tools**
+
   - OpenDrift, Ichthyop, Parcels, PTM
   - Benchmark accuracy and performance
   - Document differences in algorithms
 
 - [ ] **Uncertainty quantification**
+
   - Ensemble runs with parameter variations
   - Monte Carlo analysis tools
   - Sensitivity analysis (Sobol indices)
@@ -299,6 +334,7 @@
 ### 8. User Experience
 
 - [ ] **Progress bars** using `tqdm` for long simulations
+
   ```python
   from tqdm import tqdm
   for t in tqdm(range(num_timesteps), desc="Simulating"):
@@ -306,16 +342,19 @@
   ```
 
 - [ ] **Better error messages** with recovery suggestions
+
   - Validate inputs before simulation start
   - Suggest fixes for common errors
   - Link to documentation for complex issues
 
 - [ ] **Configuration templates** for common scenarios
+
   - `examples/passive_tracer.py`
   - `examples/sediment_transport.py`
   - `examples/larval_drift.py`
 
 - [ ] **Validation mode** to check inputs before running
+
   - `fluvial-particle --validate config.py`
   - Verify mesh files exist and are readable
   - Check parameter ranges and compatibility
@@ -332,14 +371,17 @@
 ### Immediate (Next Release)
 
 1. **Fix ReadTheDocs build** ⚠️
+
    - Critical for documentation access
    - Check environment.yml and conf.py
 
 2. **Increase test coverage to 75%**
+
    - Add tests for `RiverGrid` methods
    - Test boundary condition handling
 
 3. **Add time-varying velocity fields support**
+
    - High user demand
    - Essential for realistic simulations
 
@@ -350,14 +392,17 @@
 ### Short-term (3-6 months)
 
 1. **GPU acceleration prototype**
+
    - Evaluate CuPy vs. Numba
    - Target 10x speedup for large simulations
 
 2. **Tutorial notebooks**
+
    - Lower barrier to entry
    - Demonstrate key features
 
 3. **Particle source/sink functionality**
+
    - Continuous release scenarios
    - Boundary condition improvements
 
@@ -368,14 +413,17 @@
 ### Long-term (6-12 months)
 
 1. **Unstructured mesh support**
+
    - Major architectural change
    - Enables complex geometries
 
 2. **Particle-particle interactions**
+
    - Advanced physics
    - Schooling behaviors
 
 3. **Web-based GUI**
+
    - Accessibility for non-coders
    - Configuration and visualization
 
@@ -390,18 +438,22 @@
 These can be implemented quickly and provide immediate value:
 
 1. **Add progress bars** - 30 minutes
+
    - `pip install tqdm`, add to move() loop
    - Huge UX improvement
 
 2. **Logging framework** - 2 hours
+
    - Replace print() with logging.info()
    - Better debugging and log management
 
 3. **Configuration templates** - 1 hour
+
    - Copy existing test configs to examples/
    - Add inline comments explaining options
 
 4. **CITATION.cff** - 30 minutes
+
    - Copy template, fill in metadata
    - Proper attribution for users
 

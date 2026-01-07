@@ -13,6 +13,7 @@ We use a **hybrid approach** that leverages the strengths of both conda and uv:
 ## Dependencies Split
 
 ### From Conda (`environment.yml`)
+
 - `python>=3.10` - Python interpreter
 - `pip` - Package installer (required for uv)
 - `vtk>=9.3.1` - Visualization Toolkit (C++ library)
@@ -20,6 +21,7 @@ We use a **hybrid approach** that leverages the strengths of both conda and uv:
 - `numpy>=1.20` - NumPy with Intel MKL optimizations
 
 ### From uv (`pyproject.toml`)
+
 - All pure Python packages (ruff, pytest, sphinx, etc.)
 - The fluvial-particle package itself
 
@@ -103,6 +105,7 @@ nox
 ### Update Conda Dependencies
 
 Edit `environment.yml` and run:
+
 ```bash
 conda env update -f environment.yml --prune
 ```
@@ -110,6 +113,7 @@ conda env update -f environment.yml --prune
 ### Update Python Dependencies
 
 Edit `pyproject.toml` and run:
+
 ```bash
 uv pip install -e .[dev] --upgrade
 ```
@@ -117,13 +121,17 @@ uv pip install -e .[dev] --upgrade
 ## Troubleshooting
 
 ### "mamba not found" error
+
 **Solution**: Conda now uses libmamba by default. Remove `mamba` from `environment.yml`.
 
 ### "poetry not found" error
+
 **Solution**: We no longer use Poetry. Use `uv pip install -e .[dev]` instead.
 
 ### VTK or h5py import errors
+
 **Solution**: These should come from conda, not pip. Recreate your environment:
+
 ```bash
 conda deactivate
 conda env remove -n fluvial-particle
@@ -133,11 +141,13 @@ uv pip install -e .[dev]
 ```
 
 ### Package conflicts
+
 **Solution**: The conda environment provides VTK, h5py, and numpy. When you run `uv pip install -e .`, it will see these are already satisfied and won't reinstall them (unless versions conflict).
 
 ## CI/CD Environment
 
 GitHub Actions uses the same hybrid approach:
+
 1. `conda-incubator/setup-miniconda@v3` sets up conda
 2. Installs from `environment.yml`
 3. Runs `uv pip install -e .` for the package

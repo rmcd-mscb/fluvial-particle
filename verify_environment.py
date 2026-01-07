@@ -12,9 +12,8 @@ def check_python_version():
     if version.major == 3 and version.minor >= 10:
         print(f"  ✓ Python {version.major}.{version.minor}.{version.micro}")
         return True
-    else:
-        print(f"  ✗ Python {version.major}.{version.minor}.{version.micro} (need >= 3.10)")
-        return False
+    print(f"  ✗ Python {version.major}.{version.minor}.{version.micro} (need >= 3.10)")
+    return False
 
 
 def check_conda_packages():
@@ -57,7 +56,7 @@ def check_uv_packages():
             print(f"  ✓ {tool_name} {version} - {description}")
         except ImportError:
             print(f"  ✗ {tool_name} - {description} NOT FOUND")
-            print(f"     Install with: uv pip install -e .[dev]")
+            print("     Install with: uv pip install -e .[dev]")
             all_ok = False
 
     return all_ok
@@ -134,14 +133,13 @@ def main():
         print("  - Run all checks: nox")
         print("  - Install pre-commit: pre-commit install")
         return 0
-    else:
-        print("✗ Some checks failed. Please review the errors above.")
-        print("=" * 70)
-        print("\nTo fix:")
-        print("  1. Ensure conda environment is activated: conda activate fluvial-particle")
-        print("  2. Install development dependencies: uv pip install -e .[dev]")
-        print("  3. Run this script again to verify")
-        return 1
+    print("✗ Some checks failed. Please review the errors above.")
+    print("=" * 70)
+    print("\nTo fix:")
+    print("  1. Ensure conda environment is activated: conda activate fluvial-particle")
+    print("  2. Install development dependencies: uv pip install -e .[dev]")
+    print("  3. Run this script again to verify")
+    return 1
 
 
 if __name__ == "__main__":
