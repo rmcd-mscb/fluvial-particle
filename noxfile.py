@@ -1,5 +1,6 @@
 """Nox sessions."""
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -27,22 +28,30 @@ nox.options.default_venv_backend = "conda"
 
 def install_conda_env_yaml(session: nox.Session) -> None:
     """Shortcut for installing conda env with yaml file"""
-    print(session.virtualenv.location)
-    session.run(
-        "mamba",
-        "env",
-        "update",
-        "--verbose",
-        "--prefix",
-        session.virtualenv.location,
-        "--file",
-        "environment.yml",
-        "--prune",
-    )
-    print("finished conda install")
-    # Install the package with uv
-    session.run("uv", "pip", "install", "-e", ".", "--system")
-    print("finished package install")
+    # Check if running in CI with pre-configured conda environment
+    if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
+        print("Running in CI - using pre-configured conda environment")
+        # Just install the package with uv in the existing environment
+        session.run("uv", "pip", "install", "-e", ".", "--system")
+        print("finished package install")
+    else:
+        # Local development - set up conda environment
+        print(session.virtualenv.location)
+        session.run(
+            "mamba",
+            "env",
+            "update",
+            "--verbose",
+            "--prefix",
+            session.virtualenv.location,
+            "--file",
+            "environment.yml",
+            "--prune",
+        )
+        print("finished conda install")
+        # Install the package with uv
+        session.run("uv", "pip", "install", "-e", ".", "--system")
+        print("finished package install")
 
 
 def activate_virtualenv_in_precommit_hooks(session: nox.Session) -> None:
