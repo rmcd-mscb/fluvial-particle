@@ -10,7 +10,7 @@ import nox
 
 
 package = "fluvial_particle"
-python_versions = ["3.10"]
+python_versions = ["3.13"]
 nox.needs_version = ">= 2021.6.6"
 nox.options.sessions = (
     "pre-commit",
@@ -104,7 +104,7 @@ def activate_virtualenv_in_precommit_hooks(session: nox.Session) -> None:
         hook.write_text("\n".join(lines))
 
 
-@nox.session(name="pre-commit", python="3.10")
+@nox.session(name="pre-commit", python="3.13")
 def precommit(session: nox.Session) -> None:
     """Lint using pre-commit (includes ruff, mypy, security checks, etc.)."""
     install_conda_env_yaml(session)
@@ -137,7 +137,7 @@ def ruff_format(session: nox.Session) -> None:
     session.run("ruff", *args)
 
 
-@nox.session(python="3.10")
+@nox.session(python="3.13")
 def safety(session: nox.Session) -> None:
     """Scan dependencies for insecure packages."""
     install_conda_env_yaml(session)
@@ -203,7 +203,7 @@ def xdoctest(session: nox.Session) -> None:
     session.run("python", "-m", "xdoctest", package, *args)
 
 
-@nox.session(name="docs-build", python="3.9", venv_backend="conda")
+@nox.session(name="docs-build", python="3.13", venv_backend="conda")
 def docs_build(session: nox.Session) -> None:
     """Build the documentation."""
     install_conda_env_yaml(session)
@@ -218,7 +218,7 @@ def docs_build(session: nox.Session) -> None:
     session.run("sphinx-build", *args)
 
 
-@nox.session(python="3.9")
+@nox.session(python="3.13")
 def docs(session: nox.Session) -> None:
     """Build and serve the documentation with live reloading on file changes."""
     install_conda_env_yaml(session)
