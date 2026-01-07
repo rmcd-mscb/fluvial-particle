@@ -41,6 +41,7 @@ def install_conda_env_yaml(session: nox.Session) -> None:
             "mamba",
             "env",
             "update",
+            "--yes",
             "--verbose",
             "--prefix",
             session.virtualenv.location,
