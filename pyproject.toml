@@ -18,8 +18,11 @@ classifiers = [
 ]
 
 dependencies = [
+    "h5py>=3.15.1",
     # Note: h5py and vtk are installed from conda (see environment.yml)
     # They are NOT listed here to avoid conflicts with conda-installed versions
+    "numpy>=2.2.6",
+    "vtk>=9.5.2",
 ]
 
 [project.optional-dependencies]
@@ -227,3 +230,11 @@ replace = '"version": "{new_version}"'
 filename = "meta.yaml"
 search = 'version: {current_version}'
 replace = 'version: {new_version}'
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+    "meshio>=5.3.5",
+    "nox>=2025.11.12",
+    "quarto-cli>=1.8.26",
+]
