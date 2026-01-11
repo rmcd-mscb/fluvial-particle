@@ -195,3 +195,31 @@ Run `conda run -n fluvial-particle uv sync --all-extras` to install new dependen
 
 ### Conda and uv conflict
 Conda provides the base dependencies (Python, VTK, h5py, numpy). uv installs everything else into the same environment. They don't conflict because uv respects conda-installed packages.
+
+## Editing Jupyter Notebooks (.ipynb)
+
+**Issue**: `.ipynb` files are JSON files, but VS Code may present them in an internal XML representation. Standard text editing tools (`replace_string_in_file`) may appear to work but changes don't persist.
+
+**Solution**: Use one of these approaches:
+
+### Option 1: Use `edit_notebook_file` tool (Preferred for VS Code)
+```python
+edit_notebook_file(
+    cellId="#VSC-xxxxx",  # Cell ID from the notebook
+    editType="edit",
+    filePath="/path/to/notebook.ipynb",
+    language="python",
+    newCode="# your updated code here"
+)
+```
+
+### Option 2: Edit the raw JSON directly (Most reliable)
+When the notebook editing tools don't persist changes, use terminal commands to edit the raw JSON:
+
+```bash
+# Example: Replace os.path with pathlib.Path
+sed -i 's/os\.path\.exists(/Path(/g' notebook.ipynb
+sed -i 's/os\.path\.getsize(/Path(/g' notebook.ipynb
+```
+
+**Key takeaway**: If notebook edits aren't persisting, close the notebook in VS Code and edit the raw JSON file directly with `sed`, `awk`, or standard text replacement tools.

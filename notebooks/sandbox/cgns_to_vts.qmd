@@ -1,0 +1,400 @@
+---
+title: CGNS to VTK .vts Converter
+jupyter: python3
+---
+
+
+Convert iRIC CGNS files to VTK StructuredGrid (.vts) format.
+
+Handles:
+- 2D and 3D structured grids
+- Node (vertex) and cell (center) data
+- Time series data
+- Multiple bases (iRIC, iRIC3D)
+
+
+```{python}
+import h5py
+import numpy as np
+from pathlib import Path
+import vtk
+from vtk.util import numpy_support
+```
+
+## Configuration
+
+```{python}
+# Input CGNS file
+cgns_file = Path("/home/rmcd/data/iRIC/nays2dplusstraight2/Case1.cgn")
+
+# Output directory
+output_dir = Path("/home/rmcd/data/iRIC/nays2dplusstraight2/vtk_output")
+output_dir.mkdir(exist_ok=True, parents=True)
+
+# Which base to convert ('iRIC' for 2D, 'iRIC3D' for 3D)
+base_name = 'iRIC'  # Change to 'iRIC' for 2D solution
+
+# Time step range (None = all)
+time_step_start = 0
+time_step_end = None  # None means all time steps
+
+print(f"Input: {cgns_file}")
+print(f"Output: {output_dir}")
+print(f"Base: {base_name}")
+```
+
+## Helper Functions
+
+```{python}
+def read_grid_dimensions(zone):
+    """Read NI, NJ, NK from zone data."""
+    if ' data' not in zone:
+        raise ValueError("Zone does not contain ' data' attribute")
+
+    dims = zone[' data'][:].flatten()
+
+    print(f"  Raw dimensions array: {dims}")
+
+    if len(dims) < 3:
+        raise ValueError(f"Invalid dimensions: {dims}")
+
+    # Detect format type
+    # iRIC 2D format: [NI_node, NJ_node, NI_cell, NJ_cell, 0, 0] where NI_cell = NI_node-1
+    # iRIC 3D format: [NI_node, NJ_node, NK_node, NI_cell, NJ_cell, NK_cell]
+    # Standard CGNS: [NI, NJ, NK] or [NI, NJ, NK, ...]
+
+    if len(dims) >= 4 and dims[2] == dims[0] - 1 and dims[3] == dims[1] - 1:
+        # iRIC 2D format detected: dims[2] and dims[3] are cell counts, not node count for K
+        print(f"  Detected iRIC 2D format")
+        ni = int(dims[0])
+        nj = int(dims[1])
+        nk = 1  # 2D grid
+    elif len(dims) >= 6 and dims[3] == dims[0] - 1 and dims[4] == dims[1] - 1 and dims[5] == dims[2] - 1:
+        # iRIC 3D format: first 3 are node dims, next 3 are cell dims
+        print(f"  Detected iRIC 3D format")
+        ni = int(dims[0])
+        nj = int(dims[1])
+        nk = int(dims[2])
+    else:
+        # Standard CGNS format: just take first 3 values
+        print(f"  Using standard CGNS format")
+        ni = int(dims[0])
+        nj = int(dims[1])
+        nk = int(dims[2]) if len(dims) > 2 else 1
+
+    print(f"  Grid dimensions (nodes): NI={ni}, NJ={nj}, NK={nk}")
+
+    return ni, nj, nk
+
+
+def read_coordinates(zone, ni, nj, nk):
+    """Read X, Y, Z coordinate arrays."""
+    if 'GridCoordinates' not in zone:
+        raise ValueError("GridCoordinates not found in zone")
+
+    gc = zone['GridCoordinates']
+
+    # Read coordinates from Groups with ' data' sub-datasets
+    x = gc['CoordinateX'][' data'][:]
+    y = gc['CoordinateY'][' data'][:]
+
+    # Z coordinate may not exist for 2D grids
+    if 'CoordinateZ' in gc:
+        z = gc['CoordinateZ'][' data'][:]
+    else:
+        # Create zero array for Z if not present
+        print(f"  CoordinateZ not found - creating zeros for 2D grid")
+        z = np.zeros_like(x)
+
+    print(f"  Raw coordinate shapes: x={x.shape}, y={y.shape}, z={z.shape}")
+
+    expected_size = ni * nj * nk
+    is_3d = nk > 1
+
+    # Handle different storage formats
+    if is_3d:
+        # 3D grid: coordinates stored as (NK, NJ, NI)
+        if x.shape == (nk, nj, ni):
+            # Reshape to VTK ordering: I varies fastest, then J, then K
+            # NumPy order is [k, j, i], VTK wants i + j*NI + k*NI*NJ
+            x = np.transpose(x, (2, 1, 0)).flatten()  # (NI, NJ, NK) then flatten
+            y = np.transpose(y, (2, 1, 0)).flatten()
+            z = np.transpose(z, (2, 1, 0)).flatten()
+        else:
+            # Already flat or different order - just flatten
+            x = x.flatten()
+            y = y.flatten()
+            z = z.flatten()
+    else:
+        # 2D grid: coordinates stored as (NJ, NI) or (1, NJ, NI)
+        if x.ndim == 3 and x.shape[0] == 1:
+            # Remove singleton dimension and transpose
+            x = x.squeeze().T.flatten()  # (NI, NJ) then flatten
+            y = y.squeeze().T.flatten()
+            z = z.squeeze().T.flatten()
+        elif x.ndim == 2 and x.shape == (nj, ni):
+            # Transpose to get correct ordering
+            x = x.T.flatten()  # (NI, NJ) then flatten
+            y = y.T.flatten()
+            z = z.T.flatten()
+        else:
+            # Just flatten
+            x = x.flatten()
+            y = y.flatten()
+            z = z.flatten()
+
+    print(f"  Processed coordinates: {len(x)} points (expected {expected_size})")
+
+    if len(x) != expected_size:
+        raise ValueError(f"Coordinate size mismatch: expected {expected_size}, got {len(x)}")
+
+    return x, y, z
+
+
+def categorize_variables(flow_solution, ni, nj, nk):
+    """Categorize variables as node or cell data based on array size."""
+    # Calculate expected sizes
+    if nk > 1:
+        expected_node = ni * nj * nk
+        expected_cell = (ni - 1) * (nj - 1) * (nk - 1)
+    else:
+        expected_node = ni * nj
+        expected_cell = (ni - 1) * (nj - 1)
+
+    node_vars = {}
+    cell_vars = {}
+
+    for var_name in flow_solution.keys():
+        var = flow_solution[var_name]
+
+        if isinstance(var, h5py.Group) and ' data' in var:
+            data = var[' data'][:]
+            original_shape = data.shape
+
+            # Handle different storage formats (similar to coordinates)
+            if nk > 1 and data.ndim == 3 and data.shape == (nk, nj, ni):
+                # 3D variable - transpose and flatten
+                data = np.transpose(data, (2, 1, 0)).flatten()
+            elif nk > 1 and data.ndim == 3 and data.shape == (nk-1, nj-1, ni-1):
+                # 3D cell variable - transpose and flatten
+                data = np.transpose(data, (2, 1, 0)).flatten()
+            elif nk == 1 and data.ndim == 3 and data.shape[0] == 1:
+                # 2D variable with singleton dimension
+                data = data.squeeze().T.flatten()
+            elif nk == 1 and data.ndim == 2:
+                # 2D variable - check if it needs transposing
+                if data.shape == (nj, ni):
+                    data = data.T.flatten()
+                elif data.shape == (nj-1, ni-1):
+                    data = data.T.flatten()
+                else:
+                    data = data.flatten()
+            else:
+                # Just flatten
+                data = data.flatten()
+
+            if len(data) == expected_node:
+                node_vars[var_name] = data
+            elif len(data) == expected_cell:
+                cell_vars[var_name] = data
+            else:
+                print(f"  ⚠️  Skipping {var_name}: shape {original_shape} → {len(data)} values (expected {expected_node} nodes or {expected_cell} cells)")
+
+    return node_vars, cell_vars
+```
+
+## Create VTK StructuredGrid
+
+```{python}
+def create_vtk_grid(x, y, z, ni, nj, nk):
+    """Create VTK StructuredGrid from coordinates."""
+    # Create VTK points
+    points = vtk.vtkPoints()
+
+    # Add points in structured order
+    for i in range(len(x)):
+        points.InsertNextPoint(x[i], y[i], z[i])
+
+    # Create structured grid
+    grid = vtk.vtkStructuredGrid()
+    grid.SetDimensions(ni, nj, nk)
+    grid.SetPoints(points)
+
+    return grid
+
+
+def add_point_data(grid, var_name, data):
+    """Add point (node) data to VTK grid."""
+    vtk_array = numpy_support.numpy_to_vtk(data, deep=True)
+    vtk_array.SetName(var_name)
+    grid.GetPointData().AddArray(vtk_array)
+
+
+def add_cell_data(grid, var_name, data):
+    """Add cell data to VTK grid."""
+    vtk_array = numpy_support.numpy_to_vtk(data, deep=True)
+    vtk_array.SetName(var_name)
+    grid.GetCellData().AddArray(vtk_array)
+
+
+def write_vts(grid, output_file):
+    """Write VTK StructuredGrid to .vts file."""
+    writer = vtk.vtkXMLStructuredGridWriter()
+    writer.SetFileName(str(output_file))
+    writer.SetInputData(grid)
+    writer.Write()
+    print(f"  ✓ Wrote {output_file}")
+```
+
+## Main Conversion
+
+```{python}
+# Open CGNS file
+with h5py.File(cgns_file, 'r') as f:
+    print(f"\n{'='*60}")
+    print(f"Converting CGNS to VTS")
+    print(f"{'='*60}\n")
+
+    # Check if base exists
+    if base_name not in f:
+        raise ValueError(f"Base '{base_name}' not found in file. Available: {list(f.keys())}")
+
+    base = f[base_name]
+
+    # Find main zone
+    zone_name = 'iRICZone' if 'iRICZone' in base else list(base.keys())[0]
+    zone = base[zone_name]
+
+    print(f"Base: {base_name}")
+    print(f"Zone: {zone_name}")
+
+    # Read grid dimensions
+    ni, nj, nk = read_grid_dimensions(zone)
+    grid_type = "3D" if nk > 1 else "2D"
+
+    print(f"Grid: {ni} × {nj} × {nk} ({grid_type})")
+    print(f"Nodes: {ni * nj * nk:,}")
+
+    if nk > 1:
+        print(f"Cells: {(ni-1) * (nj-1) * (nk-1):,}")
+    else:
+        print(f"Cells: {(ni-1) * (nj-1):,}")
+
+    # Read coordinates
+    print("\nReading coordinates...")
+    x, y, z = read_coordinates(zone, ni, nj, nk)
+    print(f"  X: [{x.min():.3f}, {x.max():.3f}]")
+    print(f"  Y: [{y.min():.3f}, {y.max():.3f}]")
+    print(f"  Z: [{z.min():.3f}, {z.max():.3f}]")
+
+    # Find all FlowSolution nodes
+    flow_solutions = sorted([k for k in zone.keys() if 'FlowSolution' in k])
+
+    if not flow_solutions:
+        raise ValueError("No FlowSolution nodes found")
+
+    print(f"\nTime steps: {len(flow_solutions)}")
+
+    # Determine range
+    end_idx = time_step_end if time_step_end is not None else len(flow_solutions)
+    end_idx = min(end_idx, len(flow_solutions))
+
+    print(f"Converting: {time_step_start} to {end_idx-1}\n")
+
+    # Convert each time step
+    for idx in range(time_step_start, end_idx):
+        fs_name = flow_solutions[idx]
+        fs = zone[fs_name]
+
+        print(f"Time step {idx}: {fs_name}")
+
+        # Create grid
+        grid = create_vtk_grid(x, y, z, ni, nj, nk)
+
+        # Categorize and add variables
+        node_vars, cell_vars = categorize_variables(fs, ni, nj, nk)
+
+        print(f"  Node variables: {len(node_vars)}")
+        for var_name, data in node_vars.items():
+            add_point_data(grid, var_name, data)
+
+        print(f"  Cell variables: {len(cell_vars)}")
+        for var_name, data in cell_vars.items():
+            add_cell_data(grid, var_name, data)
+
+        # Write output file
+        output_file = output_dir / f"{base_name}_{idx:04d}.vts"
+        write_vts(grid, output_file)
+        print()
+
+    print(f"{'='*60}")
+    print(f"Conversion complete!")
+    print(f"Output: {output_dir}")
+    print(f"{'='*60}")
+```
+
+## Create ParaView Collection File (Optional)
+
+Generate a `.pvd` file to load all time steps in ParaView at once.
+
+```{python}
+# Create PVD file for time series
+pvd_file = output_dir / f"{base_name}_series.pvd"
+
+with open(pvd_file, 'w') as f:
+    f.write('<?xml version="1.0"?>\n')
+    f.write('<VTKFile type="Collection" version="0.1" byte_order="LittleEndian">\n')
+    f.write('  <Collection>\n')
+
+    # Add each time step
+    for idx in range(time_step_start, end_idx):
+        vts_filename = f"{base_name}_{idx:04d}.vts"
+        f.write(f'    <DataSet timestep="{idx}" file="{vts_filename}"/>\n')
+
+    f.write('  </Collection>\n')
+    f.write('</VTKFile>\n')
+
+print(f"✓ Created ParaView collection: {pvd_file}")
+print(f"\nOpen this file in ParaView to view the time series.")
+```
+
+## Verification
+
+Quick check of the first output file.
+
+```{python}
+# Read and verify first output file
+first_file = output_dir / f"{base_name}_{time_step_start:04d}.vts"
+
+if first_file.exists():
+    reader = vtk.vtkXMLStructuredGridReader()
+    reader.SetFileName(str(first_file))
+    reader.Update()
+
+    grid = reader.GetOutput()
+
+    print(f"\n{'='*60}")
+    print(f"Verification: {first_file.name}")
+    print(f"{'='*60}\n")
+
+    # Get dimensions - VTK method requires output parameter
+    dims = [0, 0, 0]
+    grid.GetDimensions(dims)
+    print(f"Dimensions: {dims[0]} × {dims[1]} × {dims[2]}")
+    print(f"Points: {grid.GetNumberOfPoints():,}")
+    print(f"Cells: {grid.GetNumberOfCells():,}")
+
+    print(f"\nPoint Data Arrays: {grid.GetPointData().GetNumberOfArrays()}")
+    for i in range(grid.GetPointData().GetNumberOfArrays()):
+        arr = grid.GetPointData().GetArray(i)
+        print(f"  • {arr.GetName()}")
+
+    print(f"\nCell Data Arrays: {grid.GetCellData().GetNumberOfArrays()}")
+    for i in range(grid.GetCellData().GetNumberOfArrays()):
+        arr = grid.GetCellData().GetArray(i)
+        print(f"  • {arr.GetName()}")
+
+    print(f"\n{'='*60}")
+else:
+    print(f"Output file not found: {first_file}")
+```
