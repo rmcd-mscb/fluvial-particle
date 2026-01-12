@@ -159,6 +159,7 @@ source = ["src", "*/site-packages"]
 [tool.coverage.run]
 branch = true
 source = ["fluvial_particle"]
+relative_files = true
 
 [tool.coverage.report]
 show_missing = true
