@@ -65,8 +65,20 @@ Settings
 .. automodule:: fluvial_particle.Settings
     :members:
 
-fluvial_particle.__init__
---------------------------
+Core API
+---------
 
-.. automodule:: fluvial_particle.__init__
+.. automodule:: fluvial_particle
+   :members:
+
+Simulation
+----------
+
+.. automodule:: fluvial_particle.simulation
+   :members:
+
+Command Line Interface
+----------------------
+
+.. automodule:: fluvial_particle.cli
    :members:
