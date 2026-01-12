@@ -1,0 +1,148 @@
+---
+title: "Convert VTK Files to VTS Format"
+format: html
+jupyter: python3
+---
+
+# VTK to VTS Conversion
+
+This notebook converts legacy VTK files to VTS (VTK XML Structured Grid) format.
+
+## Setup
+
+```{python}
+import vtk
+from pathlib import Path
+import os
+
+# Define paths
+input_dir = Path("../../../../tmp")
+output_dir = Path("../../../../tmp/vts_output")
+
+# Create output directory if it doesn't exist
+output_dir.mkdir(parents=True, exist_ok=True)
+```
+
+```{python}
+input_dir.exists()
+output_dir.exists()
+```
+
+## Conversion Functions
+
+```{python}
+def convert_vtk_to_vts(input_file, output_file):
+    """
+    Convert a legacy VTK file to VTS (XML Structured Grid) format.
+
+    Args:
+        input_file: Path to input .vtk file
+        output_file: Path to output .vts file
+    """
+    # Read the legacy VTK file
+    reader = vtk.vtkGenericDataObjectReader()
+    reader.SetFileName(str(input_file))
+    reader.Update()
+
+    # Get the output
+    data = reader.GetOutput()
+
+    # Write as VTS (XML Structured Grid)
+    if isinstance(data, vtk.vtkStructuredGrid):
+        writer = vtk.vtkXMLStructuredGridWriter()
+    elif isinstance(data, vtk.vtkUnstructuredGrid):
+        # If it's unstructured, use VTU writer instead
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        output_file = str(output_file).replace('.vts', '.vtu')
+    elif isinstance(data, vtk.vtkPolyData):
+        # If it's polydata, use VTP writer
+        writer = vtk.vtkXMLPolyDataWriter()
+        output_file = str(output_file).replace('.vts', '.vtp')
+    else:
+        print(f"Warning: {input_file} has unsupported data type: {type(data)}")
+        return False
+
+    writer.SetFileName(str(output_file))
+    writer.SetInputData(data)
+    writer.Write()
+
+    return True
+```
+
+## Convert 2D Files
+
+```{python}
+print("Converting 2D files...")
+successful_2d = 0
+failed_2d = []
+
+for i in range(1, 101):
+    input_file = input_dir / f"Result_2D_{i}.vtk"
+    output_file = output_dir / f"Result_2D_{i}.vts"
+
+    if input_file.exists():
+        try:
+            if convert_vtk_to_vts(input_file, output_file):
+                successful_2d += 1
+                if i % 10 == 0:
+                    print(f"  Converted {i}/100 files")
+            else:
+                failed_2d.append(i)
+        except Exception as e:
+            print(f"  Error converting {input_file}: {e}")
+            failed_2d.append(i)
+    else:
+        print(f"  Warning: {input_file} not found")
+
+print(f"\n2D Conversion complete: {successful_2d} successful")
+if failed_2d:
+    print(f"Failed files: {failed_2d}")
+```
+
+## Convert 3D Files
+
+```{python}
+print("\nConverting 3D files...")
+successful_3d = 0
+failed_3d = []
+
+for i in range(1, 101):
+    input_file = input_dir / f"Result_3D_{i}.vtk"
+    output_file = output_dir / f"Result_3D_{i}.vts"
+
+    if input_file.exists():
+        try:
+            if convert_vtk_to_vts(input_file, output_file):
+                successful_3d += 1
+                if i % 10 == 0:
+                    print(f"  Converted {i}/100 files")
+            else:
+                failed_3d.append(i)
+        except Exception as e:
+            print(f"  Error converting {input_file}: {e}")
+            failed_3d.append(i)
+    else:
+        print(f"  Warning: {input_file} not found")
+
+print(f"\n3D Conversion complete: {successful_3d} successful")
+if failed_3d:
+    print(f"Failed files: {failed_3d}")
+```
+
+## Summary
+
+```{python}
+print("\n" + "="*50)
+print("CONVERSION SUMMARY")
+print("="*50)
+print(f"2D files converted: {successful_2d}/100")
+print(f"3D files converted: {successful_3d}/100")
+print(f"Total files converted: {successful_2d + successful_3d}/200")
+```
+
+## Notes
+
+- The conversion function automatically detects the data type (StructuredGrid, UnstructuredGrid, or PolyData)
+- If the data is not a structured grid, it will use the appropriate writer (.vtu or .vtp)
+- VTS files are XML-based and generally more robust than legacy VTK format
+- The output files are placed in the same directory as the input files
