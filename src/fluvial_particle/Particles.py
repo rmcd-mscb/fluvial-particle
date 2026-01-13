@@ -747,6 +747,7 @@ class Particles:
             "CellIndex2D",
             fname,
             "/properties/cellidx2d",
+            number_type="Int",
         )
         self.write_hdf5_xmf_scalarattribute(
             filexmf,
@@ -756,6 +757,7 @@ class Particles:
             "CellIndex3D",
             fname,
             "/properties/cellidx3d",
+            number_type="Int",
         )
         self.write_hdf5_xmf_scalarattribute(filexmf, nprints, nparts, tidx, "Depth", fname, "/properties/depth")
         self.write_hdf5_xmf_scalarattribute(
@@ -811,33 +813,33 @@ class Particles:
                 <Time Value="{time}"/>
                 <Topology NodesPerElement="{nparts}" TopologyType="Polyvertex"/>
                 <Geometry GeometryType="X_Y_Z" Name="particles">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}">
                         <DataItem Dimensions="3 2" Format="XML">
                             {tidx} 0
                             1 1
                             1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" NumberType="Float" Precision="8">
                             particles.h5:/coordinates/x
                         </DataItem>
                     </DataItem>
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}">
                         <DataItem Dimensions="3 2" Format="XML">
                             {tidx} 0
                             1 1
                             1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" NumberType="Float" Precision="8">
                             particles.h5:/coordinates/y
                         </DataItem>
                     </DataItem>
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}">
                         <DataItem Dimensions="3 2" Format="XML">
                             {tidx} 0
                             1 1
                             1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" NumberType="Float" Precision="8">
                             particles.h5:/coordinates/z
                         </DataItem>
                     </DataItem>
@@ -845,7 +847,9 @@ class Particles:
             """
         )
 
-    def write_hdf5_xmf_scalarattribute(self, filexmf, nprints, nparts, tidx, name, fname, path):
+    def write_hdf5_xmf_scalarattribute(
+        self, filexmf, nprints, nparts, tidx, name, fname, path, number_type="Float", precision="8"
+    ):
         """Write scalar attribute to XDMF file.
 
         Args:
@@ -856,16 +860,18 @@ class Particles:
             name (str): name of the attribute
             fname (str): name of the HDF5 file holding the data
             path (str): path to the attribute data set
+            number_type (str): XDMF NumberType - "Float" or "Int" (default: "Float")
+            precision (str): bytes per value - "4" or "8" (default: "8")
         """
         filexmf.write(
             f"""<Attribute Name="{name}" AttributeType="Scalar" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts}">
                         <DataItem Dimensions="3 2" Format="XML">
                         {tidx} 0
                         1 1
                         1 {nparts}
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" Precision="8">
+                        <DataItem Dimensions="{nprints} {nparts}" Format="HDF" NumberType="{number_type}" Precision="{precision}">
                             {fname}:{path}
                         </DataItem>
                     </DataItem>
@@ -887,13 +893,13 @@ class Particles:
         """
         filexmf.write(
             f"""<Attribute Name="{name}" AttributeType="Vector" Center="Node">
-                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts} 3" Format="XML">
+                    <DataItem ItemType="HyperSlab" Dimensions="1 {nparts} 3">
                         <DataItem Dimensions="3 3" Format="XML">
                         {tidx} 0 0
                         1 1 1
                         1 {nparts} 3
                         </DataItem>
-                        <DataItem Dimensions="{nprints} {nparts} 3" Format="HDF" Precision="8">
+                        <DataItem Dimensions="{nprints} {nparts} 3" Format="HDF" NumberType="Float" Precision="8">
                             {fname}:{path}
                         </DataItem>
                     </DataItem>
