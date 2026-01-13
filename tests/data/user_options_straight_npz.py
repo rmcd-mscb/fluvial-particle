@@ -2,6 +2,20 @@
 
 from fluvial_particle.Particles import Particles
 
+# Field name mappings from standard names to model-specific names
+# Note: For .npz files, these mappings are not used as the npz format
+# has its own internal naming convention
+field_map_2d = {
+    "bed_elevation": "Elevation",
+    "wet_dry": "IBC",
+    "shear_stress": "ShearStress (magnitude)",
+    "velocity": "Velocity",
+    "water_surface_elevation": "WaterSurfaceElevation",
+}
+field_map_3d = {
+    "velocity": "Velocity",
+}
+
 # Paths to 3D and 2D mesh files
 file_name_3d = "./tests/data/Result_straight_3d_1_new.npz"
 file_name_2d = "./tests/data/Result_straight_2d_1.npz"

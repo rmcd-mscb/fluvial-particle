@@ -10,11 +10,22 @@ from vtk.util import numpy_support  # type: ignore[import]
 
 # from numba import jit
 
+# Standard internal field names used by fluvial-particle
+STANDARD_FIELDS_2D = (
+    "bed_elevation",
+    "wet_dry",
+    "shear_stress",
+    "velocity",
+    "water_surface_elevation",
+)
+
+STANDARD_FIELDS_3D = ("velocity",)
+
 
 class RiverGrid:
     """A class of hydrodynamic data and tools defined on VTK structured grids."""
 
-    def __init__(self, track3d, filename2d, filename3d=None):
+    def __init__(self, track3d, filename2d, filename3d=None, field_map_2d=None, field_map_3d=None):
         """Initialize instance of class RiverGrid.
 
         Args:
@@ -26,10 +37,32 @@ class RiverGrid:
                 See the docstring of the read_2d_data() method for additional details.
             filename3d (str, optional): path to the input 3D grid. Required for 3D simulations.
                 Supports the same formats as filename2d.
+            field_map_2d (dict): Mapping from standard field names to model-specific names for
+                the 2D grid. Required keys: bed_elevation, wet_dry, shear_stress, velocity,
+                water_surface_elevation. Example: {"bed_elevation": "Elevation", ...}
+            field_map_3d (dict): Mapping from standard field names to model-specific names for
+                the 3D grid. Required keys: velocity. Example: {"velocity": "Velocity"}
 
         Raises:
             ValueError: track3d is 1 but no filename provided for input 3D grid.
+            ValueError: field_map_2d is missing required standard field names.
+            ValueError: field_map_3d is missing required standard field names.
         """
+        # Validate field mappings
+        if field_map_2d is None:
+            raise ValueError("field_map_2d is required")
+        missing_2d = [k for k in STANDARD_FIELDS_2D if k not in field_map_2d]
+        if missing_2d:
+            raise ValueError(f"field_map_2d is missing required keys: {missing_2d}")
+        self.field_map_2d = field_map_2d
+
+        if field_map_3d is None:
+            raise ValueError("field_map_3d is required")
+        missing_3d = [k for k in STANDARD_FIELDS_3D if k not in field_map_3d]
+        if missing_3d:
+            raise ValueError(f"field_map_3d is missing required keys: {missing_3d}")
+        self.field_map_3d = field_map_3d
+
         self.vtksgrid2d = vtk.vtkStructuredGrid()
         self.vtksgrid3d = None
         self.fname2d = filename2d
@@ -54,6 +87,24 @@ class RiverGrid:
         self.nnc = self.nn - 1
         self.nzc = self.nz - 1
         self.process_arrays()
+
+    def _apply_field_mapping(self, vtkgrid, field_map):
+        """Rename arrays in a VTK grid from model-specific names to standard names.
+
+        Args:
+            vtkgrid: VTK structured grid object
+            field_map (dict): Mapping from standard names to model-specific names
+        """
+        ptdata = vtkgrid.GetPointData()
+        # Create reverse mapping: model_name -> standard_name
+        reverse_map = {v: k for k, v in field_map.items()}
+        # Rename arrays
+        for i in range(ptdata.GetNumberOfArrays()):
+            arr = ptdata.GetArray(i)
+            if arr is not None:
+                model_name = arr.GetName()
+                if model_name in reverse_map:
+                    arr.SetName(reverse_map[model_name])
 
     def build_probe_filter(self, nparts, comm=None):
         """Build pipeline for probe filters (i.e. interpolation).
@@ -289,31 +340,31 @@ class RiverGrid:
             if x not in reqd:
                 ptdata.RemoveArray(x)
 
-        # Add two cell-centered int arrays to 2D grid; index array and IBC array for checking particle wetness
+        # Add two cell-centered int arrays to 2D grid; index array and wet_dry array for checking particle wetness
         numcells = self.vtksgrid2d.GetNumberOfCells()
         cidx = vtk.vtkIntArray()
         cidx.SetNumberOfComponents(1)
         cidx.SetNumberOfTuples(numcells)
         cidx.SetName("CellIndex")
-        cibc = vtk.vtkIntArray()
-        cibc.SetNumberOfComponents(1)
-        cibc.SetNumberOfTuples(numcells)
-        cibc.Fill(1)  # Set all cells to wet by default
-        cibc.SetName("CellIBC")
-        ibc = ptdata.GetArray("IBC")
+        cell_wet_dry = vtk.vtkIntArray()
+        cell_wet_dry.SetNumberOfComponents(1)
+        cell_wet_dry.SetNumberOfTuples(numcells)
+        cell_wet_dry.Fill(1)  # Set all cells to wet by default
+        cell_wet_dry.SetName("CellWetDry")
+        wet_dry = ptdata.GetArray("wet_dry")
         for cellidx in range(numcells):
             cidx.SetValue(cellidx, cellidx)  # Set cell index
             # Check wetness cell-by-cell
             cell = self.vtksgrid2d.GetCell(cellidx)
             cellpts = cell.GetPointIds()
             for ptidx in range(cellpts.GetNumberOfIds()):
-                # If any pts bounding cell have IBC < 1, then set to dry
-                if ibc.GetTuple(cellpts.GetId(ptidx))[0] < 1:
-                    cibc.SetValue(cellidx, 0)
+                # If any pts bounding cell have wet_dry < 1, then set to dry
+                if wet_dry.GetTuple(cellpts.GetId(ptidx))[0] < 1:
+                    cell_wet_dry.SetValue(cellidx, 0)
                     break
-        self.vtksgrid2d.GetCellData().AddArray(cibc)
+        self.vtksgrid2d.GetCellData().AddArray(cell_wet_dry)
         self.vtksgrid2d.GetCellData().AddArray(cidx)
-        ptdata.RemoveArray("IBC")  # no longer needed
+        ptdata.RemoveArray("wet_dry")  # no longer needed
 
         # Set boundarycells array, particles that enter these cells will be deactivated
         # On structured grid, always assumes river flows in or out through the i=1, i=imax faces, and
@@ -331,7 +382,7 @@ class RiverGrid:
                 if x not in reqd:
                     ptdata.RemoveArray(x)
             # Remove velocity vector data from 2D grid, won't be using it
-            self.vtksgrid2d.GetPointData().RemoveArray("Velocity")
+            self.vtksgrid2d.GetPointData().RemoveArray("velocity")
             # Add cell-centered index array to 3D grid
             numcells = self.vtksgrid3d.GetNumberOfCells()
             cidx3 = vtk.vtkIntArray()
@@ -348,6 +399,9 @@ class RiverGrid:
         Loads 2D data onto a VTK structured grid. The structured grid can be directly supplied as a .vtk file,
         a .vts (VTK XML) file, or as a collection of 2D arrays in a NumPy .npz file. The filename is read from
         the self.fname2d variable, saved during class initialization via the filename2d argument.
+
+        The field_map_2d dict (provided at initialization) maps standard field names to model-specific names
+        in the input file. After reading, arrays are renamed to standard names for internal use.
 
         Supported formats:
             - .vtk: VTK legacy structured grid format
@@ -376,26 +430,33 @@ class RiverGrid:
             reader2d.SetFileName(self.fname2d)
             reader2d.SetOutput(self.vtksgrid2d)
             reader2d.Update()
-            # Check for required field arrays defined at the grid points
+            # Check for required field arrays (using model-specific names from field_map)
             ptdata = self.vtksgrid2d.GetPointData()
             names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
-            missing = [x for x in self.required_keys2d if x not in names]
+            model_names = [self.field_map_2d[k] for k in self.required_keys2d]
+            missing = [x for x in model_names if x not in names]
             if len(missing) > 0:
                 raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
+            # Rename arrays from model-specific names to standard names
+            self._apply_field_mapping(self.vtksgrid2d, self.field_map_2d)
         elif suffix == ".vts":
             # Read 2D grid from VTK XML structured grid format
             reader2d = vtk.vtkXMLStructuredGridReader()
             reader2d.SetFileName(self.fname2d)
             reader2d.Update()
             self.vtksgrid2d.ShallowCopy(reader2d.GetOutput())
-            # Check for required field arrays defined at the grid points
+            # Check for required field arrays (using model-specific names from field_map)
             ptdata = self.vtksgrid2d.GetPointData()
             names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
-            missing = [x for x in self.required_keys2d if x not in names]
+            model_names = [self.field_map_2d[k] for k in self.required_keys2d]
+            missing = [x for x in model_names if x not in names]
             if len(missing) > 0:
                 raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
+            # Rename arrays from model-specific names to standard names
+            self._apply_field_mapping(self.vtksgrid2d, self.field_map_2d)
         elif suffix == ".npz":
             # Read 2D grid arrays from NumPy .npz file and convert to VTK grid
+            # Note: .npz format uses fixed internal names, not the field_map
             npzfile = np.load(self.fname2d)
             reqd = ["x", "y", "elev", "ibc", "shear", "vx", "vy", "wse"]
             names = npzfile.files
@@ -448,7 +509,8 @@ class RiverGrid:
             # combine the velocity components
             vel = np.stack([vx, vy, vz]).T
 
-            # add the fields to the grid
+            # add the fields to the grid using standard names
+            # Order must match STANDARD_FIELDS_2D: bed_elevation, wet_dry, shear_stress, velocity, water_surface_elevation
             arr_list = [elev, ibc, shear, vel, wse]
             name_list = self.required_keys2d
             for arr, name in zip(arr_list, name_list):  # noqa: B905
@@ -470,6 +532,9 @@ class RiverGrid:
         Loads 3D data onto a VTK structured grid. The structured grid can be directly supplied as a .vtk file,
         a .vts (VTK XML) file, or as a collection of 3D arrays in a NumPy .npz file. The filename is read from
         the self.fname3d variable, saved during class initialization via the filename3d argument.
+
+        The field_map_3d dict (provided at initialization) maps standard field names to model-specific names
+        in the input file. After reading, arrays are renamed to standard names for internal use.
 
         Supported formats:
             - .vtk: VTK legacy structured grid format
@@ -495,24 +560,30 @@ class RiverGrid:
             reader3d.SetFileName(self.fname3d)
             reader3d.SetOutput(self.vtksgrid3d)
             reader3d.Update()
-            # Check for required field arrays defined at the grid points
+            # Check for required field arrays (using model-specific names from field_map)
             ptdata = self.vtksgrid3d.GetPointData()
             names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
-            missing = [x for x in self.required_keys3d if x not in names]
+            model_names = [self.field_map_3d[k] for k in self.required_keys3d]
+            missing = [x for x in model_names if x not in names]
             if len(missing) > 0:
                 raise ValueError(f"Missing {missing} array from the input 3D grid")
+            # Rename arrays from model-specific names to standard names
+            self._apply_field_mapping(self.vtksgrid3d, self.field_map_3d)
         elif suffix == ".vts":
             # Read 3D grid from VTK XML structured grid format
             reader3d = vtk.vtkXMLStructuredGridReader()
             reader3d.SetFileName(self.fname3d)
             reader3d.Update()
             self.vtksgrid3d.ShallowCopy(reader3d.GetOutput())
-            # Check for required field arrays defined at the grid points
+            # Check for required field arrays (using model-specific names from field_map)
             ptdata = self.vtksgrid3d.GetPointData()
             names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
-            missing = [x for x in self.required_keys3d if x not in names]
+            model_names = [self.field_map_3d[k] for k in self.required_keys3d]
+            missing = [x for x in model_names if x not in names]
             if len(missing) > 0:
                 raise ValueError(f"Missing {missing} array from the input 3D grid")
+            # Rename arrays from model-specific names to standard names
+            self._apply_field_mapping(self.vtksgrid3d, self.field_map_3d)
         elif suffix == ".npz":
             # Read 3D grid arrays from NumPy .npz file and convert to VTK grid
             npzfile = np.load(self.fname3d)
@@ -556,10 +627,10 @@ class RiverGrid:
             grid.SetDimensions(tuple(np.flip(dims)))
             grid.SetPoints(pts)
 
-            # combine the velocity components and add to the grid
+            # combine the velocity components and add to the grid using standard name
             vel = np.stack([vx, vy, vz]).T
             vtkvel = numpy_support.numpy_to_vtk(vel)
-            vtkvel.SetName("Velocity")
+            vtkvel.SetName("velocity")  # standard name
             grid.GetPointData().AddArray(vtkvel)
 
             # save to the class variable
@@ -594,19 +665,13 @@ class RiverGrid:
 
     @property
     def required_keys2d(self):
-        """tuple(str): array names required in the input 2D grid."""
-        return (
-            "Elevation",
-            "IBC",
-            "ShearStress (magnitude)",
-            "Velocity",
-            "WaterSurfaceElevation",
-        )
+        """tuple(str): standard array names required in the input 2D grid."""
+        return STANDARD_FIELDS_2D
 
     @property
     def required_keys3d(self):
-        """tuple(str): array names required in the input 3D grid."""
-        return ("Velocity",)
+        """tuple(str): standard array names required in the input 3D grid."""
+        return STANDARD_FIELDS_3D
 
     def update_2d_pipeline(self, px, py, idx=None):
         """Update the 2D VTK probe filter pipeline.

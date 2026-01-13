@@ -64,8 +64,10 @@ def simulate(settings, argvars, timer, comm=None):
     # Type of Particles class or subclass to simulate
     particles = settings["ParticleType"]
 
-    # Initialize RiverGrid object
-    river = RiverGrid(track3d, file_name_2d, file_name_3d)
+    # Initialize RiverGrid object with field name mappings
+    field_map_2d = settings["field_map_2d"]
+    field_map_3d = settings["field_map_3d"]
+    river = RiverGrid(track3d, file_name_2d, file_name_3d, field_map_2d, field_map_3d)
 
     # Initialize particle positions
     if isinstance(settings["StartLoc"], tuple):

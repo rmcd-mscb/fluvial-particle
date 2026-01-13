@@ -152,6 +152,10 @@ def test_track_serial(run, request, testdir):
         "startfrac = 0.5",
         "ParticleType = Particles",
         "lev = 0.00025",
+        'field_map_2d = {"bed_elevation": "Elevation", "wet_dry": "IBC", '
+        '"shear_stress": "ShearStress (magnitude)", "velocity": "Velocity", '
+        '"water_surface_elevation": "WaterSurfaceElevation"}',
+        'field_map_3d = {"velocity": "Velocity"}',
     ]
     # Create a new options file in the test directory
     settings_file = join(testdir.tmpdir, "options.py")

@@ -447,7 +447,7 @@ class Particles:
 
         # Get interpolated point data from the probe filter
         ptsout = self.mesh.probe3d.GetOutput().GetPointData()
-        dataout = ptsout.GetArray("Velocity")
+        dataout = ptsout.GetArray("velocity")
         vel = numpy_support.vtk_to_numpy(dataout)
         # Interpolation on cell-centered ordered integer array gives cell index number
         cellidxvtk = ptsout.GetArray("CellIndex")
@@ -487,9 +487,9 @@ class Particles:
             # Update 2D filter and interpolate 2D fields
             self.mesh.update_2d_pipeline(px, py, idx)
             ptsout = self.mesh.probe2d.GetOutput().GetPointData()
-            elev = ptsout.GetArray("Elevation")
-            wse = ptsout.GetArray("WaterSurfaceElevation")
-            shear = ptsout.GetArray("ShearStress (magnitude)")
+            elev = ptsout.GetArray("bed_elevation")
+            wse = ptsout.GetArray("water_surface_elevation")
+            shear = ptsout.GetArray("shear_stress")
             # Interpolation on cell-centered ordered integer array gives cell index number
             cellidx = ptsout.GetArray("CellIndex")
             if idx is None:
@@ -504,7 +504,7 @@ class Particles:
                 self.cellindex2d[idx] = numpy_support.vtk_to_numpy(cellidx)
             if not self.track3d:
                 # Get 2D Velocity components
-                vel = ptsout.GetArray("Velocity")
+                vel = ptsout.GetArray("velocity")
                 vel_np = numpy_support.vtk_to_numpy(vel)
                 if idx is None:
                     self.velx = vel_np[:, 0]
@@ -530,8 +530,8 @@ class Particles:
         """
         # Pre-fill with True so that deactivated particles are ignored
         # check cell centered values instead
-        ibcvtk = self.mesh.probe2d.GetOutput().GetPointData().GetArray("CellIBC")
-        ibc = numpy_support.vtk_to_numpy(ibcvtk)
+        wet_dry_vtk = self.mesh.probe2d.GetOutput().GetPointData().GetArray("CellWetDry")
+        ibc = numpy_support.vtk_to_numpy(wet_dry_vtk)
         if self.in_bounds_mask is None:
             wet = np.asarray(ibc, dtype=bool)
         else:
