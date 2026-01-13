@@ -16,8 +16,8 @@ from pathlib import Path
 import os
 
 # Define paths
-input_dir = Path("../../../../tmp")
-output_dir = Path("../../../../tmp/vts_output")
+input_dir = Path(r"/home/rmcd/data/iRIC/nays2dplusstraight2")
+output_dir = Path("/home/rmcd/data/iRIC/nays2dplusstraight2/vts_output")
 
 # Create output directory if it doesn't exist
 output_dir.mkdir(parents=True, exist_ok=True)
@@ -31,13 +31,15 @@ output_dir.exists()
 ## Conversion Functions
 
 ```{python}
-def convert_vtk_to_vts(input_file, output_file):
+def convert_vtk_to_vts(input_file, output_file, time_value=None, time_step=None):
     """
     Convert a legacy VTK file to VTS (XML Structured Grid) format.
 
     Args:
         input_file: Path to input .vtk file
         output_file: Path to output .vts file
+        time_value: Optional time value (float) to embed in the VTS file as TimeValue
+        time_step: Optional time step index (int) for efficient file lookup
     """
     # Read the legacy VTK file
     reader = vtk.vtkGenericDataObjectReader()
@@ -46,6 +48,22 @@ def convert_vtk_to_vts(input_file, output_file):
 
     # Get the output
     data = reader.GetOutput()
+
+    # Add time value to field data if provided (Float64 per VTK spec)
+    if time_value is not None:
+        time_array = vtk.vtkDoubleArray()
+        time_array.SetName("TimeValue")
+        time_array.SetNumberOfTuples(1)
+        time_array.SetValue(0, time_value)
+        data.GetFieldData().AddArray(time_array)
+
+    # Add time step index for efficient integer-based lookup
+    if time_step is not None:
+        step_array = vtk.vtkIntArray()
+        step_array.SetName("TimeStep")
+        step_array.SetNumberOfTuples(1)
+        step_array.SetValue(0, time_step)
+        data.GetFieldData().AddArray(step_array)
 
     # Write as VTS (XML Structured Grid)
     if isinstance(data, vtk.vtkStructuredGrid):
@@ -72,20 +90,28 @@ def convert_vtk_to_vts(input_file, output_file):
 ## Convert 2D Files
 
 ```{python}
+# Time parameters for 2D files
+start_time_2d = 0.0  # Starting time in seconds
+dt_2d = 1.0          # Time step in seconds
+
 print("Converting 2D files...")
+print(f"Time parameters: start_time={start_time_2d}, dt={dt_2d}")
 successful_2d = 0
 failed_2d = []
 
-for i in range(1, 101):
+for i in range(1, 601):
     input_file = input_dir / f"Result_2D_{i}.vtk"
     output_file = output_dir / f"Result_2D_{i}.vts"
 
+    # Calculate time for this file: time = start_time + (file_number - 1) * dt
+    time_value = start_time_2d + (i - 1) * dt_2d
+
     if input_file.exists():
         try:
-            if convert_vtk_to_vts(input_file, output_file):
+            if convert_vtk_to_vts(input_file, output_file, time_value=time_value, time_step=i):
                 successful_2d += 1
                 if i % 10 == 0:
-                    print(f"  Converted {i}/100 files")
+                    print(f"  Converted {i}/600 files (t={time_value:.2f})")
             else:
                 failed_2d.append(i)
         except Exception as e:
@@ -99,23 +125,184 @@ if failed_2d:
     print(f"Failed files: {failed_2d}")
 ```
 
+## Time average 2D solution
+```{python}
+import numpy as np
+import glob
+import re
+
+def extract_file_number(filepath):
+    """Extract numeric index from filename for proper sorting."""
+    match = re.search(r'Result_2D_(\d+)\.vts', filepath)
+    return int(match.group(1)) if match else 0
+
+print("\nTime-averaging Result_2D_*.vts files...")
+
+# Find all Result_2D_*.vts files (exclude the time_average file if it exists)
+# Sort numerically by file number, not alphabetically
+vts_files = sorted([f for f in glob.glob(str(output_dir / "Result_2D_*.vts"))
+                    if "time_average" not in f],
+                   key=extract_file_number)
+print(f"Found {len(vts_files)} files to average")
+
+if len(vts_files) > 0:
+    # Read first file to get structure
+    reader = vtk.vtkXMLStructuredGridReader()
+    reader.SetFileName(vts_files[0])
+    reader.Update()
+    base_grid = reader.GetOutput()
+
+    # Get all point data array names (exclude time-related metadata if present)
+    point_data = base_grid.GetPointData()
+    num_arrays = point_data.GetNumberOfArrays()
+    array_names = [point_data.GetArrayName(i) for i in range(num_arrays)]
+
+    print(f"Arrays to average: {array_names}")
+
+    # Extract time values from field data or filename
+    times = []
+    for vts_file in vts_files:
+        reader = vtk.vtkXMLStructuredGridReader()
+        reader.SetFileName(vts_file)
+        reader.Update()
+        grid = reader.GetOutput()
+
+        # Try to get time from field data
+        field_data = grid.GetFieldData()
+        time_array = field_data.GetArray("TimeValue")
+        if time_array and time_array.GetNumberOfTuples() > 0:
+            times.append(time_array.GetValue(0))
+        else:
+            # If no time in field data, extract from filename and calculate time
+            # Time = start_time + (file_number - 1) * dt
+            match = re.search(r'Result_2D_(\d+)', vts_file)
+            if match:
+                file_num = int(match.group(1))
+                # Use same formula as conversion: time = start_time + (i - 1) * dt
+                times.append(start_time_2d + (file_num - 1) * dt_2d)
+            else:
+                times.append(0.0)
+
+    times = np.array(times)
+    print(f"Time range: {times[0]:.2f} to {times[-1]:.2f}")
+
+    # Calculate time intervals (dt) for proper weighting
+    if len(times) > 1:
+        dt = np.diff(times)
+        # Add half intervals at boundaries for trapezoidal integration
+        dt_weights = np.zeros(len(times))
+        dt_weights[0] = dt[0] / 2 if len(dt) > 0 else 1.0
+        dt_weights[-1] = dt[-1] / 2 if len(dt) > 0 else 1.0
+        for i in range(1, len(times) - 1):
+            dt_weights[i] = (dt[i-1] + dt[i]) / 2
+
+        total_time = np.sum(dt_weights)
+        print(f"Total integration time: {total_time:.2f}")
+        print(f"Average dt: {np.mean(dt):.2f}")
+    else:
+        dt_weights = np.ones(len(times))
+        total_time = 1.0
+
+    # Initialize accumulators for each array
+    num_points = base_grid.GetNumberOfPoints()
+    accumulators = {name: np.zeros(point_data.GetArray(name).GetNumberOfTuples() *
+                                     point_data.GetArray(name).GetNumberOfComponents())
+                    for name in array_names}
+
+    # Accumulate weighted values from all files
+    for i, vts_file in enumerate(vts_files):
+        reader = vtk.vtkXMLStructuredGridReader()
+        reader.SetFileName(vts_file)
+        reader.Update()
+        grid = reader.GetOutput()
+
+        weight = dt_weights[i]
+
+        for name in array_names:
+            array = grid.GetPointData().GetArray(name)
+            if array:
+                vtk_data = [array.GetValue(j) for j in range(array.GetNumberOfTuples() * array.GetNumberOfComponents())]
+                accumulators[name] += weight * np.array(vtk_data)
+
+        if (i + 1) % 50 == 0:
+            print(f"  Processed {i + 1}/{len(vts_files)} files")
+
+    # Compute time-weighted averages and create output grid
+    avg_grid = vtk.vtkStructuredGrid()
+    dims = [0, 0, 0]
+    base_grid.GetDimensions(dims)
+    avg_grid.SetDimensions(dims)
+    avg_grid.SetPoints(base_grid.GetPoints())
+
+    for name in array_names:
+        avg_values = accumulators[name] / total_time
+
+        # Get original array to match type and components
+        orig_array = base_grid.GetPointData().GetArray(name)
+        vtk_array = vtk.vtkFloatArray()
+        vtk_array.SetName(name)
+        vtk_array.SetNumberOfComponents(orig_array.GetNumberOfComponents())
+        vtk_array.SetNumberOfTuples(orig_array.GetNumberOfTuples())
+
+        for j, val in enumerate(avg_values):
+            vtk_array.SetValue(j, val)
+
+        avg_grid.GetPointData().AddArray(vtk_array)
+
+    # Add TimeValue field (use midpoint of averaging window per VTK convention)
+    time_value_array = vtk.vtkDoubleArray()
+    time_value_array.SetName("TimeValue")
+    time_value_array.SetNumberOfTuples(1)
+    time_value_array.SetValue(0, (times[0] + times[-1]) / 2.0)
+    avg_grid.GetFieldData().AddArray(time_value_array)
+
+    # Add time averaging metadata (Float64 for consistency)
+    time_info = vtk.vtkDoubleArray()
+    time_info.SetName("TimeAveragingInfo")
+    time_info.SetNumberOfComponents(3)
+    time_info.SetNumberOfTuples(1)
+    time_info.SetValue(0, times[0])      # Start time
+    time_info.SetValue(1, times[-1])     # End time
+    time_info.SetValue(2, total_time)    # Total integration time
+    avg_grid.GetFieldData().AddArray(time_info)
+
+    # Write time-averaged file
+    output_file = output_dir / "Result_2D_time_average.vts"
+    writer = vtk.vtkXMLStructuredGridWriter()
+    writer.SetFileName(str(output_file))
+    writer.SetInputData(avg_grid)
+    writer.Write()
+
+    print(f"Time-averaged file saved to: {output_file}")
+else:
+    print("No VTS files found to average")
+```
+
 ## Convert 3D Files
 
 ```{python}
+# Time parameters for 3D files
+start_time_3d = 0.0  # Starting time in seconds
+dt_3d = 1.0          # Time step in seconds
+
 print("\nConverting 3D files...")
+print(f"Time parameters: start_time={start_time_3d}, dt={dt_3d}")
 successful_3d = 0
 failed_3d = []
 
-for i in range(1, 101):
+for i in range(1, 601):
     input_file = input_dir / f"Result_3D_{i}.vtk"
     output_file = output_dir / f"Result_3D_{i}.vts"
 
+    # Calculate time for this file: time = start_time + (file_number - 1) * dt
+    time_value = start_time_3d + (i - 1) * dt_3d
+
     if input_file.exists():
         try:
-            if convert_vtk_to_vts(input_file, output_file):
+            if convert_vtk_to_vts(input_file, output_file, time_value=time_value, time_step=i):
                 successful_3d += 1
                 if i % 10 == 0:
-                    print(f"  Converted {i}/100 files")
+                    print(f"  Converted {i}/600 files (t={time_value:.2f})")
             else:
                 failed_3d.append(i)
         except Exception as e:
@@ -129,15 +316,171 @@ if failed_3d:
     print(f"Failed files: {failed_3d}")
 ```
 
+## Time average 3D solution
+```{python}
+import numpy as np
+import glob
+import re
+
+def extract_file_number_3d(filepath):
+    """Extract numeric index from filename for proper sorting."""
+    match = re.search(r'Result_3D_(\d+)\.vts', filepath)
+    return int(match.group(1)) if match else 0
+
+print("\nTime-averaging Result_3D_*.vts files...")
+
+# Find all Result_3D_*.vts files (exclude the time_average file if it exists)
+# Sort numerically by file number, not alphabetically
+vts_files_3d = sorted([f for f in glob.glob(str(output_dir / "Result_3D_*.vts"))
+                       if "time_average" not in f],
+                      key=extract_file_number_3d)
+print(f"Found {len(vts_files_3d)} files to average")
+
+if len(vts_files_3d) > 0:
+    # Read first file to get structure
+    reader = vtk.vtkXMLStructuredGridReader()
+    reader.SetFileName(vts_files_3d[0])
+    reader.Update()
+    base_grid_3d = reader.GetOutput()
+
+    # Get all point data array names
+    point_data_3d = base_grid_3d.GetPointData()
+    num_arrays_3d = point_data_3d.GetNumberOfArrays()
+    array_names_3d = [point_data_3d.GetArrayName(i) for i in range(num_arrays_3d)]
+
+    print(f"Arrays to average: {array_names_3d}")
+
+    # Extract time values from field data or filename
+    times_3d = []
+    for vts_file in vts_files_3d:
+        reader = vtk.vtkXMLStructuredGridReader()
+        reader.SetFileName(vts_file)
+        reader.Update()
+        grid = reader.GetOutput()
+
+        # Try to get time from field data
+        field_data = grid.GetFieldData()
+        time_array = field_data.GetArray("TimeValue")
+        if time_array and time_array.GetNumberOfTuples() > 0:
+            times_3d.append(time_array.GetValue(0))
+        else:
+            # If no time in field data, extract from filename and calculate time
+            # Time = start_time + (file_number - 1) * dt
+            match = re.search(r'Result_3D_(\d+)', vts_file)
+            if match:
+                file_num = int(match.group(1))
+                # Use same formula as conversion: time = start_time + (i - 1) * dt
+                times_3d.append(start_time_3d + (file_num - 1) * dt_3d)
+            else:
+                times_3d.append(0.0)
+
+    times_3d = np.array(times_3d)
+    print(f"Time range: {times_3d[0]:.2f} to {times_3d[-1]:.2f}")
+
+    # Calculate time intervals (dt) for proper weighting
+    if len(times_3d) > 1:
+        dt_3d_arr = np.diff(times_3d)
+        # Add half intervals at boundaries for trapezoidal integration
+        dt_weights_3d = np.zeros(len(times_3d))
+        dt_weights_3d[0] = dt_3d_arr[0] / 2 if len(dt_3d_arr) > 0 else 1.0
+        dt_weights_3d[-1] = dt_3d_arr[-1] / 2 if len(dt_3d_arr) > 0 else 1.0
+        for i in range(1, len(times_3d) - 1):
+            dt_weights_3d[i] = (dt_3d_arr[i-1] + dt_3d_arr[i]) / 2
+
+        total_time_3d = np.sum(dt_weights_3d)
+        print(f"Total integration time: {total_time_3d:.2f}")
+        print(f"Average dt: {np.mean(dt_3d_arr):.2f}")
+    else:
+        dt_weights_3d = np.ones(len(times_3d))
+        total_time_3d = 1.0
+
+    # Initialize accumulators for each array
+    num_points_3d = base_grid_3d.GetNumberOfPoints()
+    accumulators_3d = {name: np.zeros(point_data_3d.GetArray(name).GetNumberOfTuples() *
+                                       point_data_3d.GetArray(name).GetNumberOfComponents())
+                       for name in array_names_3d}
+
+    # Accumulate weighted values from all files
+    for i, vts_file in enumerate(vts_files_3d):
+        reader = vtk.vtkXMLStructuredGridReader()
+        reader.SetFileName(vts_file)
+        reader.Update()
+        grid = reader.GetOutput()
+
+        weight = dt_weights_3d[i]
+
+        for name in array_names_3d:
+            array = grid.GetPointData().GetArray(name)
+            if array:
+                vtk_data = [array.GetValue(j) for j in range(array.GetNumberOfTuples() * array.GetNumberOfComponents())]
+                accumulators_3d[name] += weight * np.array(vtk_data)
+
+        if (i + 1) % 50 == 0:
+            print(f"  Processed {i + 1}/{len(vts_files_3d)} files")
+
+    # Compute time-weighted averages and create output grid
+    avg_grid_3d = vtk.vtkStructuredGrid()
+    dims_3d = [0, 0, 0]
+    base_grid_3d.GetDimensions(dims_3d)
+    avg_grid_3d.SetDimensions(dims_3d)
+    avg_grid_3d.SetPoints(base_grid_3d.GetPoints())
+
+    for name in array_names_3d:
+        avg_values = accumulators_3d[name] / total_time_3d
+
+        # Get original array to match type and components
+        orig_array = base_grid_3d.GetPointData().GetArray(name)
+        vtk_array = vtk.vtkFloatArray()
+        vtk_array.SetName(name)
+        vtk_array.SetNumberOfComponents(orig_array.GetNumberOfComponents())
+        vtk_array.SetNumberOfTuples(orig_array.GetNumberOfTuples())
+
+        for j, val in enumerate(avg_values):
+            vtk_array.SetValue(j, val)
+
+        avg_grid_3d.GetPointData().AddArray(vtk_array)
+
+    # Add TimeValue field (use midpoint of averaging window per VTK convention)
+    time_value_array_3d = vtk.vtkDoubleArray()
+    time_value_array_3d.SetName("TimeValue")
+    time_value_array_3d.SetNumberOfTuples(1)
+    time_value_array_3d.SetValue(0, (times_3d[0] + times_3d[-1]) / 2.0)
+    avg_grid_3d.GetFieldData().AddArray(time_value_array_3d)
+
+    # Add time averaging metadata (Float64 for consistency)
+    time_info_3d = vtk.vtkDoubleArray()
+    time_info_3d.SetName("TimeAveragingInfo")
+    time_info_3d.SetNumberOfComponents(3)
+    time_info_3d.SetNumberOfTuples(1)
+    time_info_3d.SetValue(0, times_3d[0])      # Start time
+    time_info_3d.SetValue(1, times_3d[-1])     # End time
+    time_info_3d.SetValue(2, total_time_3d)    # Total integration time
+    avg_grid_3d.GetFieldData().AddArray(time_info_3d)
+
+    # Write time-averaged file
+    output_file_3d = output_dir / "Result_3D_time_average.vts"
+    writer = vtk.vtkXMLStructuredGridWriter()
+    writer.SetFileName(str(output_file_3d))
+    writer.SetInputData(avg_grid_3d)
+    writer.Write()
+
+    print(f"Time-averaged file saved to: {output_file_3d}")
+else:
+    print("No 3D VTS files found to average")
+```
+
 ## Summary
 
 ```{python}
 print("\n" + "="*50)
 print("CONVERSION SUMMARY")
 print("="*50)
-print(f"2D files converted: {successful_2d}/100")
-print(f"3D files converted: {successful_3d}/100")
-print(f"Total files converted: {successful_2d + successful_3d}/200")
+print(f"2D files converted: {successful_2d}/600")
+print(f"3D files converted: {successful_3d}/600")
+print(f"Total files converted: {successful_2d + successful_3d}/1200")
+print("\nTime-averaged files:")
+print(f"  - Result_2D_time_average.vts")
+print(f"  - Result_3D_time_average.vts")
 ```
 
 ## Notes
@@ -145,4 +488,9 @@ print(f"Total files converted: {successful_2d + successful_3d}/200")
 - The conversion function automatically detects the data type (StructuredGrid, UnstructuredGrid, or PolyData)
 - If the data is not a structured grid, it will use the appropriate writer (.vtu or .vtp)
 - VTS files are XML-based and generally more robust than legacy VTK format
-- The output files are placed in the same directory as the input files
+- Each VTS file contains:
+  - `TimeValue` (Float64): Time in seconds for ParaView animation support
+  - `TimeStep` (Int32): Integer timestep index for efficient file lookup
+- Time-averaged files contain:
+  - `TimeValue`: Midpoint of the averaging window
+  - `TimeAveragingInfo`: 3-component array with [start_time, end_time, total_integration_time]
