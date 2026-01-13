@@ -9,9 +9,13 @@ Some parameters are required in the options file, while others are optional.
 Required keyword arguments
 ============================
 
-**file_name_2d**, str: Path to the 2D input mesh.
+**file_name_2d**, str: Path to the 2D input mesh. Supported formats:
 
-**file_name_3d**, str: Path to the 3D input mesh. In the case of a 2D simulation, this entry will be ignored but it is still required.
+* ``.vts`` - VTK XML Structured Grid format (**recommended**). Modern binary format with compression, 5-10x smaller than legacy VTK.
+* ``.vtk`` - VTK legacy format (ASCII or binary). Widely compatible with older tools.
+* ``.npz`` - NumPy compressed archive. Python-specific format for custom workflows.
+
+**file_name_3d**, str: Path to the 3D input mesh. Supports the same formats as file_name_2d. In the case of a 2D simulation, this entry will be ignored but it is still required.
 
 **SimTime**, float: Maximum allowable simulation time, in seconds. The simulation will end before this time only if all of the tracked particles leave the domain before SimTime.
 

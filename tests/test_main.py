@@ -83,6 +83,14 @@ def run_simulation(argdict: dict) -> None:
             },
             "./tests/data/output_straight",
         ),
+        (
+            {
+                "settings_file": "./tests/data/user_options_straight_test_vts.py",
+                "seed": 3654125,
+                "no_postprocess": True,
+            },
+            "./tests/data/output_straight",
+        ),
     ],
     ids=(
         "Particles simulation",
@@ -92,6 +100,7 @@ def run_simulation(argdict: dict) -> None:
         "simulate with variable start times",
         "simulate from checkpoint",
         "simulate with npz input meshes",
+        "simulate with vts input meshes",
     ),
 )
 def test_particle(argdict: dict, test_out_path: str) -> None:
