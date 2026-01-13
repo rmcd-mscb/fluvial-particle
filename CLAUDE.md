@@ -1,48 +1,76 @@
 # Claude Code Instructions for fluvial-particle
 
+## Current Work
+
+### Branch: `add-vts-support`
+**Goal**: Support modern VTK XML formats and time-dependent flow fields for particle tracking.
+
+#### Completed
+- ✅ Added `.vts` (VTK XML Structured Grid) support to `RiverGrid.py`
+  - `read_2d_data()` and `read_3d_data()` now accept `.vts` files
+  - Uses `vtkXMLStructuredGridReader()` with `ShallowCopy()`
+- ✅ Created VTS test files with TimeValue/TimeStep metadata
+  - `tests/data/Result_straight_2d_1.vts`
+  - `tests/data/Result_straight_3d_1.vts`
+  - `tests/data/Result_straight_3d_1_new.vts`
+- ✅ Added test case: `"simulate with vts input meshes"` in `test_main.py`
+- ✅ Created VTK→VTS conversion notebook: `notebooks/sandbox/convert_vtk_to_vts.qmd`
+  - Includes time-averaging for 2D and 3D files
+  - Adds `TimeValue` (Float64) and `TimeStep` (Int32) to each file
+  - Fixed numeric sorting issue for file series
+
+#### In Progress / Next Steps
+- 🔲 Time-dependent grid switching for particle tracking
+  - Need to efficiently switch between flow field snapshots during simulation
+  - Use `TimeValue`/`TimeStep` metadata to map particle time → flow field file
+- 🔲 Consider PVD collection files for managing time series
+- 🔲 Test with actual time-varying simulation data
+
+#### Key Files
+- `src/fluvial_particle/RiverGrid.py` - Grid reading and velocity interpolation
+- `notebooks/sandbox/convert_vtk_to_vts.qmd` - VTK→VTS conversion with time metadata
+- `tests/data/user_options_straight_test_vts.py` - VTS test configuration
+
+---
+
 ## Environment Management
 
-This project uses a **hybrid conda + uv** approach for dependency management:
+This project uses **uv** for dependency and environment management.
 
 ### Architecture
-- **Conda** (`environment.yml`): Manages compiled C/C++ dependencies that benefit from conda's binary distribution
-  - VTK (complex C++ visualization library)
-  - h5py (HDF5 with C bindings)
-  - numpy (with MKL optimizations)
-  - Python interpreter
-
-- **uv** (`pyproject.toml`): Manages all pure Python dependencies
+- **uv** (`pyproject.toml`): Manages all dependencies and the virtual environment
+  - Creates and manages a `.venv` virtual environment
+  - Handles all Python dependencies including compiled packages (VTK, h5py, numpy)
   - Development tools (ruff, pytest, mypy, etc.)
   - Documentation tools (Sphinx, myst-parser, etc.)
-  - All other Python packages
 
-### Conda Environment Name
-`fluvial-particle`
+### Virtual Environment
+uv manages a virtual environment in `.venv/` at the project root.
 
 ## Running Commands
 
-**CRITICAL**: All commands MUST be run within the conda environment. Use one of these approaches:
+**CRITICAL**: All commands should be run using the uv-managed environment. Use `uv run` to execute commands:
 
-### Option 1: Activate environment first (for interactive work)
 ```bash
-conda activate fluvial-particle
-<your commands here>
-```
+# Run any command in the uv environment
+uv run <command>
 
-### Option 2: Use conda run (for single commands)
-```bash
-conda run -n fluvial-particle <command>
+# Examples
+uv run pytest
+uv run ruff check .
+uv run python script.py
 ```
 
 ### Examples
 ```bash
-# Good - runs in environment
-conda run -n fluvial-particle uv sync
-conda run -n fluvial-particle pytest
-conda run -n fluvial-particle ruff check .
+# Good - runs in uv environment (always up to date)
+uv run pytest
+uv run ruff check .
+uv run ruff format .
+uv run mypy src/
 
-# Bad - runs in base environment (wrong!)
-uv sync
+# Alternative - activate the venv first
+source .venv/bin/activate
 pytest
 ruff check .
 ```
@@ -51,70 +79,66 @@ ruff check .
 
 ### Initial Setup (one-time)
 ```bash
-# 1. Create conda environment with compiled dependencies
-conda env create -f environment.yml
-
-# 2. Activate the environment
-conda activate fluvial-particle
-
-# 3. Install Python dependencies with uv
+# Sync all dependencies (creates .venv if needed)
 uv sync --all-extras
 ```
 
 ### Adding New Dependencies
 
-#### For compiled dependencies (rare):
-1. Add to `environment.yml`
-2. Update the environment:
-   ```bash
-   conda env update -f environment.yml --prune
-   ```
-
-#### For Python dependencies (common):
-1. Add to `pyproject.toml` under `dependencies` or `[project.optional-dependencies]`
+#### For runtime dependencies:
+1. Add to `pyproject.toml` under `dependencies`
 2. Sync with uv:
    ```bash
-   conda run -n fluvial-particle uv sync --all-extras
+   uv sync --all-extras
+   ```
+
+#### For development dependencies:
+1. Add to `pyproject.toml` under `[project.optional-dependencies]`
+2. Sync with uv:
+   ```bash
+   uv sync --all-extras
    ```
 
 ### Updating Dependencies
 
 ```bash
 # Update all dependencies
-conda run -n fluvial-particle uv sync --upgrade --all-extras
+uv sync --upgrade --all-extras
 
-# Update conda dependencies
-conda env update -f environment.yml --prune
+# Update a specific package
+uv add --upgrade <package-name>
 ```
 
 ## Development Workflow
 
 ### Running Tests
 ```bash
-conda run -n fluvial-particle pytest
+uv run pytest
+uv run pytest -v  # verbose
+uv run pytest tests/test_main.py  # specific file
 ```
 
 ### Code Quality Checks
 ```bash
 # Lint and format
-conda run -n fluvial-parameter ruff check .
-conda run -n fluvial-particle ruff format .
+uv run ruff check .
+uv run ruff format .
 
 # Type checking
-conda run -n fluvial-particle mypy src/
+uv run mypy src/
 
 # Pre-commit hooks
-conda run -n fluvial-particle pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 ### Building Documentation
 
 ```bash
 # Build HTML documentation locally
-conda run -n fluvial-particle sphinx-build docs docs/_build/html
+uv run sphinx-build docs docs/_build/html
 
 # Build with auto-rebuild on file changes (development mode)
-conda run -n fluvial-particle sphinx-autobuild docs docs/_build/html
+uv run sphinx-autobuild docs docs/_build/html
 
 # Clean previous build
 rm -rf docs/_build
@@ -160,41 +184,45 @@ The project uses `bump-my-version` to manage version numbers across multiple fil
 
 ```bash
 # Patch version (0.0.3 -> 0.0.4)
-conda run -n fluvial-particle uv run bump-my-version bump patch
+uv run bump-my-version bump patch
 
 # Minor version (0.0.4 -> 0.1.0)
-conda run -n fluvial-particle uv run bump-my-version bump minor
+uv run bump-my-version bump minor
 
 # Major version (0.1.0 -> 1.0.0)
-conda run -n fluvial-particle uv run bump-my-version bump major
+uv run bump-my-version bump major
 ```
 
 **Note**: bump-my-version automatically commits changes and creates git tags.
 
-## Why This Approach?
+## Why uv?
 
-1. **Conda handles compiled code well**: VTK and HDF5 have complex C++ dependencies that conda manages better than pip
-2. **uv is fast for Python packages**: uv resolves and installs pure Python dependencies much faster than pip or conda
-3. **Best of both worlds**: Leverages each tool's strengths
-4. **Reproducible**: `environment.yml` locks conda deps, uv uses `uv.lock` for Python deps
+1. **Fast**: uv is significantly faster than pip or conda for dependency resolution and installation
+2. **Reproducible**: `uv.lock` ensures exact reproducibility across environments
+3. **Simple**: Single tool manages both dependencies and virtual environment
+4. **Modern**: Handles compiled packages (VTK, h5py, numpy) without issues
 
 ## Important Notes
 
-- **Always check your environment**: Before running commands, verify you're in the correct environment
-- **Sync after changes**: After modifying `pyproject.toml`, always run `uv sync`
+- **Always use `uv run`**: This ensures commands run in the correct environment with up-to-date dependencies
+- **Sync after changes**: After modifying `pyproject.toml`, always run `uv sync --all-extras`
 - **Don't mix pip and uv**: Use uv for all Python package management
-- **Test in clean environment**: Periodically recreate the environment from scratch to ensure reproducibility
+- **Lock file**: The `uv.lock` file should be committed to version control for reproducibility
 
 ## Troubleshooting
 
 ### "Command not found" errors
-You're probably in the base environment. Activate `fluvial-particle` first.
+Make sure you're using `uv run <command>` or have activated the virtual environment.
 
 ### Import errors after adding dependencies
-Run `conda run -n fluvial-particle uv sync --all-extras` to install new dependencies.
+Run `uv sync --all-extras` to install new dependencies.
 
-### Conda and uv conflict
-Conda provides the base dependencies (Python, VTK, h5py, numpy). uv installs everything else into the same environment. They don't conflict because uv respects conda-installed packages.
+### Stale environment
+If you encounter strange behavior, try:
+```bash
+rm -rf .venv
+uv sync --all-extras
+```
 
 ## Editing Jupyter Notebooks (.ipynb)
 
@@ -223,3 +251,19 @@ sed -i 's/os\.path\.getsize(/Path(/g' notebook.ipynb
 ```
 
 **Key takeaway**: If notebook edits aren't persisting, close the notebook in VS Code and edit the raw JSON file directly with `sed`, `awk`, or standard text replacement tools.
+
+## Supported Input File Formats
+
+The project supports multiple grid file formats for 2D and 3D input meshes:
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| VTK XML Structured Grid | `.vts` | **Recommended** - Modern binary format with compression |
+| VTK Legacy | `.vtk` | ASCII or binary, widely compatible |
+| NumPy Archive | `.npz` | Python-specific compressed format |
+
+### VTS File Time Metadata
+
+VTS files can include time metadata in their FieldData section:
+- `TimeValue` (Float64): Time in seconds for ParaView animation support
+- `TimeStep` (Int32): Integer timestep index for efficient file lookup

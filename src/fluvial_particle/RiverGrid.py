@@ -19,10 +19,13 @@ class RiverGrid:
 
         Args:
             track3d (int): 1 if 3D model run, 0 else
-            filename2d (str): path to the input 2D grid. Must be either a VTK structured grid file
-                (with extension .vtk), or a NumPy NpzFile created using the savez command. The arrays in the .npz file
-                must match the expected keys. See the docstring of the read_2d_data() method for additional details.
-            filename3d (str, optional): path to the input 2D VTK structured grid. Required for 3D simulations
+            filename2d (str): path to the input 2D grid. Supported formats:
+                - .vtk: VTK legacy structured grid format
+                - .vts: VTK XML structured grid format (recommended for large files)
+                - .npz: NumPy compressed archive format
+                See the docstring of the read_2d_data() method for additional details.
+            filename3d (str, optional): path to the input 3D grid. Required for 3D simulations.
+                Supports the same formats as filename2d.
 
         Raises:
             ValueError: track3d is 1 but no filename provided for input 3D grid.
@@ -343,8 +346,13 @@ class RiverGrid:
         """Read 2D structured grid data file.
 
         Loads 2D data onto a VTK structured grid. The structured grid can be directly supplied as a .vtk file,
-        or as a collection of 2D arrays in a NumPy .npz file. The filename is read from the self.fname2d variable,
-        saved during class initialization via the filename2d argument.
+        a .vts (VTK XML) file, or as a collection of 2D arrays in a NumPy .npz file. The filename is read from
+        the self.fname2d variable, saved during class initialization via the filename2d argument.
+
+        Supported formats:
+            - .vtk: VTK legacy structured grid format
+            - .vts: VTK XML structured grid format (recommended for large files)
+            - .npz: NumPy compressed archive format
 
         If a .npz file is supplied, then each expected field is a 2D array of the same shape. The (x, y) coordinates
         of every node that defines the grid are supplied via the x & y arguments. The remaining fields are all defined
@@ -361,13 +369,25 @@ class RiverGrid:
             - z (optional): z coordinates of the grid. Defaults to constant 0.
             - vz (optional): z-component of fluid velocity. Defaults to constant 0.
         """
-        suffix = pathlib.Path(self.fname2d).suffix
+        suffix = pathlib.Path(self.fname2d).suffix.lower()
         if suffix == ".vtk":
-            # Read 2D grid from vtk structured grid inputs
+            # Read 2D grid from VTK legacy structured grid format
             reader2d = vtk.vtkStructuredGridReader()
             reader2d.SetFileName(self.fname2d)
             reader2d.SetOutput(self.vtksgrid2d)
             reader2d.Update()
+            # Check for required field arrays defined at the grid points
+            ptdata = self.vtksgrid2d.GetPointData()
+            names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
+            missing = [x for x in self.required_keys2d if x not in names]
+            if len(missing) > 0:
+                raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
+        elif suffix == ".vts":
+            # Read 2D grid from VTK XML structured grid format
+            reader2d = vtk.vtkXMLStructuredGridReader()
+            reader2d.SetFileName(self.fname2d)
+            reader2d.Update()
+            self.vtksgrid2d.ShallowCopy(reader2d.GetOutput())
             # Check for required field arrays defined at the grid points
             ptdata = self.vtksgrid2d.GetPointData()
             names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
@@ -440,15 +460,21 @@ class RiverGrid:
             self.vtksgrid2d = grid
         else:
             raise TypeError(
-                f"{pathlib.Path(self.fname2d).suffix} file type not supported for input 2D grid; expected .vtk or .npz"
+                f"{pathlib.Path(self.fname2d).suffix} file type not supported for input 2D grid; "
+                f"expected .vtk, .vts, or .npz"
             )
 
     def read_3d_data(self):
         """Read 3D structured grid data file.
 
         Loads 3D data onto a VTK structured grid. The structured grid can be directly supplied as a .vtk file,
-        or as a collection of 3D arrays in a NumPy .npz file. The filename is read from the self.fname3d variable,
-        saved during class initialization via the filename3d argument.
+        a .vts (VTK XML) file, or as a collection of 3D arrays in a NumPy .npz file. The filename is read from
+        the self.fname3d variable, saved during class initialization via the filename3d argument.
+
+        Supported formats:
+            - .vtk: VTK legacy structured grid format
+            - .vts: VTK XML structured grid format (recommended for large files)
+            - .npz: NumPy compressed archive format
 
         If a .npz file is supplied, then each expected field is a 3D array of the same shape. The (x, y, z) coordinates
         of every node that defines the grid are supplied via the x, y, & z arguments. The 3D fluid velocity is the other
@@ -462,13 +488,25 @@ class RiverGrid:
             - vy: y-component of fluid velocity
             - vz: z-component of fluid velocity
         """
-        suffix = pathlib.Path(self.fname3d).suffix
+        suffix = pathlib.Path(self.fname3d).suffix.lower()
         if suffix == ".vtk":
-            # Read 3D grid
+            # Read 3D grid from VTK legacy structured grid format
             reader3d = vtk.vtkStructuredGridReader()
             reader3d.SetFileName(self.fname3d)
             reader3d.SetOutput(self.vtksgrid3d)
             reader3d.Update()
+            # Check for required field arrays defined at the grid points
+            ptdata = self.vtksgrid3d.GetPointData()
+            names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
+            missing = [x for x in self.required_keys3d if x not in names]
+            if len(missing) > 0:
+                raise ValueError(f"Missing {missing} array from the input 3D grid")
+        elif suffix == ".vts":
+            # Read 3D grid from VTK XML structured grid format
+            reader3d = vtk.vtkXMLStructuredGridReader()
+            reader3d.SetFileName(self.fname3d)
+            reader3d.Update()
+            self.vtksgrid3d.ShallowCopy(reader3d.GetOutput())
             # Check for required field arrays defined at the grid points
             ptdata = self.vtksgrid3d.GetPointData()
             names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
@@ -528,7 +566,8 @@ class RiverGrid:
             self.vtksgrid3d = grid
         else:
             raise TypeError(
-                f"{pathlib.Path(self.fname3d).suffix} file type not supported for input 3D grid; expected .vtk or .npz"
+                f"{pathlib.Path(self.fname3d).suffix} file type not supported for input 3D grid; "
+                f"expected .vtk, .vts, or .npz"
             )
 
     def reconstruct_filter_pipeline(self, nparts):
