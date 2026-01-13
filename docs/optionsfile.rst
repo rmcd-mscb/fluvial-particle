@@ -37,21 +37,37 @@ Required keyword arguments
 
 **ParticleType**: The type of particles to simulate, either the Particles class or a subclass (e.g. LarvalBotParticles). This argument should not be placed inside quotes or brackets of any kind.
 
-**field_map_2d**, dict: A dictionary mapping standard internal field names to the model-specific names in your 2D mesh file. This allows *fluvial-particle* to work with output from different hydrodynamic models (e.g., Delft-FM, iRIC, HEC-RAS) that use different naming conventions. Required keys:
+**field_map_2d**, dict: A dictionary mapping standard internal field names to the model-specific names in your 2D mesh file. This allows *fluvial-particle* to work with output from different hydrodynamic models (e.g., Delft-FM, iRIC, HEC-RAS) that use different naming conventions.
+
+Required keys:
 
 * ``bed_elevation``: bed/bottom elevation (e.g., "Elevation" in Delft-FM)
-* ``wet_dry``: wet/dry indicator, 1=wet, 0=dry (e.g., "IBC" in Delft-FM)
 * ``shear_stress``: shear stress magnitude (e.g., "ShearStress (magnitude)")
 * ``velocity``: velocity vector (e.g., "Velocity")
 * ``water_surface_elevation``: water surface elevation (e.g., "WaterSurfaceElevation")
 
-Example for Delft-FM output:
+Optional key:
+
+* ``wet_dry``: wet/dry indicator, 1=wet, 0=dry (e.g., "IBC" in Delft-FM). If not provided, this field will be computed automatically from depth using the ``min_depth`` threshold: cells with depth > min_depth are wet (1), otherwise dry (0).
+
+Example for Delft-FM output (with wet_dry):
 
 .. code-block:: python
 
     field_map_2d = {
         "bed_elevation": "Elevation",
         "wet_dry": "IBC",
+        "shear_stress": "ShearStress (magnitude)",
+        "velocity": "Velocity",
+        "water_surface_elevation": "WaterSurfaceElevation",
+    }
+
+Example without wet_dry (computed from depth):
+
+.. code-block:: python
+
+    field_map_2d = {
+        "bed_elevation": "Elevation",
         "shear_stress": "ShearStress (magnitude)",
         "velocity": "Velocity",
         "water_surface_elevation": "WaterSurfaceElevation",
@@ -70,7 +86,7 @@ Example:
     }
 
 .. note::
-   For ``.npz`` files, these field mappings are not used as the npz format has its own internal naming convention.
+   For ``.npz`` files, the ``ibc`` field (wet/dry indicator) is optional. If not present in the npz file, wet_dry will be computed from depth.
 
 
 Optional keyword arguments
