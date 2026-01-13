@@ -444,19 +444,19 @@ if particles_xmf.exists():
 ```
 
 ```{python}
-  def convert_particles_to_vtp(h5_path: Path, output_dir: Path):
-      """Convert particles.h5 to VTP files that ParaView reads natively."""
-      import vtk
-      from vtk.util import numpy_support
+def convert_particles_to_vtp(h5_path: Path, output_dir: Path):
+    """Convert particles.h5 to VTP files that ParaView reads natively."""
+    import vtk
+    from vtk.util import numpy_support
 
-      with h5py.File(h5_path, "r") as f:
-          coords = f["coordinates"]
-          props = f["properties"]
+    with h5py.File(h5_path, "r") as f:
+        coords = f["coordinates"]
+        props = f["properties"]
 
-          time = coords["time"][:]
-          x = coords["x"][:]
-          y = coords["y"][:]
-          z = coords["z"][:]
+        time = coords["time"][:]
+        x = coords["x"][:]
+        y = coords["y"][:]
+        z = coords["z"][:]
 
           n_timesteps = x.shape[0]
           n_particles = x.shape[1]
