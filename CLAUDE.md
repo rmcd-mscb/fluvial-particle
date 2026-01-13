@@ -1,35 +1,37 @@
 # Claude Code Instructions for fluvial-particle
 
-## Current Work
+## Recent Changes
 
-### Branch: `add-vts-support`
-**Goal**: Support modern VTK XML formats and time-dependent flow fields for particle tracking.
+### PR #15: Field Name Mapping (branch: `add-field-mapping`)
+**Goal**: Enable fluvial-particle to work with output from different hydrodynamic models.
+
+#### Completed
+- ✅ Added `field_map_2d` and `field_map_3d` required parameters
+- ✅ Standard internal field names: `bed_elevation`, `wet_dry`, `shear_stress`, `velocity`, `water_surface_elevation`
+- ✅ Users map model-specific names (e.g., Delft-FM's "IBC" → standard "wet_dry")
+- ✅ Updated all test configuration files with explicit mappings
+- ✅ Updated documentation in `docs/optionsfile.rst` and `docs/example.rst`
+
+#### Key Files
+- `src/fluvial_particle/RiverGrid.py` - Field mapping applied during grid reading
+- `src/fluvial_particle/Settings.py` - New required parameters
+- `docs/optionsfile.rst` - Field mapping documentation
+
+### PR #13: VTS Support (merged to main)
+**Goal**: Support modern VTK XML formats and time-dependent flow fields.
 
 #### Completed
 - ✅ Added `.vts` (VTK XML Structured Grid) support to `RiverGrid.py`
-  - `read_2d_data()` and `read_3d_data()` now accept `.vts` files
-  - Uses `vtkXMLStructuredGridReader()` with `ShallowCopy()`
 - ✅ Created VTS test files with TimeValue/TimeStep metadata
-  - `tests/data/Result_straight_2d_1.vts`
-  - `tests/data/Result_straight_3d_1.vts`
-  - `tests/data/Result_straight_3d_1_new.vts`
-- ✅ Added test case: `"simulate with vts input meshes"` in `test_main.py`
+- ✅ Added test case: `"simulate with vts input meshes"`
 - ✅ Created VTK→VTS conversion notebook: `notebooks/sandbox/convert_vtk_to_vts.qmd`
-  - Includes time-averaging for 2D and 3D files
-  - Adds `TimeValue` (Float64) and `TimeStep` (Int32) to each file
-  - Fixed numeric sorting issue for file series
 
-#### In Progress / Next Steps
+### Future Work
 - 🔲 Time-dependent grid switching for particle tracking
   - Need to efficiently switch between flow field snapshots during simulation
   - Use `TimeValue`/`TimeStep` metadata to map particle time → flow field file
 - 🔲 Consider PVD collection files for managing time series
 - 🔲 Test with actual time-varying simulation data
-
-#### Key Files
-- `src/fluvial_particle/RiverGrid.py` - Grid reading and velocity interpolation
-- `notebooks/sandbox/convert_vtk_to_vts.qmd` - VTK→VTS conversion with time metadata
-- `tests/data/user_options_straight_test_vts.py` - VTS test configuration
 
 ---
 
@@ -267,3 +269,33 @@ The project supports multiple grid file formats for 2D and 3D input meshes:
 VTS files can include time metadata in their FieldData section:
 - `TimeValue` (Float64): Time in seconds for ParaView animation support
 - `TimeStep` (Int32): Integer timestep index for efficient file lookup
+
+### Field Name Mapping
+
+Different hydrodynamic models use different array names. The `field_map_2d` and `field_map_3d` parameters map model-specific names to standard internal names:
+
+**Standard 2D fields:**
+- `bed_elevation` - bed/bottom elevation
+- `wet_dry` - wet/dry indicator (1=wet, 0=dry)
+- `shear_stress` - shear stress magnitude
+- `velocity` - velocity vector
+- `water_surface_elevation` - water surface elevation
+
+**Standard 3D fields:**
+- `velocity` - velocity vector
+
+**Example for Delft-FM output:**
+```python
+field_map_2d = {
+    "bed_elevation": "Elevation",
+    "wet_dry": "IBC",
+    "shear_stress": "ShearStress (magnitude)",
+    "velocity": "Velocity",
+    "water_surface_elevation": "WaterSurfaceElevation",
+}
+field_map_3d = {
+    "velocity": "Velocity",
+}
+```
+
+Note: For `.npz` files, these mappings are not used as the npz format has its own internal naming convention.
