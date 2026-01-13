@@ -35,7 +35,8 @@ class PVDWriter:
         except ValueError:
             # If not relative, use the filename only (assumes same directory)
             rel_path = data_file.name
-        self.entries.append((time, str(rel_path)))
+        rel_path_str = rel_path.as_posix() if isinstance(rel_path, Path) else str(rel_path)
+        self.entries.append((time, rel_path_str))
 
     def write(self) -> None:
         """Write the PVD collection file."""
