@@ -6,6 +6,7 @@ from datetime import timedelta
 import numpy as np
 
 from .Helpers import get_prng, load_checkpoint, load_variable_source
+from .io import PVDWriter, VTPWriter
 from .RiverGrid import RiverGrid
 
 
@@ -130,11 +131,28 @@ def simulate(settings, argvars, timer, comm=None):
         dset_kwargs = settings["hdf5_dataset_kwargs"]
     parts_h5 = particles.create_hdf5(n_prints, globalnparts, fname=fname, comm=comm, **dset_kwargs)
 
+    # Initialize VTP output if enabled (serial only for now)
+    output_vtp = settings.get("output_vtp", False)
+    vtp_writer = None
+    pvd_writer = None
+    if output_vtp and master:
+        vtp_dir = pathlib.Path(output_directory) / "vtp"
+        vtp_writer = VTPWriter(vtp_dir)
+        pvd_writer = PVDWriter(pathlib.Path(output_directory) / "particles.pvd")
+        if master:
+            print("VTP output enabled", flush=True)
+
     if comm is not None:
         comm.Barrier()
 
     # Write initial conditions to file
     particles.write_hdf5(parts_h5, 0, start, end, starttime, rank)
+
+    # Write initial VTP
+    if vtp_writer is not None:
+        vtp_file = vtp_writer.write(particles, starttime, 0)
+        if vtp_file:
+            pvd_writer.add_timestep(starttime, vtp_file)
 
     if comm is not None:
         comm.Barrier()
@@ -175,6 +193,12 @@ def simulate(settings, argvars, timer, comm=None):
         if print_times[tidx] == times[i]:
             particles.write_hdf5(parts_h5, np.int32(i / print_inc) + 1, start, end, times[i], rank)
 
+            # Write VTP at print times
+            if vtp_writer is not None:
+                vtp_file = vtp_writer.write(particles, times[i], np.int32(i / print_inc) + 1)
+                if vtp_file:
+                    pvd_writer.add_timestep(times[i], vtp_file)
+
             if master:
                 e = timer() - t0
                 elapsed = str(timedelta(seconds=e))
@@ -198,6 +222,10 @@ def simulate(settings, argvars, timer, comm=None):
 
     # COLLECTIVE file close
     parts_h5.close()
+
+    # Finalize PVD collection file
+    if pvd_writer is not None:
+        pvd_writer.write()
 
     if master:
         particles.create_hdf5_xdmf(output_directory, n_prints, globalnparts)
