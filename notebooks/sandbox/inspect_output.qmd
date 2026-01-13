@@ -1,0 +1,564 @@
+---
+title: "Inspect Fluvial-Particle Output Files"
+format: html
+jupyter: python3
+---
+
+# Output File Inspector
+
+This notebook inspects the HDF5 and XDMF output files from fluvial-particle simulations
+to help debug visualization issues in ParaView.
+
+## Setup
+
+```{python}
+import h5py
+import numpy as np
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+
+def format_bytes(size: int) -> str:
+    """Format file size in human-readable units."""
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def inspect_hdf5(filepath: str, show_sample: bool = True, sample_size: int = 5) -> None:
+    """
+    Display structured information about an HDF5 output file.
+
+    Args:
+        filepath: Path to the HDF5 file
+        show_sample: If True, show sample values from each dataset
+        sample_size: Number of sample values to show
+    """
+    path = Path(filepath)
+
+    if not path.exists():
+        print(f"File not found: {path}")
+        return
+
+    file_size = path.stat().st_size
+
+    print(f"{'=' * 70}")
+    print(f"HDF5 File: {path.name}")
+    print(f"{'=' * 70}")
+    print(f"Path:      {path}")
+    print(f"Size:      {format_bytes(file_size)}")
+    print()
+
+    with h5py.File(path, "r") as f:
+        # File attributes
+        if f.attrs:
+            print("File Attributes:")
+            print("-" * 50)
+            for key, val in f.attrs.items():
+                print(f"  {key}: {val}")
+            print()
+
+        # Recursively inspect groups and datasets
+        def inspect_item(name, obj, indent=0):
+            prefix = "  " * indent
+
+            if isinstance(obj, h5py.Group):
+                desc = obj.attrs.get("Description", "")
+                desc_str = f" - {desc}" if desc else ""
+                print(f"{prefix}[Group] {name}/{desc_str}")
+
+                # Show group attributes
+                for key, val in obj.attrs.items():
+                    if key != "Description":
+                        print(f"{prefix}  @{key}: {val}")
+
+            elif isinstance(obj, h5py.Dataset):
+                dtype = obj.dtype
+                shape = obj.shape
+
+                # Calculate statistics
+                try:
+                    data = obj[()]
+                    has_nan = np.any(np.isnan(data)) if np.issubdtype(dtype, np.floating) else False
+                    nan_count = np.sum(np.isnan(data)) if has_nan else 0
+                    nan_pct = 100 * nan_count / data.size if has_nan else 0
+
+                    # Get valid (non-NaN) statistics
+                    if np.issubdtype(dtype, np.floating):
+                        valid_data = data[~np.isnan(data)]
+                        if valid_data.size > 0:
+                            vmin, vmax = valid_data.min(), valid_data.max()
+                            vmean = valid_data.mean()
+                            stats_str = f"range=[{vmin:.4g}, {vmax:.4g}], mean={vmean:.4g}"
+                        else:
+                            stats_str = "all NaN"
+                    elif np.issubdtype(dtype, np.integer):
+                        vmin, vmax = data.min(), data.max()
+                        stats_str = f"range=[{vmin}, {vmax}]"
+                    else:
+                        stats_str = ""
+                except Exception as e:
+                    stats_str = f"error: {e}"
+                    has_nan = False
+                    nan_pct = 0
+
+                # Format output
+                shape_str = str(shape)
+                nan_str = f", {nan_pct:.1f}% NaN" if has_nan and nan_pct > 0 else ""
+
+                print(f"{prefix}[Dataset] {name}")
+                print(f"{prefix}  shape: {shape_str}, dtype: {dtype}{nan_str}")
+                if stats_str:
+                    print(f"{prefix}  {stats_str}")
+
+                # Show attributes
+                for key, val in obj.attrs.items():
+                    print(f"{prefix}  @{key}: {val}")
+
+                # Show sample values
+                if show_sample and data.size > 0:
+                    # Get first valid timestep (for time-series data)
+                    if len(shape) >= 2:
+                        # Find first timestep with non-NaN data
+                        for tidx in range(min(shape[0], 5)):
+                            slice_data = data[tidx].flatten()
+                            if np.issubdtype(dtype, np.floating):
+                                valid = slice_data[~np.isnan(slice_data)]
+                            else:
+                                valid = slice_data
+                            if len(valid) > 0:
+                                sample = valid[:sample_size]
+                                print(f"{prefix}  sample[t={tidx}]: {sample.tolist()}")
+                                break
+                    else:
+                        sample = data.flatten()[:sample_size]
+                        print(f"{prefix}  sample: {sample.tolist()}")
+
+                print()
+
+        # Walk the file structure
+        print("Structure:")
+        print("-" * 50)
+        f.visititems(lambda name, obj: inspect_item(name, obj, indent=1))
+
+    print(f"{'=' * 70}")
+
+
+def inspect_xdmf(filepath: str) -> None:
+    """
+    Parse and display XDMF file structure.
+
+    Args:
+        filepath: Path to the XDMF (.xmf) file
+    """
+    path = Path(filepath)
+
+    if not path.exists():
+        print(f"File not found: {path}")
+        return
+
+    print(f"{'=' * 70}")
+    print(f"XDMF File: {path.name}")
+    print(f"{'=' * 70}")
+    print(f"Path:      {path}")
+    print(f"Size:      {format_bytes(path.stat().st_size)}")
+    print()
+
+    try:
+        tree = ET.parse(path)
+        root = tree.getroot()
+
+        print(f"XDMF Version: {root.get('Version', 'unknown')}")
+        print()
+
+        # Find all grids
+        grids = root.findall(".//{*}Grid")
+        print(f"Number of Grids: {len(grids)}")
+        print()
+
+        # Analyze temporal grids
+        temporal_grids = [g for g in grids if g.get("GridType") == "Collection"]
+        uniform_grids = [g for g in grids if g.get("GridType") == "Uniform"]
+
+        if temporal_grids:
+            print(f"Temporal Collections: {len(temporal_grids)}")
+
+        if uniform_grids:
+            print(f"Uniform Grids (timesteps): {len(uniform_grids)}")
+            print()
+
+            # Show first few timesteps
+            print("First 3 timesteps:")
+            print("-" * 50)
+            for i, grid in enumerate(uniform_grids[:3]):
+                time_elem = grid.find(".//{*}Time")
+                time_val = time_elem.get("Value") if time_elem is not None else "unknown"
+
+                topo = grid.find(".//{*}Topology")
+                topo_type = topo.get("TopologyType") if topo is not None else "unknown"
+                nodes = topo.get("NodesPerElement") if topo is not None else "?"
+
+                attrs = grid.findall(".//{*}Attribute")
+                attr_names = [a.get("Name") for a in attrs]
+
+                print(f"  [{i}] Time={time_val}, Topology={topo_type}, Nodes={nodes}")
+                print(f"      Attributes: {attr_names}")
+
+            if len(uniform_grids) > 3:
+                print(f"  ... and {len(uniform_grids) - 3} more timesteps")
+
+        print()
+
+        # Check for common issues
+        print("Validation:")
+        print("-" * 50)
+
+        # Check HDF5 file references
+        data_items = root.findall(".//{*}DataItem[@Format='HDF']")
+        hdf5_refs = set()
+        for item in data_items:
+            text = item.text.strip() if item.text else ""
+            if ":" in text:
+                hdf5_file = text.split(":")[0]
+                hdf5_refs.add(hdf5_file)
+
+        print(f"  Referenced HDF5 files: {list(hdf5_refs)}")
+
+        # Check if referenced files exist
+        xdmf_dir = path.parent
+        for hdf5_file in hdf5_refs:
+            hdf5_path = xdmf_dir / hdf5_file
+            exists = hdf5_path.exists()
+            status = "OK" if exists else "MISSING"
+            print(f"    {hdf5_file}: {status}")
+
+        # Check dimension consistency
+        dims_found = set()
+        for item in data_items:
+            dims = item.get("Dimensions")
+            if dims:
+                dims_found.add(dims)
+
+        if len(dims_found) > 5:
+            print(f"  Warning: Many different dimension specs ({len(dims_found)})")
+
+    except ET.ParseError as e:
+        print(f"XML Parse Error: {e}")
+
+    print(f"{'=' * 70}")
+
+
+def compare_xdmf_to_hdf5(xdmf_path: str, hdf5_path: str) -> None:
+    """
+    Compare XDMF references to actual HDF5 structure.
+
+    This helps identify mismatches that cause ParaView issues.
+    """
+    print(f"{'=' * 70}")
+    print("XDMF vs HDF5 Comparison")
+    print(f"{'=' * 70}")
+
+    xdmf = Path(xdmf_path)
+    hdf5 = Path(hdf5_path)
+
+    if not xdmf.exists() or not hdf5.exists():
+        print("One or both files not found")
+        return
+
+    # Parse XDMF
+    tree = ET.parse(xdmf)
+    root = tree.getroot()
+
+    # Get all HDF5 references from XDMF
+    data_items = root.findall(".//{*}DataItem[@Format='HDF']")
+
+    xdmf_refs = {}
+    for item in data_items:
+        text = item.text.strip() if item.text else ""
+        if ":" in text:
+            parts = text.split(":")
+            path_in_hdf5 = parts[1] if len(parts) > 1 else ""
+            dims = item.get("Dimensions", "")
+            xdmf_refs[path_in_hdf5] = dims
+
+    # Open HDF5 and compare
+    with h5py.File(hdf5, "r") as f:
+        print("\nDataset Comparison:")
+        print("-" * 50)
+        print(f"{'HDF5 Path':<35} {'HDF5 Shape':<20} {'XDMF Dims':<20} {'Match'}")
+        print(f"{'-'*35} {'-'*20} {'-'*20} {'-'*6}")
+
+        def check_dataset(name, obj):
+            if isinstance(obj, h5py.Dataset):
+                path = "/" + name
+                hdf5_shape = str(obj.shape)
+                xdmf_dims = xdmf_refs.get(path, "not in XDMF")
+
+                # Check if dimensions match
+                if xdmf_dims != "not in XDMF":
+                    xdmf_shape_tuple = tuple(int(x) for x in xdmf_dims.split())
+                    match = xdmf_shape_tuple == obj.shape
+                    match_str = "OK" if match else "MISMATCH"
+                else:
+                    match_str = "-"
+
+                print(f"{path:<35} {hdf5_shape:<20} {xdmf_dims:<20} {match_str}")
+
+        f.visititems(check_dataset)
+
+    print(f"{'=' * 70}")
+```
+
+## Inspect Particles HDF5 File
+
+```{python}
+# Set the path to your output directory
+output_dir = Path("/home/rmcd/data/iRIC/nays2dplusstraight2_pt/vts_output")
+
+# Inspect the particles HDF5 file
+particles_h5 = output_dir / "particles.h5"
+inspect_hdf5(particles_h5, show_sample=True)
+```
+
+## Inspect Particles XDMF File
+
+```{python}
+# Inspect the XDMF file
+particles_xmf = output_dir / "particles.xmf"
+inspect_xdmf(particles_xmf)
+```
+
+## Compare XDMF to HDF5
+
+```{python}
+# Check if XDMF references match HDF5 structure
+compare_xdmf_to_hdf5(particles_xmf, particles_h5)
+```
+
+## Deep Dive: Specific Dataset Analysis
+
+```{python}
+# Open the HDF5 file for detailed analysis
+if particles_h5.exists():
+    with h5py.File(particles_h5, "r") as f:
+        print("Coordinates Group:")
+        print("-" * 50)
+
+        coords = f["coordinates"]
+        time = coords["time"][:]
+        x = coords["x"][:]
+        y = coords["y"][:]
+        z = coords["z"][:]
+
+        print(f"Time steps recorded: {np.sum(~np.isnan(time))}")
+        print(f"Time values: {time[~np.isnan(time)].flatten()}")
+        print()
+
+        # Check each timestep
+        print("Per-timestep particle statistics:")
+        print(f"{'Timestep':<10} {'Time':<10} {'Valid X':<12} {'X Range':<25} {'Z Range'}")
+        print("-" * 70)
+
+        for tidx in range(min(len(time), 10)):
+            t = time[tidx].item() if not np.isnan(time[tidx]) else np.nan
+
+            x_t = x[tidx, :]
+            z_t = z[tidx, :]
+
+            valid_x = np.sum(~np.isnan(x_t))
+
+            if valid_x > 0:
+                x_valid = x_t[~np.isnan(x_t)]
+                z_valid = z_t[~np.isnan(z_t)]
+                x_range = f"[{x_valid.min():.2f}, {x_valid.max():.2f}]"
+                z_range = f"[{z_valid.min():.2f}, {z_valid.max():.2f}]" if z_valid.size > 0 else "N/A"
+            else:
+                x_range = "N/A"
+                z_range = "N/A"
+
+            print(f"{tidx:<10} {t:<10.2f} {valid_x:<12} {x_range:<25} {z_range}")
+```
+
+## Deep Dive: Properties Analysis
+
+```{python}
+if particles_h5.exists():
+    with h5py.File(particles_h5, "r") as f:
+        print("Properties Group - First Valid Timestep:")
+        print("-" * 50)
+
+        props = f["properties"]
+
+        # Find first timestep with valid data
+        depth = props["depth"][:]
+
+        for tidx in range(len(depth)):
+            valid = ~np.isnan(depth[tidx])
+            if np.any(valid):
+                print(f"First valid timestep: {tidx}")
+                print()
+
+                for name in props.keys():
+                    data = props[name][tidx]
+                    data_flat = data.flatten()
+
+                    if np.issubdtype(data.dtype, np.floating):
+                        valid_data = data_flat[~np.isnan(data_flat)]
+                    else:
+                        valid_data = data_flat
+
+                    if len(valid_data) > 0:
+                        if len(data.shape) > 1:
+                            # Vector data
+                            print(f"{name}:")
+                            print(f"  shape: {data.shape}")
+                            print(f"  sample: {data[:3].tolist()}")
+                        else:
+                            # Scalar data
+                            vmin, vmax = valid_data.min(), valid_data.max()
+                            vmean = valid_data.mean() if np.issubdtype(data.dtype, np.floating) else "N/A"
+                            print(f"{name}:")
+                            print(f"  range: [{vmin}, {vmax}]")
+                            print(f"  mean: {vmean}")
+                            print(f"  sample: {valid_data[:5].tolist()}")
+                        print()
+
+                break
+```
+
+## Raw XDMF Content
+
+```{python}
+# Show the raw XDMF file content (first 100 lines)
+if particles_xmf.exists():
+    print("Raw XDMF Content (first 100 lines):")
+    print("-" * 50)
+    with open(particles_xmf, "r") as f:
+        for i, line in enumerate(f):
+            if i >= 100:
+                print("... (truncated)")
+                break
+            print(f"{i+1:4d}: {line.rstrip()}")
+```
+
+```{python}
+  def convert_particles_to_vtp(h5_path: Path, output_dir: Path):
+      """Convert particles.h5 to VTP files that ParaView reads natively."""
+      import vtk
+      from vtk.util import numpy_support
+
+      with h5py.File(h5_path, "r") as f:
+          coords = f["coordinates"]
+          props = f["properties"]
+
+          time = coords["time"][:]
+          x = coords["x"][:]
+          y = coords["y"][:]
+          z = coords["z"][:]
+
+          n_timesteps = x.shape[0]
+          n_particles = x.shape[1]
+
+          output_dir.mkdir(parents=True, exist_ok=True)
+          vtp_files = []
+
+          for tidx in range(n_timesteps):
+              t = time[tidx].item() if not np.isnan(time[tidx]) else None
+              if t is None:
+                  continue
+
+              # Create points
+              points = vtk.vtkPoints()
+              for i in range(n_particles):
+                  xi, yi, zi = x[tidx, i], y[tidx, i], z[tidx, i]
+                  if not np.isnan(xi):
+                      points.InsertNextPoint(xi, yi, zi)
+
+              n_valid = points.GetNumberOfPoints()
+              if n_valid == 0:
+                  continue
+
+              # Create polydata with vertices
+              polydata = vtk.vtkPolyData()
+              polydata.SetPoints(points)
+
+              verts = vtk.vtkCellArray()
+              for i in range(n_valid):
+                  verts.InsertNextCell(1)
+                  verts.InsertCellPoint(i)
+              polydata.SetVerts(verts)
+
+              # Add scalar attributes
+              for name, h5name in [("Depth", "depth"), ("BedElevation", "bedelev"),
+                                    ("WSE", "wse"), ("HeightAboveBed", "htabvbed")]:
+                  data = props[h5name][tidx, :]
+                  valid_data = data[~np.isnan(x[tidx, :])]
+                  arr = numpy_support.numpy_to_vtk(valid_data, deep=True)
+                  arr.SetName(name)
+                  polydata.GetPointData().AddArray(arr)
+
+              # Add velocity vector
+              velvec = props["velvec"][tidx, :, :]
+              valid_vel = velvec[~np.isnan(x[tidx, :]), :]
+              vel_arr = numpy_support.numpy_to_vtk(valid_vel, deep=True)
+              vel_arr.SetName("Velocity")
+              polydata.GetPointData().AddArray(vel_arr)
+
+              # Add time metadata
+              time_arr = vtk.vtkDoubleArray()
+              time_arr.SetName("TimeValue")
+              time_arr.SetNumberOfTuples(1)
+              time_arr.SetValue(0, t)
+              polydata.GetFieldData().AddArray(time_arr)
+
+              # Write VTP
+              vtp_file = output_dir / f"particles_{tidx:04d}.vtp"
+              writer = vtk.vtkXMLPolyDataWriter()
+              writer.SetFileName(str(vtp_file))
+              writer.SetInputData(polydata)
+              writer.Write()
+              vtp_files.append((t, vtp_file.name))
+
+              if tidx % 10 == 0:
+                  print(f"Wrote timestep {tidx}, t={t:.2f}, {n_valid} particles")
+
+          # Write PVD collection file
+          pvd_file = output_dir / "particles.pvd"
+          with open(pvd_file, "w") as f:
+              f.write('<?xml version="1.0"?>\n')
+              f.write('<VTKFile type="Collection" version="1.0">\n')
+              f.write('  <Collection>\n')
+              for t, fname in vtp_files:
+                  f.write(f'    <DataSet timestep="{t}" file="{fname}"/>\n')
+              f.write('  </Collection>\n')
+              f.write('</VTKFile>\n')
+
+          print(f"\nDone! Open {pvd_file} in ParaView")
+```
+```{python}
+# Run the conversion
+convert_particles_to_vtp(particles_h5, output_dir / "vtp_output")
+```
+## Notes
+
+### Common ParaView Issues
+
+1. **Huge/unrealistic values**: Check if array indices are being read as data values
+2. **Missing data**: XDMF HyperSlab indices may not match HDF5 dimensions
+3. **Garbled display**: Endianness or precision mismatch in XDMF
+4. **No particles visible**: Check coordinate ranges vs. camera position
+
+### XDMF HyperSlab Format
+
+The HyperSlab in XDMF specifies: `start stride count`
+```xml
+<DataItem Dimensions="3 2">
+    tidx 0      <!-- start: time index, particle 0 -->
+    1 1         <!-- stride: 1 in each dimension -->
+    1 nparts    <!-- count: 1 timestep, all particles -->
+</DataItem>
+```
+
+If `tidx` or `nparts` don't match the actual HDF5 dimensions, ParaView will read garbage.
