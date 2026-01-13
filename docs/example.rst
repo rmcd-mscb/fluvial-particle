@@ -56,6 +56,9 @@ Example options file
 
 This file can be run in either serial or parallel execution mode. The input mesh data paths are relative to the repository root directory -- be sure to update :python:`"path/to/repo"` with the correct path on your machine.
 
+.. note::
+   This example uses legacy VTK (``.vtk``) files. For large meshes, consider using VTK XML (``.vts``) format which offers better compression and faster I/O. See the options file documentation for supported formats.
+
 
 .. code-block:: python
 
