@@ -57,3 +57,49 @@ The grids of the cells 2D and 3D .xmf files are defined similarly to each other 
 
 
 A note of caution: the *HyperSlab* item type doesn't always play nicely with Paraview, to which the numerous online forum posts on the subject can atest. It seems to work fine when used in the particles context on the *Polyvertex* topology type, and also on the cells 1D and 2D grid geometry definitions. Experience on this project indicates that it does not work well in the 2D and 3D cases when slicing into cell-centered *Attributes* inside of the temporal collection grid, i.e. when the HDF5 data are stored in one array that has an extra dimension for time. For this reason, the cell-centered data in the HDF5 file are written to a new dataset per time step so that the entire dataset can be loaded by Paraview at once.
+
+
+VTP/PVD files (optional)
+--------------------------
+
+As an alternative to XDMF+HDF5 output, *fluvial-particle* can write particle data directly to VTK PolyData (.vtp) files. This format is natively supported by ParaView without requiring any plugins or readers, making it simpler to visualize particle trajectories.
+
+To enable VTP output, set ``output_vtp = True`` in your options file. This will create:
+
+* A ``vtp/`` subdirectory containing one VTP file per output timestep (e.g., ``particles_0000.vtp``, ``particles_0001.vtp``, etc.)
+* A ``particles.pvd`` collection file that references all VTP files with their associated timestamps
+
+VTP file contents
+~~~~~~~~~~~~~~~~~~~
+
+Each VTP file contains the particle positions and attributes at a single timestep:
+
+**Point coordinates:**
+
+* x, y, z positions of all valid (non-NaN) particles
+
+**Scalar attributes:**
+
+* ``Depth`` - water depth at particle location
+* ``BedElevation`` - bed elevation at particle location
+* ``WaterSurfaceElevation`` - water surface elevation at particle location
+* ``HeightAboveBed`` - particle height above the channel bed
+* ``ShearStress`` - bed shear stress at particle location
+* ``CellIndex2D`` - index of the 2D grid cell containing the particle
+* ``CellIndex3D`` - index of the 3D grid cell containing the particle
+
+**Vector attributes:**
+
+* ``Velocity`` - 3-component velocity vector (vx, vy, vz)
+
+**Field data:**
+
+* ``TimeValue`` - simulation time in seconds
+
+PVD collection file
+~~~~~~~~~~~~~~~~~~~~~
+
+The PVD file is an XML file that ParaView uses to load the entire time series at once. Opening ``particles.pvd`` in ParaView will automatically load all VTP files and enable time-based animation controls.
+
+.. note::
+   VTP output is currently only available for serial (non-MPI) simulations. For parallel runs, use the HDF5+XDMF output format.

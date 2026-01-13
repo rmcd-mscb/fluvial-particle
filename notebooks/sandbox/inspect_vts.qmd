@@ -1,0 +1,223 @@
+---
+title: "Inspect VTS File Contents"
+format: html
+jupyter: python3
+---
+
+# VTS File Inspector
+
+This notebook provides a structured view of VTS (VTK XML Structured Grid) file contents,
+similar to `ncdump -h` for NetCDF or xarray's lazy load display.
+
+## Setup
+
+```{python}
+import vtk
+from vtk.util import numpy_support
+import numpy as np
+from pathlib import Path
+from typing import Optional
+
+
+def format_bytes(size: int) -> str:
+    """Format file size in human-readable units."""
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def format_range(arr: np.ndarray) -> str:
+    """Format min/max range for an array."""
+    if arr.size == 0:
+        return "empty"
+    return f"[{arr.min():.6g}, {arr.max():.6g}]"
+
+
+def get_vtk_type_name(vtk_type: int) -> str:
+    """Convert VTK type constant to human-readable name."""
+    type_map = {
+        vtk.VTK_VOID: "void",
+        vtk.VTK_BIT: "bit",
+        vtk.VTK_CHAR: "char",
+        vtk.VTK_SIGNED_CHAR: "int8",
+        vtk.VTK_UNSIGNED_CHAR: "uint8",
+        vtk.VTK_SHORT: "int16",
+        vtk.VTK_UNSIGNED_SHORT: "uint16",
+        vtk.VTK_INT: "int32",
+        vtk.VTK_UNSIGNED_INT: "uint32",
+        vtk.VTK_LONG: "int64",
+        vtk.VTK_UNSIGNED_LONG: "uint64",
+        vtk.VTK_FLOAT: "float32",
+        vtk.VTK_DOUBLE: "float64",
+        vtk.VTK_ID_TYPE: "id_type",
+    }
+    return type_map.get(vtk_type, f"unknown({vtk_type})")
+
+
+def inspect_vts(filepath: str, show_sample: bool = False) -> None:
+    """
+    Display structured information about a VTS file.
+
+    Args:
+        filepath: Path to the VTS file
+        show_sample: If True, show sample values from each array
+    """
+    path = Path(filepath)
+
+    # Read the file
+    reader = vtk.vtkXMLStructuredGridReader()
+    reader.SetFileName(str(path))
+    reader.Update()
+    grid = reader.GetOutput()
+
+    # File info
+    file_size = path.stat().st_size if path.exists() else 0
+
+    print(f"{'=' * 70}")
+    print(f"VTS File: {path.name}")
+    print(f"{'=' * 70}")
+    print(f"Path:      {path}")
+    print(f"Size:      {format_bytes(file_size)}")
+    print()
+
+    # Dimensions
+    dims = [0, 0, 0]
+    grid.GetDimensions(dims)
+    print(f"Dimensions (i, j, k): ({dims[0]}, {dims[1]}, {dims[2]})")
+    print(f"Total points:         {grid.GetNumberOfPoints():,}")
+    print(f"Total cells:          {grid.GetNumberOfCells():,}")
+    print()
+
+    # Spatial bounds
+    bounds = [0.0] * 6
+    grid.GetBounds(bounds)
+    print("Spatial Bounds:")
+    print(f"  X: [{bounds[0]:.6g}, {bounds[1]:.6g}]  (range: {bounds[1] - bounds[0]:.6g})")
+    print(f"  Y: [{bounds[2]:.6g}, {bounds[3]:.6g}]  (range: {bounds[3] - bounds[2]:.6g})")
+    print(f"  Z: [{bounds[4]:.6g}, {bounds[5]:.6g}]  (range: {bounds[5] - bounds[4]:.6g})")
+    print()
+
+    # Field Data (metadata)
+    field_data = grid.GetFieldData()
+    n_field_arrays = field_data.GetNumberOfArrays()
+    if n_field_arrays > 0:
+        print(f"Field Data ({n_field_arrays} arrays):")
+        print("-" * 50)
+        for i in range(n_field_arrays):
+            arr = field_data.GetArray(i)
+            name = arr.GetName()
+            dtype = get_vtk_type_name(arr.GetDataType())
+            n_tuples = arr.GetNumberOfTuples()
+            n_comp = arr.GetNumberOfComponents()
+
+            # Get values for small arrays
+            if n_tuples * n_comp <= 10:
+                np_arr = numpy_support.vtk_to_numpy(arr)
+                if np_arr.size == 1:
+                    val_str = f" = {np_arr.flat[0]}"
+                else:
+                    val_str = f" = {np_arr.tolist()}"
+            else:
+                val_str = ""
+
+            print(f"  {name}: {dtype}[{n_tuples}x{n_comp}]{val_str}")
+        print()
+
+    # Point Data
+    point_data = grid.GetPointData()
+    n_point_arrays = point_data.GetNumberOfArrays()
+    if n_point_arrays > 0:
+        print(f"Point Data ({n_point_arrays} arrays):")
+        print("-" * 50)
+        print(f"  {'Name':<30} {'Type':<10} {'Shape':<15} {'Range'}")
+        print(f"  {'-'*30} {'-'*10} {'-'*15} {'-'*25}")
+        for i in range(n_point_arrays):
+            arr = point_data.GetArray(i)
+            name = arr.GetName()
+            dtype = get_vtk_type_name(arr.GetDataType())
+            n_tuples = arr.GetNumberOfTuples()
+            n_comp = arr.GetNumberOfComponents()
+
+            np_arr = numpy_support.vtk_to_numpy(arr)
+            range_str = format_range(np_arr)
+
+            shape_str = f"({n_tuples},)" if n_comp == 1 else f"({n_tuples}, {n_comp})"
+            print(f"  {name:<30} {dtype:<10} {shape_str:<15} {range_str}")
+
+            if show_sample and np_arr.size > 0:
+                sample = np_arr.flat[:5]
+                print(f"    Sample: {sample.tolist()}...")
+        print()
+
+    # Cell Data
+    cell_data = grid.GetCellData()
+    n_cell_arrays = cell_data.GetNumberOfArrays()
+    if n_cell_arrays > 0:
+        print(f"Cell Data ({n_cell_arrays} arrays):")
+        print("-" * 50)
+        print(f"  {'Name':<30} {'Type':<10} {'Shape':<15} {'Range'}")
+        print(f"  {'-'*30} {'-'*10} {'-'*15} {'-'*25}")
+        for i in range(n_cell_arrays):
+            arr = cell_data.GetArray(i)
+            name = arr.GetName()
+            dtype = get_vtk_type_name(arr.GetDataType())
+            n_tuples = arr.GetNumberOfTuples()
+            n_comp = arr.GetNumberOfComponents()
+
+            np_arr = numpy_support.vtk_to_numpy(arr)
+            range_str = format_range(np_arr)
+
+            shape_str = f"({n_tuples},)" if n_comp == 1 else f"({n_tuples}, {n_comp})"
+            print(f"  {name:<30} {dtype:<10} {shape_str:<15} {range_str}")
+        print()
+
+    print(f"{'=' * 70}")
+```
+
+## Inspect 2D VTS File
+
+```{python}
+# Inspect a 2D test file
+vts_2d_file = "/home/rmcd/data/iRIC/nays2dplusstraight2_pt/vts_output/Result_2D_time_average.vts"
+inspect_vts(vts_2d_file)
+```
+
+## Inspect with Sample Values
+
+```{python}
+# Show sample values from each array
+inspect_vts(vts_2d_file, show_sample=True)
+```
+
+## Inspect Time-Averaged 2D File
+
+```{python}
+# Inspect the time-averaged 2D file (has additional metadata)
+vts_2d_avg = "../../tests/data/Result_2D_time_average.vts"
+inspect_vts(vts_2d_avg)
+```
+
+## Inspect 3D VTS File
+
+```{python}
+# Inspect a 3D test file
+vts_3d_file = "../../tests/data/Result_straight_3d_1.vts"
+inspect_vts(vts_3d_file)
+```
+
+## Custom File Inspection
+
+```{python}
+# Uncomment and modify to inspect your own VTS file:
+# inspect_vts("/path/to/your/file.vts", show_sample=True)
+```
+
+## Notes
+
+- **Dimensions**: (i, j, k) correspond to the structured grid dimensions
+- **Point Data**: Arrays defined at grid vertices (nodes)
+- **Cell Data**: Arrays defined at grid cell centers
+- **Field Data**: Metadata arrays (e.g., TimeValue, TimeStep)
+- **Range**: Shows [min, max] values for each array

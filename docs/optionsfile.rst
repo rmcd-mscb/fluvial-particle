@@ -102,6 +102,8 @@ These arguments can be specified in the options file. Otherwise, the default val
 
 **StartIdx**, int: The index used to slice into the HDF5 particles checkpoint file along the 0th axis, i.e. the printing step axis. Only used if an HDF5 file is provided via the StartLoc keyword argument. Default value: -1
 
+**output_vtp**, bool: If True, write particle output to VTK PolyData (.vtp) files in addition to HDF5. A PVD collection file (particles.pvd) is also created to reference all VTP files with timestamp information. VTP files are natively supported by ParaView without plugins and provide a simpler alternative to XDMF+HDF5 for visualization. Output is written to a ``vtp/`` subdirectory within the output directory. Default value: False
+
 **startfrac**, float: If provided, will initialize particles to a vertical position as bed elevation + water depth multiplied with startfrac. startfrac should be between 0 and 1 -- values outside this range will initialize particles at the bed and water surface, respectively. A numpy array of length NumPart can also be used to vary the startfrac for every particle. Default value: None
 
 **vertbound**, float: Bounds the particles in the fractional water column of [vertbound, 1-vertbound]. This prevents particles from moving out of the vertical domain, either by going below the channel bed or above the water surface. Default value: 0.01

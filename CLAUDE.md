@@ -40,3 +40,4 @@ Detailed instructions are in `.claude/rules/`:
 - `versioning.md` - bump-my-version workflow
 - `file-formats.md` - VTK/VTS/NPZ and field mapping
 - `notebooks.md` - Jupyter notebook editing
+- `output-refactoring.md` - Planned refactoring for VTK output (HDF5 -> VTP/PVD)
