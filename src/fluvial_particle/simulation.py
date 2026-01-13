@@ -139,8 +139,7 @@ def simulate(settings, argvars, timer, comm=None):
         vtp_dir = pathlib.Path(output_directory) / "vtp"
         vtp_writer = VTPWriter(vtp_dir)
         pvd_writer = PVDWriter(pathlib.Path(output_directory) / "particles.pvd")
-        if master:
-            print("VTP output enabled", flush=True)
+        print("VTP output enabled", flush=True)
 
     if comm is not None:
         comm.Barrier()
