@@ -53,8 +53,8 @@ class RiverGrid:
             field_map_3d (dict): Mapping from standard field names to model-specific names for
                 the 3D grid. Required keys: velocity. Example: {"velocity": "Velocity"}
             min_depth (float, optional): Minimum depth threshold for computing wet_dry if not
-                provided in field_map_2d. Cells with depth <= min_depth are considered dry.
-                Defaults to 0.02 meters.
+                provided in field_map_2d. Cells with depth > min_depth are considered wet (1),
+                and cells with depth <= min_depth are considered dry (0). Defaults to 0.02 meters.
 
         Raises:
             ValueError: track3d is 1 but no filename provided for input 3D grid.

@@ -48,7 +48,7 @@ Required keys:
 
 Optional key:
 
-* ``wet_dry``: wet/dry indicator, 1=wet, 0=dry (e.g., "IBC" in Delft-FM). If not provided, this field will be computed automatically from depth using the ``min_depth`` threshold: cells with depth > min_depth are wet (1), otherwise dry (0).
+* ``wet_dry``: wet/dry indicator, 1=wet, 0=dry (e.g., "IBC" in Delft-FM). If ``wet_dry`` is omitted from ``field_map_2d``, this field will be computed automatically from depth using the ``min_depth`` threshold (defaults to 0.02m if not specified in the options file): cells with depth > min_depth are wet (1), otherwise dry (0).
 
 Example for Delft-FM output (with wet_dry):
 
@@ -86,7 +86,7 @@ Example:
     }
 
 .. note::
-   For ``.npz`` files, the ``ibc`` field (wet/dry indicator) is optional. If not present in the npz file, wet_dry will be computed from depth.
+   For ``.npz`` files, the ``ibc`` field (wet/dry indicator) is optional. If not present in the npz file, ``wet_dry`` will be computed from depth using the ``min_depth`` threshold.
 
 
 Optional keyword arguments
