@@ -37,6 +37,41 @@ Required keyword arguments
 
 **ParticleType**: The type of particles to simulate, either the Particles class or a subclass (e.g. LarvalBotParticles). This argument should not be placed inside quotes or brackets of any kind.
 
+**field_map_2d**, dict: A dictionary mapping standard internal field names to the model-specific names in your 2D mesh file. This allows *fluvial-particle* to work with output from different hydrodynamic models (e.g., Delft-FM, iRIC, HEC-RAS) that use different naming conventions. Required keys:
+
+* ``bed_elevation``: bed/bottom elevation (e.g., "Elevation" in Delft-FM)
+* ``wet_dry``: wet/dry indicator, 1=wet, 0=dry (e.g., "IBC" in Delft-FM)
+* ``shear_stress``: shear stress magnitude (e.g., "ShearStress (magnitude)")
+* ``velocity``: velocity vector (e.g., "Velocity")
+* ``water_surface_elevation``: water surface elevation (e.g., "WaterSurfaceElevation")
+
+Example for Delft-FM output:
+
+.. code-block:: python
+
+    field_map_2d = {
+        "bed_elevation": "Elevation",
+        "wet_dry": "IBC",
+        "shear_stress": "ShearStress (magnitude)",
+        "velocity": "Velocity",
+        "water_surface_elevation": "WaterSurfaceElevation",
+    }
+
+**field_map_3d**, dict: A dictionary mapping standard internal field names to the model-specific names in your 3D mesh file. Required keys:
+
+* ``velocity``: velocity vector (e.g., "Velocity")
+
+Example:
+
+.. code-block:: python
+
+    field_map_3d = {
+        "velocity": "Velocity",
+    }
+
+.. note::
+   For ``.npz`` files, these field mappings are not used as the npz format has its own internal naming convention.
+
 
 Optional keyword arguments
 ============================

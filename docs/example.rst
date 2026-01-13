@@ -75,6 +75,17 @@ This file can be run in either serial or parallel execution mode. The input mesh
  StartLoc = (6.14, 9.09, 10.3)  # Starting location from a single point
  ParticleType = Particles  # Particle type to simulate
 
+ # Field name mappings from standard names to model-specific names (Delft-FM example)
+ field_map_2d = {
+     "bed_elevation": "Elevation",
+     "wet_dry": "IBC",
+     "shear_stress": "ShearStress (magnitude)",
+     "velocity": "Velocity",
+     "water_surface_elevation": "WaterSurfaceElevation",
+ }
+ field_map_3d = {
+     "velocity": "Velocity",
+ }
 
  # Some optional keyword arguments
  lev = 0.00025  # reach-averaged lateral eddy viscosity

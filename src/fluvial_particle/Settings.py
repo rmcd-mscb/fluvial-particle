@@ -34,7 +34,7 @@ class Settings(dict):
 
         Returns:
             list(str): list of the required keys: SimTime, dt, Track3D, PrintAtTick, file_name_2d, file_name_3d,
-            NumPart, StartLoc
+            NumPart, StartLoc, field_map_2d, field_map_3d
         """
         return (
             "SimTime",
@@ -45,6 +45,8 @@ class Settings(dict):
             "file_name_3d",
             "NumPart",
             "StartLoc",
+            "field_map_2d",
+            "field_map_3d",
         )
 
     @classmethod

@@ -5,6 +5,7 @@ from os.path import join
 from tempfile import TemporaryDirectory
 
 import numpy as np
+import pytest
 import vtk
 from numpy.testing import assert_allclose, assert_equal, assert_string_equal
 from vtk.util import numpy_support
@@ -17,6 +18,7 @@ from fluvial_particle.Helpers import (
     load_checkpoint,
     load_variable_source,
 )
+from fluvial_particle.RiverGrid import RiverGrid
 from fluvial_particle.Settings import Settings
 
 from .support import get_h5file, get_num_timesteps, get_points
@@ -143,3 +145,81 @@ def test_support():
     assert_equal(test_keys, ["coordinates", "properties"])
     assert_equal(test_nts, 4)
     assert_equal(test_points[-1, :], [34.11210153322322, 0.3878199353097108, 9.73657708285166])
+
+
+def test_field_mapping_required():
+    """Test that field_map_2d and field_map_3d are required parameters."""
+    # Test missing field_map_2d
+    with pytest.raises(ValueError, match="field_map_2d is required"):
+        RiverGrid(
+            track3d=0,
+            filename2d="./tests/data/Result_straight_2d_1.vtk",
+            field_map_2d=None,
+            field_map_3d={"velocity": "Velocity"},
+        )
+
+    # Test missing field_map_3d
+    with pytest.raises(ValueError, match="field_map_3d is required"):
+        RiverGrid(
+            track3d=0,
+            filename2d="./tests/data/Result_straight_2d_1.vtk",
+            field_map_2d={
+                "bed_elevation": "Elevation",
+                "wet_dry": "IBC",
+                "shear_stress": "ShearStress (magnitude)",
+                "velocity": "Velocity",
+                "water_surface_elevation": "WaterSurfaceElevation",
+            },
+            field_map_3d=None,
+        )
+
+
+def test_field_mapping_missing_keys():
+    """Test that missing keys in field mappings raise ValueError."""
+    # Test missing key in field_map_2d
+    with pytest.raises(ValueError, match="field_map_2d is missing required keys"):
+        RiverGrid(
+            track3d=0,
+            filename2d="./tests/data/Result_straight_2d_1.vtk",
+            field_map_2d={
+                "bed_elevation": "Elevation",
+                # Missing: wet_dry, shear_stress, velocity, water_surface_elevation
+            },
+            field_map_3d={"velocity": "Velocity"},
+        )
+
+    # Test missing key in field_map_3d
+    with pytest.raises(ValueError, match="field_map_3d is missing required keys"):
+        RiverGrid(
+            track3d=0,
+            filename2d="./tests/data/Result_straight_2d_1.vtk",
+            field_map_2d={
+                "bed_elevation": "Elevation",
+                "wet_dry": "IBC",
+                "shear_stress": "ShearStress (magnitude)",
+                "velocity": "Velocity",
+                "water_surface_elevation": "WaterSurfaceElevation",
+            },
+            field_map_3d={},  # Missing: velocity
+        )
+
+
+def test_field_mapping_valid():
+    """Test that valid field mappings work correctly."""
+    # Should not raise any exception
+    river = RiverGrid(
+        track3d=0,
+        filename2d="./tests/data/Result_straight_2d_1.vtk",
+        field_map_2d={
+            "bed_elevation": "Elevation",
+            "wet_dry": "IBC",
+            "shear_stress": "ShearStress (magnitude)",
+            "velocity": "Velocity",
+            "water_surface_elevation": "WaterSurfaceElevation",
+        },
+        field_map_3d={"velocity": "Velocity"},
+    )
+
+    # Verify the grid was loaded correctly
+    assert river.vtksgrid2d is not None
+    assert river.vtksgrid2d.GetNumberOfPoints() > 0
