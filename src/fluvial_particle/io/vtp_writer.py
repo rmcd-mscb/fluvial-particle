@@ -23,7 +23,7 @@ class VTPWriter:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def write(self, particles, time: float, tidx: int) -> Path:
+    def write(self, particles, time: float, tidx: int) -> Path | None:
         """Write particle state to a VTP file.
 
         Args:
@@ -32,7 +32,7 @@ class VTPWriter:
             tidx: Time step index (used for filename).
 
         Returns:
-            Path to the written VTP file.
+            Path to the written VTP file, or None if no valid particles.
         """
         # Get valid (non-NaN) particle indices
         valid_mask = ~np.isnan(particles.x)
