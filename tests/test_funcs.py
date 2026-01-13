@@ -175,15 +175,15 @@ def test_field_mapping_required():
 
 
 def test_field_mapping_missing_keys():
-    """Test that missing keys in field mappings raise ValueError."""
-    # Test missing key in field_map_2d
+    """Test that missing required keys in field mappings raise ValueError."""
+    # Test missing required key in field_map_2d (wet_dry is optional, but others are required)
     with pytest.raises(ValueError, match="field_map_2d is missing required keys"):
         RiverGrid(
             track3d=0,
             filename2d="./tests/data/Result_straight_2d_1.vtk",
             field_map_2d={
                 "bed_elevation": "Elevation",
-                # Missing: wet_dry, shear_stress, velocity, water_surface_elevation
+                # Missing required: shear_stress, velocity, water_surface_elevation
             },
             field_map_3d={"velocity": "Velocity"},
         )
@@ -195,7 +195,6 @@ def test_field_mapping_missing_keys():
             filename2d="./tests/data/Result_straight_2d_1.vtk",
             field_map_2d={
                 "bed_elevation": "Elevation",
-                "wet_dry": "IBC",
                 "shear_stress": "ShearStress (magnitude)",
                 "velocity": "Velocity",
                 "water_surface_elevation": "WaterSurfaceElevation",
@@ -223,3 +222,55 @@ def test_field_mapping_valid():
     # Verify the grid was loaded correctly
     assert river.vtksgrid2d is not None
     assert river.vtksgrid2d.GetNumberOfPoints() > 0
+
+
+def test_auto_compute_wet_dry(capsys):
+    """Test that wet_dry is computed from depth when not provided in field_map_2d."""
+    # Create RiverGrid without wet_dry in field_map_2d
+    river = RiverGrid(
+        track3d=0,
+        filename2d="./tests/data/Result_straight_2d_1.vtk",
+        field_map_2d={
+            "bed_elevation": "Elevation",
+            "shear_stress": "ShearStress (magnitude)",
+            "velocity": "Velocity",
+            "water_surface_elevation": "WaterSurfaceElevation",
+            # wet_dry intentionally omitted - should be computed from depth
+        },
+        field_map_3d={"velocity": "Velocity"},
+        min_depth=0.02,
+    )
+
+    # Verify the grid was loaded correctly
+    assert river.vtksgrid2d is not None
+    assert river.vtksgrid2d.GetNumberOfPoints() > 0
+
+    # Verify that wet_dry was computed (check stdout message)
+    captured = capsys.readouterr()
+    assert "Computed wet_dry from depth" in captured.out
+
+    # Verify that _compute_wet_dry flag was set
+    assert river._compute_wet_dry is True
+
+
+def test_auto_compute_wet_dry_custom_min_depth(capsys):
+    """Test that custom min_depth is used when computing wet_dry."""
+    custom_min_depth = 0.05
+
+    river = RiverGrid(
+        track3d=0,
+        filename2d="./tests/data/Result_straight_2d_1.vtk",
+        field_map_2d={
+            "bed_elevation": "Elevation",
+            "shear_stress": "ShearStress (magnitude)",
+            "velocity": "Velocity",
+            "water_surface_elevation": "WaterSurfaceElevation",
+        },
+        field_map_3d={"velocity": "Velocity"},
+        min_depth=custom_min_depth,
+    )
+
+    # Verify the custom min_depth was used
+    captured = capsys.readouterr()
+    assert f"min_depth={custom_min_depth}m" in captured.out
+    assert river._min_depth == custom_min_depth

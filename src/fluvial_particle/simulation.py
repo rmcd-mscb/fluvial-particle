@@ -67,7 +67,10 @@ def simulate(settings, argvars, timer, comm=None):
     # Initialize RiverGrid object with field name mappings
     field_map_2d = settings["field_map_2d"]
     field_map_3d = settings["field_map_3d"]
-    river = RiverGrid(track3d, file_name_2d, file_name_3d, field_map_2d, field_map_3d)
+    min_depth = settings.get(
+        "min_depth"
+    )  # Optional threshold for auto-computing wet_dry from depth (if wet_dry not in field_map_2d)
+    river = RiverGrid(track3d, file_name_2d, file_name_3d, field_map_2d, field_map_3d, min_depth)
 
     # Initialize particle positions
     if isinstance(settings["StartLoc"], tuple):

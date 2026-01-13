@@ -11,21 +11,30 @@ from vtk.util import numpy_support  # type: ignore[import]
 # from numba import jit
 
 # Standard internal field names used by fluvial-particle
-STANDARD_FIELDS_2D = (
+# Required fields must be provided in field_map_2d
+REQUIRED_FIELDS_2D = (
     "bed_elevation",
-    "wet_dry",
     "shear_stress",
     "velocity",
     "water_surface_elevation",
 )
 
+# Optional fields - if not provided, they will be computed internally
+OPTIONAL_FIELDS_2D = ("wet_dry",)
+
+# All standard 2D fields (required + optional)
+STANDARD_FIELDS_2D = REQUIRED_FIELDS_2D + OPTIONAL_FIELDS_2D
+
 STANDARD_FIELDS_3D = ("velocity",)
+
+# Default minimum depth threshold for computing wet_dry (meters)
+DEFAULT_MIN_DEPTH = 0.02
 
 
 class RiverGrid:
     """A class of hydrodynamic data and tools defined on VTK structured grids."""
 
-    def __init__(self, track3d, filename2d, filename3d=None, field_map_2d=None, field_map_3d=None):
+    def __init__(self, track3d, filename2d, filename3d=None, field_map_2d=None, field_map_3d=None, min_depth=None):
         """Initialize instance of class RiverGrid.
 
         Args:
@@ -38,10 +47,14 @@ class RiverGrid:
             filename3d (str, optional): path to the input 3D grid. Required for 3D simulations.
                 Supports the same formats as filename2d.
             field_map_2d (dict): Mapping from standard field names to model-specific names for
-                the 2D grid. Required keys: bed_elevation, wet_dry, shear_stress, velocity,
-                water_surface_elevation. Example: {"bed_elevation": "Elevation", ...}
+                the 2D grid. Required keys: bed_elevation, shear_stress, velocity,
+                water_surface_elevation. Optional key: wet_dry (computed from depth if not provided).
+                Example: {"bed_elevation": "Elevation", ...}
             field_map_3d (dict): Mapping from standard field names to model-specific names for
                 the 3D grid. Required keys: velocity. Example: {"velocity": "Velocity"}
+            min_depth (float, optional): Minimum depth threshold for computing wet_dry if not
+                provided in field_map_2d. Cells with depth > min_depth are considered wet (1),
+                and cells with depth <= min_depth are considered dry (0). Defaults to 0.02 meters.
 
         Raises:
             ValueError: track3d is 1 but no filename provided for input 3D grid.
@@ -51,10 +64,14 @@ class RiverGrid:
         # Validate field mappings
         if field_map_2d is None:
             raise ValueError("field_map_2d is required")
-        missing_2d = [k for k in STANDARD_FIELDS_2D if k not in field_map_2d]
+        missing_2d = [k for k in REQUIRED_FIELDS_2D if k not in field_map_2d]
         if missing_2d:
             raise ValueError(f"field_map_2d is missing required keys: {missing_2d}")
         self.field_map_2d = field_map_2d
+
+        # Check if wet_dry needs to be computed
+        self._compute_wet_dry = "wet_dry" not in field_map_2d
+        self._min_depth = min_depth if min_depth is not None else DEFAULT_MIN_DEPTH
 
         if field_map_3d is None:
             raise ValueError("field_map_3d is required")
@@ -105,6 +122,39 @@ class RiverGrid:
                 model_name = arr.GetName()
                 if model_name in reverse_map:
                     arr.SetName(reverse_map[model_name])
+
+    def _compute_wet_dry_from_depth(self):
+        """Compute wet_dry field from depth (water_surface_elevation - bed_elevation).
+
+        Cells with depth > min_depth are considered wet (1), otherwise dry (0).
+        This method is called when wet_dry is not provided in field_map_2d.
+        """
+        ptdata = self.vtksgrid2d.GetPointData()
+
+        # Get bed elevation and water surface elevation arrays
+        bed_elev = ptdata.GetArray("bed_elevation")
+        wse = ptdata.GetArray("water_surface_elevation")
+
+        if bed_elev is None or wse is None:
+            raise ValueError("Cannot compute wet_dry: bed_elevation or water_surface_elevation not found")
+
+        # Convert to numpy arrays for computation
+        bed_elev_np = numpy_support.vtk_to_numpy(bed_elev)
+        wse_np = numpy_support.vtk_to_numpy(wse)
+
+        # Compute depth and wet_dry mask
+        depth = wse_np - bed_elev_np
+        wet_dry_np = (depth > self._min_depth).astype(np.float64)
+
+        # Create VTK array and add to grid
+        wet_dry_vtk = numpy_support.numpy_to_vtk(wet_dry_np)
+        wet_dry_vtk.SetName("wet_dry")
+        ptdata.AddArray(wet_dry_vtk)
+
+        print(
+            f"Computed wet_dry from depth (min_depth={self._min_depth}m): "
+            f"{int(wet_dry_np.sum())} wet / {len(wet_dry_np)} total points"
+        )
 
     def build_probe_filter(self, nparts, comm=None):
         """Build pipeline for probe filters (i.e. interpolation).
@@ -393,6 +443,18 @@ class RiverGrid:
                 cidx3.SetTuple(i, [i])
             self.vtksgrid3d.GetCellData().AddArray(cidx3)
 
+    def _validate_and_apply_field_mapping_2d(self):
+        """Validate required fields exist and apply field mapping for 2D VTK grids."""
+        ptdata = self.vtksgrid2d.GetPointData()
+        names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
+        model_names = list(self.field_map_2d.values())
+        missing = [x for x in model_names if x not in names]
+        if len(missing) > 0:
+            raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
+        self._apply_field_mapping(self.vtksgrid2d, self.field_map_2d)
+        if self._compute_wet_dry:
+            self._compute_wet_dry_from_depth()
+
     def read_2d_data(self):
         """Read 2D structured grid data file.
 
@@ -415,7 +477,7 @@ class RiverGrid:
             - x: x coordinates of the grid
             - y: y coordinates of the grid
             - elev: topographic elevation
-            - ibc: indicates whether node is wet (1) or dry (0)
+            - ibc: indicates whether node is wet (1) or dry (0), optional - computed from depth if missing
             - shear: shear stress magnitude
             - vx: x-component of fluid velocity
             - vy: y-component of fluid velocity
@@ -425,40 +487,23 @@ class RiverGrid:
         """
         suffix = pathlib.Path(self.fname2d).suffix.lower()
         if suffix == ".vtk":
-            # Read 2D grid from VTK legacy structured grid format
             reader2d = vtk.vtkStructuredGridReader()
             reader2d.SetFileName(self.fname2d)
             reader2d.SetOutput(self.vtksgrid2d)
             reader2d.Update()
-            # Check for required field arrays (using model-specific names from field_map)
-            ptdata = self.vtksgrid2d.GetPointData()
-            names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
-            model_names = [self.field_map_2d[k] for k in self.required_keys2d]
-            missing = [x for x in model_names if x not in names]
-            if len(missing) > 0:
-                raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
-            # Rename arrays from model-specific names to standard names
-            self._apply_field_mapping(self.vtksgrid2d, self.field_map_2d)
+            self._validate_and_apply_field_mapping_2d()
         elif suffix == ".vts":
-            # Read 2D grid from VTK XML structured grid format
             reader2d = vtk.vtkXMLStructuredGridReader()
             reader2d.SetFileName(self.fname2d)
             reader2d.Update()
             self.vtksgrid2d.ShallowCopy(reader2d.GetOutput())
-            # Check for required field arrays (using model-specific names from field_map)
-            ptdata = self.vtksgrid2d.GetPointData()
-            names = [ptdata.GetArrayName(i) for i in range(ptdata.GetNumberOfArrays())]
-            model_names = [self.field_map_2d[k] for k in self.required_keys2d]
-            missing = [x for x in model_names if x not in names]
-            if len(missing) > 0:
-                raise ValueError(f"Missing {missing} array(s) from the input 2D grid")
-            # Rename arrays from model-specific names to standard names
-            self._apply_field_mapping(self.vtksgrid2d, self.field_map_2d)
+            self._validate_and_apply_field_mapping_2d()
         elif suffix == ".npz":
             # Read 2D grid arrays from NumPy .npz file and convert to VTK grid
             # Note: .npz format uses fixed internal names, not the field_map
             npzfile = np.load(self.fname2d)
-            reqd = ["x", "y", "elev", "ibc", "shear", "vx", "vy", "wse"]
+            # Required fields for npz (ibc is optional - will be computed from depth if missing)
+            reqd = ["x", "y", "elev", "shear", "vx", "vy", "wse"]
             names = npzfile.files
             missing = [x for x in reqd if x not in names]
             if len(missing) > 0:
@@ -468,7 +513,8 @@ class RiverGrid:
             y = npzfile["y"]
             z = npzfile["z"] if "z" in names else np.zeros(dims)
             elev = npzfile["elev"]
-            ibc = npzfile["ibc"]
+            has_ibc = "ibc" in names
+            ibc = npzfile["ibc"] if has_ibc else None
             shear = npzfile["shear"]
             vx = npzfile["vx"]
             vy = npzfile["vy"]
@@ -476,7 +522,9 @@ class RiverGrid:
             wse = npzfile["wse"]
 
             # make sure they're all the same shape and 2D
-            ll = [x, y, z, elev, ibc, shear, vx, vy, vz, wse]
+            ll = [x, y, z, elev, shear, vx, vy, vz, wse]
+            if ibc is not None:
+                ll.append(ibc)
             if not all(a.shape == dims for a in ll):
                 raise Exception("input arrays in the 2D grid npz file must all be the same shape")
             if not len(dims) == 2:
@@ -487,7 +535,8 @@ class RiverGrid:
             y = y.ravel()
             z = z.ravel()
             elev = elev.ravel()
-            ibc = ibc.ravel()
+            if ibc is not None:
+                ibc = ibc.ravel()
             shear = shear.ravel()
             vx = vx.ravel()
             vy = vy.ravel()
@@ -509,17 +558,29 @@ class RiverGrid:
             # combine the velocity components
             vel = np.stack([vx, vy, vz]).T
 
-            # add the fields to the grid using standard names
-            # Order must match STANDARD_FIELDS_2D: bed_elevation, wet_dry, shear_stress, velocity, water_surface_elevation
-            arr_list = [elev, ibc, shear, vel, wse]
-            name_list = self.required_keys2d
-            for arr, name in zip(arr_list, name_list):  # noqa: B905
+            # add required fields to the grid using standard names
+            for arr, name in [
+                (elev, "bed_elevation"),
+                (shear, "shear_stress"),
+                (vel, "velocity"),
+                (wse, "water_surface_elevation"),
+            ]:
                 vtkarr = numpy_support.numpy_to_vtk(arr)
                 vtkarr.SetName(name)
                 grid.GetPointData().AddArray(vtkarr)
 
+            # add wet_dry if provided in npz file
+            if ibc is not None:
+                vtkarr = numpy_support.numpy_to_vtk(ibc)
+                vtkarr.SetName("wet_dry")
+                grid.GetPointData().AddArray(vtkarr)
+
             # save to the class variable
             self.vtksgrid2d = grid
+
+            # Compute wet_dry from depth if not provided in npz file
+            if ibc is None:
+                self._compute_wet_dry_from_depth()
         else:
             raise TypeError(
                 f"{pathlib.Path(self.fname2d).suffix} file type not supported for input 2D grid; "
@@ -665,7 +726,12 @@ class RiverGrid:
 
     @property
     def required_keys2d(self):
-        """tuple(str): standard array names required in the input 2D grid."""
+        """tuple(str): standard array names that will be present in the 2D grid.
+
+        Returns all standard fields. This includes required fields from field_map_2d
+        plus optional fields (like wet_dry) that are either mapped or computed.
+        """
+        # Always include all standard fields since optional ones are computed if not mapped
         return STANDARD_FIELDS_2D
 
     @property
