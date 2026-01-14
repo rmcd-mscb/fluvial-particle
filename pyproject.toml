@@ -130,7 +130,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401", "D104"]  # Unused imports (re-exports), missing docstring OK
+"__init__.py" = ["F401", "D104", "RUF067"]  # Unused imports (re-exports), missing docstring OK, allow metadata vars
 "simulation.py" = ["PLR0912"]  # Too many branches (complex simulation logic)
 "noxfile.py" = ["D", "S"]         # Skip docstring and security checks
 "tests/**/*.py" = ["D", "S101", "PLR2004"]  # Skip docstrings, allow assert and magic values
