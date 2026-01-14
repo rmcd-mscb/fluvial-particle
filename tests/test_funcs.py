@@ -1,5 +1,6 @@
 """Test cases for the Settings and Helpers modules."""
 
+import pathlib
 import time
 from os.path import join
 from tempfile import TemporaryDirectory
@@ -111,8 +112,6 @@ def test_generate_settings_template():
         generate_settings_template(output_path)
 
         # Verify file was created
-        import pathlib
-
         assert pathlib.Path(output_path).exists()
 
         # Verify contents
@@ -130,8 +129,6 @@ def test_generate_settings_template_no_overwrite():
         output_path = join(tmpdir, "existing.py")
 
         # Create existing file
-        import pathlib
-
         pathlib.Path(output_path).write_text("existing content", encoding="utf-8")
 
         # Should raise SystemExit when trying to overwrite
