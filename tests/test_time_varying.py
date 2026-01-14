@@ -196,6 +196,43 @@ class TestTimeVaryingGrid:
                 grid_dt=1.0,
             )
 
+    def test_time_varying_grid_pipeline_update_with_interpolation(self):
+        """Test that update_2d_pipeline updates correct grids based on weight."""
+        grid = TimeVaryingGrid(
+            track3d=0,
+            file_pattern_2d="./tests/data/time_series_straight/Result_2D_{}.vts",
+            file_pattern_3d="./tests/data/time_series_straight/Result_3D_{}.vts",
+            field_map_2d={
+                "bed_elevation": "Elevation[m]",
+                "shear_stress": "Tausta",
+                "velocity": "Velocity",
+                "water_surface_elevation": "WaterSurf.[m]",
+            },
+            field_map_3d={"velocity": "Velocity"},
+            grid_start_index=2,
+            grid_end_index=6,
+            grid_dt=1.0,
+            interpolation="linear",
+        )
+
+        # Build probe filter with some test points
+        nparts = 5
+        grid.build_probe_filter(nparts)
+
+        # At t=0, weight=0, only current grid needed
+        grid.advance_to_time(0.0)
+        assert grid.get_interpolation_weight() == 0.0
+
+        # At t=0.5, weight=0.5, both grids needed for linear interpolation
+        grid.advance_to_time(0.5)
+        weight = grid.get_interpolation_weight()
+        assert abs(weight - 0.5) < 1e-10
+
+        # Verify both probes are accessible
+        assert grid.probe2d is not None
+        assert grid.next_probe2d is not None
+        assert grid.has_next_grid
+
 
 class TestTimeVaryingSimulation:
     """Integration tests for time-varying simulation."""

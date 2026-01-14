@@ -235,14 +235,22 @@ class TimeVaryingGrid:
 
     def update_2d_pipeline(self, px, py, idx=None) -> None:
         """Update 2D probe filter pipeline."""
-        self._current_grid.update_2d_pipeline(px, py, idx)
-        if self._next_grid is not None and self.interpolation == "linear":
+        weight = self.get_interpolation_weight()
+        # For nearest with weight=1, only need next grid; otherwise need current
+        if weight < 1.0:
+            self._current_grid.update_2d_pipeline(px, py, idx)
+        # For linear (any weight > 0) or nearest with weight=1, need next grid
+        if self._next_grid is not None and weight > 0:
             self._next_grid.update_2d_pipeline(px, py, idx)
 
     def update_3d_pipeline(self, px, py, pz, idx=None) -> None:
         """Update 3D probe filter pipeline."""
-        self._current_grid.update_3d_pipeline(px, py, pz, idx)
-        if self._next_grid is not None and self.interpolation == "linear":
+        weight = self.get_interpolation_weight()
+        # For nearest with weight=1, only need next grid; otherwise need current
+        if weight < 1.0:
+            self._current_grid.update_3d_pipeline(px, py, pz, idx)
+        # For linear (any weight > 0) or nearest with weight=1, need next grid
+        if self._next_grid is not None and weight > 0:
             self._next_grid.update_3d_pipeline(px, py, pz, idx)
 
     def out_of_grid(self, px, py, idx=None):
