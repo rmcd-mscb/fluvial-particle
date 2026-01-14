@@ -165,6 +165,34 @@ class SimulationResults:
         z = coords["z"][:] if not flatten_z else np.zeros_like(x)
         return np.stack([x, y, z], axis=-1)
 
+    def get_positions_2d(
+        self,
+        timestep: int | None = None,
+    ) -> NDArray[np.floating]:
+        """Get particle positions as 2D (x, y) coordinates.
+
+        Convenience method for 2D visualizations and analysis where
+        the z coordinate is not needed.
+
+        Args:
+            timestep: Specific timestep index to retrieve. If None, returns
+                     all timesteps. Supports negative indexing (-1 for last).
+
+        Returns:
+            If timestep is specified: array of shape (n_particles, 2)
+            If timestep is None: array of shape (n_timesteps, n_particles, 2)
+        """
+        coords = self._h5file["coordinates"]
+
+        if timestep is not None:
+            x = coords["x"][timestep, :]
+            y = coords["y"][timestep, :]
+            return np.stack([x, y], axis=-1)
+
+        x = coords["x"][:]
+        y = coords["y"][:]
+        return np.stack([x, y], axis=-1)
+
     def get_property(
         self,
         name: str,

@@ -73,6 +73,16 @@ class TestSimulationResults:
         positions = results.get_positions(timestep=0, flatten_z=True)
         assert np.all(positions[:, 2] == 0)
 
+    def test_get_positions_2d_single_timestep(self, results):
+        """Test getting 2D positions for a single timestep."""
+        positions = results.get_positions_2d(timestep=0)
+        assert positions.shape == (results.num_particles, 2)
+
+    def test_get_positions_2d_all_timesteps(self, results):
+        """Test getting 2D positions for all timesteps."""
+        positions = results.get_positions_2d()
+        assert positions.shape == (results.num_timesteps, results.num_particles, 2)
+
     def test_get_property(self, results):
         """Test getting a property."""
         depths = results.get_property("depth", timestep=0)
