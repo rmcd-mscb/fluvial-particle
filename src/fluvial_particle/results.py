@@ -39,6 +39,7 @@ Example usage::
 from __future__ import annotations
 
 import pathlib
+import warnings
 from typing import TYPE_CHECKING
 
 import h5py
@@ -249,6 +250,7 @@ class SimulationResults:
                 "time": time_val,
             }
 
+            skipped_props = []
             for prop in self.property_names:
                 prop_data = self.get_property(prop, timestep)
                 if prop_data.ndim == 1:
@@ -257,6 +259,15 @@ class SimulationResults:
                     data["vx"] = prop_data[:, 0]
                     data["vy"] = prop_data[:, 1]
                     data["vz"] = prop_data[:, 2]
+                else:
+                    skipped_props.append(f"{prop} (shape: {prop_data.shape})")
+
+            if skipped_props:
+                warnings.warn(
+                    f"Skipped multi-dimensional properties: {', '.join(skipped_props)}. "
+                    "Use get_property() to access these directly.",
+                    stacklevel=2,
+                )
 
             return pd.DataFrame(data)
 
@@ -361,11 +372,16 @@ def run_simulation(
     output_path = pathlib.Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
+    # Legacy API uses confusing 'no_postprocess' key where:
+    #   no_postprocess=True  → DO run postprocessing (default)
+    #   no_postprocess=False → DON'T run postprocessing
+    # This is backwards from what the name suggests. We use clear 'postprocess'
+    # parameter and translate here.
     argdict = {
         "settings_file": str(settings_path),
         "output_directory": str(output_path),
         "seed": seed,
-        "no_postprocess": postprocess,  # Note: confusing name, True = DO postprocess
+        "no_postprocess": postprocess,
     }
 
     options = Settings.read(str(settings_path))
