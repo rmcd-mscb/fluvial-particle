@@ -109,6 +109,66 @@ These arguments can be specified in the options file. Otherwise, the default val
 **vertbound**, float: Bounds the particles in the fractional water column of [vertbound, 1-vertbound]. This prevents particles from moving out of the vertical domain, either by going below the channel bed or above the water surface. Default value: 0.01
 
 
+Time-varying grid settings
+=============================
+
+For simulations with unsteady (time-varying) flow conditions, *fluvial-particle* can load a sequence of pre-computed velocity fields and interpolate between them during the simulation. This is useful when:
+
+* Flow conditions change significantly during the simulation period
+* You have output from an unsteady CFD simulation
+* You want to capture tidal, flood, or other transient flow effects
+
+To enable time-varying grids, set ``time_dependent = True`` and provide the following settings:
+
+**time_dependent**, bool: Enable time-varying grid mode. When True, velocity fields are loaded from a sequence of grid files and interpolated temporally. Default value: False
+
+**file_pattern_2d**, str: Format string for 2D grid files with ``{}`` as placeholder for the file index. Example: ``"./data/flow_2d_{}.vts"`` will load ``flow_2d_0.vts``, ``flow_2d_1.vts``, etc.
+
+**file_pattern_3d**, str: Format string for 3D grid files, same pattern as file_pattern_2d.
+
+**grid_start_index**, int: Index of the first grid file in the sequence.
+
+**grid_end_index**, int: Index of the last grid file in the sequence (inclusive).
+
+**grid_dt**, float: Time interval between grid files in seconds.
+
+**grid_start_time**, float: Simulation time corresponding to the first grid file. Default value: 0.0
+
+**grid_interpolation**, str: Temporal interpolation method between grid timesteps. Options:
+
+* ``"linear"`` (default): Linear interpolation between grid timesteps. Provides smooth velocity transitions.
+* ``"nearest"``: Use the nearest grid timestep. Snaps to the closest available timestep.
+* ``"hold"``: Use the most recent grid until the next timestep. Step-function behavior.
+
+Example time-varying configuration:
+
+.. code-block:: python
+
+    # Enable time-varying mode
+    time_dependent = True
+
+    # File patterns (grid files: Result_2D_0.vts through Result_2D_10.vts)
+    file_pattern_2d = "./data/unsteady/Result_2D_{}.vts"
+    file_pattern_3d = "./data/unsteady/Result_3D_{}.vts"
+
+    # Grid file indices
+    grid_start_index = 0
+    grid_end_index = 10
+
+    # Timing: each grid file represents 60 seconds of flow
+    grid_dt = 60.0
+    grid_start_time = 0.0
+
+    # Linear interpolation between timesteps
+    grid_interpolation = "linear"
+
+.. note::
+   When using time-varying grids, ``file_name_2d`` and ``file_name_3d`` are ignored. The grid files are loaded based on the file patterns instead.
+
+.. note::
+   The ``TimeVaryingGrid`` class uses a sliding window approach, keeping only 2 grids in memory at a time. This allows simulations with many timesteps without excessive memory usage.
+
+
 LarvalParticles optional keyword arguments
 =============================================
 
