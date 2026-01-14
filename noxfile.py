@@ -79,7 +79,7 @@ def activate_virtualenv_in_precommit_hooks(session: nox.Session) -> None:
 def precommit(session: nox.Session) -> None:
     """Lint using pre-commit (includes ruff, mypy, security checks, etc.)."""
     args = session.posargs or ["run", "--all-files", "--show-diff-on-failure"]
-    session.install("-e", ".[dev]")
+    session.install("-e", ".[ci,dev]")
     session.install("ruff", "pre-commit", "pre-commit-hooks")
     session.run("pre-commit", *args)
     if args and args[0] == "install":
@@ -89,7 +89,7 @@ def precommit(session: nox.Session) -> None:
 @nox.session(python=python_versions)
 def ruff_check(session: nox.Session) -> None:
     """Run ruff linter."""
-    session.install("-e", ".")
+    session.install("-e", ".[ci]")
     session.install("ruff")
     args = session.posargs or ["check", "src", "tests", "noxfile.py"]
     session.run("ruff", *args)
@@ -98,7 +98,7 @@ def ruff_check(session: nox.Session) -> None:
 @nox.session(python=python_versions)
 def ruff_format(session: nox.Session) -> None:
     """Check ruff formatting."""
-    session.install("-e", ".")
+    session.install("-e", ".[ci]")
     session.install("ruff")
     args = session.posargs or ["format", "--check", "src", "tests", "noxfile.py"]
     session.run("ruff", *args)
@@ -107,7 +107,7 @@ def ruff_format(session: nox.Session) -> None:
 @nox.session(python="3.13")
 def safety(session: nox.Session) -> None:
     """Scan dependencies for insecure packages."""
-    session.install("-e", ".[dev]")
+    session.install("-e", ".[ci,dev]")
     session.install("safety")
     session.run("safety", "check", "--full-report")
 
@@ -115,7 +115,7 @@ def safety(session: nox.Session) -> None:
 @nox.session(python=python_versions)
 def mypy(session: nox.Session) -> None:
     """Type-check using mypy."""
-    session.install("-e", ".[dev]")
+    session.install("-e", ".[ci,dev]")
     session.install("mypy", "pytest")
     args = session.posargs or ["src", "tests", "docs/conf.py"]
     session.run("mypy", *args)
@@ -126,7 +126,7 @@ def mypy(session: nox.Session) -> None:
 @nox.session(python=python_versions)
 def tests(session: nox.Session) -> None:
     """Run the test suite."""
-    session.install("-e", ".[dev]")
+    session.install("-e", ".[ci,dev]")
     session.install("coverage[toml]", "pytest", "pygments")
     try:
         session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
@@ -150,7 +150,7 @@ def coverage(session: nox.Session) -> None:
 @nox.session(python=python_versions)
 def typeguard(session: nox.Session) -> None:
     """Runtime type checking using Typeguard."""
-    session.install("-e", ".[dev]")
+    session.install("-e", ".[ci,dev]")
     session.install("pytest", "typeguard", "pygments")
     session.run("pytest", f"--typeguard-packages={package}", *session.posargs)
 
@@ -158,7 +158,7 @@ def typeguard(session: nox.Session) -> None:
 @nox.session(python=python_versions)
 def xdoctest(session: nox.Session) -> None:
     """Run examples with xdoctest."""
-    session.install("-e", ".[dev]")
+    session.install("-e", ".[ci,dev]")
     session.install("xdoctest[colors]")
     args = session.posargs or ["all"]
     session.run("python", "-m", "xdoctest", package, *args)
@@ -167,7 +167,7 @@ def xdoctest(session: nox.Session) -> None:
 @nox.session(name="docs-build", python="3.13")
 def docs_build(session: nox.Session) -> None:
     """Build the documentation."""
-    session.install("-e", ".[dev]")
+    session.install("-e", ".[ci,dev]")
     session.install("sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser", "sphinx-autobuild")
     args = session.posargs or ["docs", "docs/_build/html"]
 
@@ -181,7 +181,7 @@ def docs_build(session: nox.Session) -> None:
 @nox.session(python="3.13")
 def docs(session: nox.Session) -> None:
     """Build and serve the documentation with live reloading on file changes."""
-    session.install("-e", ".[dev]")
+    session.install("-e", ".[ci,dev]")
     session.install("sphinx", "sphinx-autobuild", "sphinx-click", "sphinx-rtd-theme")
     args = session.posargs or ["--open-browser", "docs", "docs/_build"]
 
