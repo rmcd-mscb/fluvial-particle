@@ -275,7 +275,7 @@ def convert_particles_hdf5tocsv(h5fname, output_dir, output_prefix="particles"):
         cellidx2d = props["cellidx2d"][()]
         cellidx3d = props["cellidx3d"][()]
         depth = props["depth"][()]
-        htbabvbed = props["htabvbed"][()]
+        htabvbed = props["htabvbed"][()]
         velvec = props["velvec"][()]
         wse = props["wse"][()]
         vx = velvec[..., 0]
@@ -319,7 +319,7 @@ def convert_particles_hdf5tocsv(h5fname, output_dir, output_prefix="particles"):
                     cellidx2d[idx],
                     cellidx3d[idx],
                     depth[idx],
-                    htbabvbed[idx],
+                    htabvbed[idx],
                     vx[idx],
                     vy[idx],
                     vz[idx],
