@@ -18,9 +18,11 @@ classifiers = [
 ]
 
 dependencies = [
-    # Note: h5py, numpy, and vtk are installed from conda (see environment.yml)
-    # They are NOT listed here to avoid conflicts with conda's optimized builds.
-    # This package requires conda for VTK - there's no reliable PyPI wheel.
+    # For local development: conda provides these (see environment.yml)
+    # For CI/pip installs: PyPI versions are used
+    "h5py>=3.7.0",
+    "numpy>=1.20",
+    "vtk>=9.3.0",
 ]
 
 [project.optional-dependencies]
