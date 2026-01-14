@@ -42,16 +42,17 @@ conda run -n fluvial-particle uv pip install -e ".[dev]"
 - **h5py/numpy** benefit from conda's MKL optimizations
 - **uv is fast** for pure Python dependencies (~10x faster than pip)
 
-Note: h5py/numpy/vtk are listed in BOTH environment.yml (for local dev) and pyproject.toml (for CI). Locally, conda's optimized versions are used. In CI, PyPI versions are used.
+Note: h5py/numpy/vtk are in `environment.yml` (for local dev) and in pyproject.toml's optional `[ci]` group (for CI/pure-pip installs). Locally, conda's optimized versions are used. In CI, install with `pip install -e ".[ci,dev]"`.
 
 ## Adding Dependencies
 
 ### Compiled dependencies (rare):
 1. Add to `environment.yml`
-2. Run: `conda env update -f environment.yml --prune`
+2. Add to `pyproject.toml` under `[project.optional-dependencies] ci`
+3. Run: `conda env update -f environment.yml --prune`
 
 ### Python dependencies (common):
-1. Add to `pyproject.toml` under `dependencies` or `[project.optional-dependencies]`
+1. Add to `pyproject.toml` under `dependencies` or `[project.optional-dependencies] dev`
 2. Run: `conda run -n fluvial-particle uv pip install -e ".[dev]"`
 
 ## Updating Dependencies

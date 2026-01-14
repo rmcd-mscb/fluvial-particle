@@ -17,15 +17,16 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-dependencies = [
-    # For local development: conda provides these (see environment.yml)
-    # For CI/pip installs: PyPI versions are used
+dependencies = []
+
+[project.optional-dependencies]
+# Compiled dependencies - conda provides these locally (see environment.yml)
+# Only install from PyPI in CI or pure-pip environments
+ci = [
     "h5py>=3.7.0",
     "numpy>=1.20",
     "vtk>=9.3.0",
 ]
-
-[project.optional-dependencies]
 dev = [
     # Linting and formatting (replaces black, flake8, darglint, etc.)
     "ruff>=0.8.0",
@@ -46,6 +47,7 @@ dev = [
     "coverage[toml]>=7.4",
     "typeguard>=2.13.3",
     "xdoctest>=1.0.0",
+    "pandas>=2.0.0",
 
     # Documentation
     "Sphinx>=7.0.0",

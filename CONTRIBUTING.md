@@ -39,8 +39,9 @@ to submit changes to this project.
 
 Your pull request needs to meet the following guidelines for acceptance:
 
-- The Nox test suite must pass without errors and warnings.
-- Include unit tests. This project maintains 100% code coverage.
+- All tests must pass (`pytest`).
+- Code must pass linting and formatting checks (`ruff check .` and `ruff format --check .`).
+- Include unit tests for new functionality.
 - If your changes add functionality, update the documentation
   accordingly.
 
@@ -51,7 +52,7 @@ you can install pre-commit as a Git hook by running the following
 command:
 
 ```shell
-nox --session=pre-commit -- install
+pre-commit install --install-hooks
 ```
 
 It is recommended to open an issue before starting work on anything.
@@ -80,111 +81,103 @@ git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-particle-fork
 
 ### Setup development environment
 
+This project uses a **hybrid conda + uv** approach:
+- **Conda**: Provides Python environment + compiled C/C++ dependencies (VTK, h5py, numpy)
+- **uv**: Fast package installer for pure Python dependencies
+
 ```shell
+# Create conda environment (provides VTK, h5py, numpy)
 conda env create -f environment.yml
-conda develop -n fluvial-particle src
+
+# Activate the environment
 conda activate fluvial-particle
-pip install -r requirements.dev
+
+# Install Python dependencies with uv (including dev deps from pyproject.toml)
+uv pip install -e ".[dev]"
 ```
 
-It is important to get [preccommit](https://pre-commit.com/) enabled on
+**Important**: Do NOT use `uv sync` - it creates an isolated `.venv` that can't see conda's packages.
+
+It is important to get [pre-commit](https://pre-commit.com/) enabled on
 the project, to ensure that certain standards are always met on a git
 commit. With several of these, it might fail if files are changed, but
 it will change them, and trying the commit a second time will actually
 work.
 
-### Git hook configuration
-
-```shell
-pre-commit install --install-hooks
-```
-
 ### Testing
 
-[Nox](https://nox.thea.codes/) is used for testing everything, with
-several sessions built-in. To run the full suite of tests, simply use:
+Run the test suite with [pytest](https://docs.pytest.org/en/latest/):
 
 ```shell
-nox
+pytest                          # run all tests
+pytest -v                       # verbose output
+pytest tests/test_main.py       # specific file
+pytest -k "test_name"           # by name pattern
 ```
 
-The different sessions are:
-
-- `pre-commit` -- validates that the
-  [preccommit](https://pre-commit.com/) checks all come back clean.
-- `safety` -- validates the [Safety](https://github.com/pyupio/safety)
-  of all production dependencies.
-- `mypy` -- validates the type-hints for the application using
-  [mypy](http://mypy-lang.org/).
-- `tests` -- runs all [pytest](https://docs.pytest.org/en/latest/)
-  tests.
-- `typeguard` -- runs all [pytest](https://docs.pytest.org/en/latest/)
-  tests, validates with
-  [Typeguard](https://github.com/agronholm/typeguard).
-- `xdoctest` -- runs any and all documentation examples with
-  [xdoctest](https://github.com/Erotemic/xdoctest).
-- `docs-build` -- builds the full set of generated API docs with
-  [Sphinx](http://www.sphinx-doc.org/).
-
-These can be run individually with the following command:
+### Code Quality
 
 ```shell
-nox -s <session>
-```
+# Lint code
+ruff check .
 
-Replace `<session>` with the name of the session give above, i.e.:
+# Format code
+ruff format .
 
-```shell
-nox -s mypy
-```
+# Type checking
+mypy src/
 
-You can also simply run [pytest](https://docs.pytest.org/en/latest/)
-tests, by using the command:
-
-```shell
-pytest tests
+# Run all pre-commit hooks
+pre-commit run --all-files
 ```
 
 ### Dependencies
 
-Production dependencies are duplicated, in both `requirements.txt` and
-`environment.yml` due to how [conda](https://www.anaconda.com) does not
-work with the `requirements.txt` file. It is necessary for both files to
-be updated as dependencies are added.
+Dependencies are managed in two places:
 
-Development dependencies are contained in `requirements.dev`.
+- **`environment.yml`**: Compiled C/C++ dependencies (VTK, h5py, numpy) - installed via conda
+- **`pyproject.toml`**: Pure Python dependencies and dev tools - installed via uv
+
+The compiled dependencies (vtk, h5py, numpy) are in an optional `[ci]` group in pyproject.toml,
+used only for CI environments. Locally, conda provides these packages.
+
+#### Local development:
+```shell
+uv pip install -e ".[dev]"
+```
+
+#### CI/pure-pip environments:
+```shell
+pip install -e ".[ci,dev]"
+```
+
+#### Adding compiled dependencies (rare):
+1. Add to both `environment.yml` AND `pyproject.toml` under `[project.optional-dependencies] ci`
+2. Run: `conda env update -f environment.yml --prune`
+
+#### Adding Python dependencies (common):
+1. Add to `pyproject.toml` under `dependencies` or `[project.optional-dependencies] dev`
+2. Run: `uv pip install -e ".[dev]"`
 
 ### Version Management
 
-The projects made by this cookiecutter use
-[Bump2version](https://github.com/c4urself/bump2version) for version
-management. The default version that the project starts with is a
-developmental version, `0.0.1-dev0`. In github, this should be
-auto-incremented on each commit to the next dev build number. To manage
-the version changes yourself, you can use the
-[Bump2version](https://github.com/c4urself/bump2version) command:
+This project uses [bump-my-version](https://github.com/callowayproject/bump-my-version)
+to update version numbers across multiple files:
+- `pyproject.toml`
+- `src/fluvial_particle/__init__.py`
+- `.bumpversion.cfg`
+- `code.json`
+- `meta.yaml`
 
 ```shell
-bump2version <part>
+# Patch: 0.0.3 -> 0.0.4
+bump-my-version bump patch
+
+# Minor: 0.0.4 -> 0.1.0
+bump-my-version bump minor
+
+# Major: 0.1.0 -> 1.0.0
+bump-my-version bump major
 ```
 
-Where `<part>` is one of:
-
-- `major`
-- `minor`
-- `patch`
-- `build`
-
-Note:
-: This makes a `dev` version, which does not write a tag into git. It is just useful for development purposes and not the version that is recommended for a release version. The version string will be formatted as: `<major>.<minor>.<patch>-dev<build>`
-
-To do a production release, use the command:
-
-```shell
-bump2version --tag release
-```
-
-This will add a tag in the git repository noting the version.
-
-Note:
-: The version string for this will be: `<major>.<minor>.<patch>`
+**Note**: This automatically commits changes and creates git tags.
