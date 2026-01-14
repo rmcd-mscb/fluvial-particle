@@ -34,7 +34,7 @@ conda env create -f environment.yml
 conda run -n fluvial-particle uv pip install -e ".[dev]"
 ```
 
-**Important**: Do NOT use `uv sync` - it creates an isolated `.venv` that can't see conda's packages.
+**Important**: Do NOT use `uv sync` (which reads from `uv.lock` and creates an isolated virtual environment in `.venv`) — it creates an isolated `.venv` that cannot see conda's packages. Always run `uv pip install` inside the activated conda environment instead.
 
 ## Why Hybrid?
 

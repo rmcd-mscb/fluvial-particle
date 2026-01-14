@@ -96,7 +96,7 @@ conda activate fluvial-particle
 uv pip install -e ".[dev]"
 ```
 
-**Important**: Do NOT use `uv sync` - it creates an isolated `.venv` that can't see conda's packages.
+**Important**: Do NOT use `uv sync` (which reads from `uv.lock` and creates an isolated virtual environment in `.venv`) — it creates an isolated `.venv` that cannot see conda's packages. Always run `uv pip install` inside the activated conda environment instead.
 
 It is important to get [pre-commit](https://pre-commit.com/) enabled on
 the project, to ensure that certain standards are always met on a git
@@ -158,6 +158,11 @@ pip install -e ".[ci,dev]"
 #### Adding Python dependencies (common):
 1. Add to `pyproject.toml` under `dependencies` or `[project.optional-dependencies] dev`
 2. Run: `uv pip install -e ".[dev]"`
+
+#### Note on pandas
+`pandas` is included in the `[dev]` optional dependencies. It is required to run tests that use
+`pytest.importorskip("pandas")` and to enable optional DataFrame export functionality, but it is
+not required for running the core simulation.
 
 ### Version Management
 

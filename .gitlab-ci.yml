@@ -33,7 +33,7 @@ stages:
     - source activate base
     - which python
     - pip install uv
-    - uv pip install -e . --system
+    - uv pip install -e ".[dev]" --system
 
 .docker-template: &docker
   <<: *install-deps
