@@ -418,6 +418,60 @@ class Particles:
         if self.part_start_time is None:
             self.part_start_time = np.full(self.nparts, fill_value=starttime, dtype=np.float64)
 
+    def _apply_temporal_interpolation_2d(self, field_values: np.ndarray, field_name: str) -> np.ndarray:
+        """Apply temporal interpolation for time-varying grids (2D fields).
+
+        Args:
+            field_values: Array of field values from the current grid.
+            field_name: Name of the field array in VTK.
+
+        Returns:
+            Interpolated field values (blended if using time-varying grid with weight > 0).
+        """
+        if not hasattr(self.mesh, "get_interpolation_weight"):
+            return field_values
+
+        weight = self.mesh.get_interpolation_weight()
+        if weight == 0.0 or not self.mesh.has_next_grid:
+            return field_values
+
+        if weight == 1.0:
+            # Use next grid entirely (nearest mode at midpoint)
+            next_ptsout = self.mesh.next_probe2d.GetOutput().GetPointData()
+            return numpy_support.vtk_to_numpy(next_ptsout.GetArray(field_name))
+
+        # Linear blend between current and next
+        next_ptsout = self.mesh.next_probe2d.GetOutput().GetPointData()
+        field_next = numpy_support.vtk_to_numpy(next_ptsout.GetArray(field_name))
+        return (1.0 - weight) * field_values + weight * field_next
+
+    def _apply_temporal_interpolation_3d(self, field_values: np.ndarray, field_name: str) -> np.ndarray:
+        """Apply temporal interpolation for time-varying grids (3D fields).
+
+        Args:
+            field_values: Array of field values from the current grid.
+            field_name: Name of the field array in VTK.
+
+        Returns:
+            Interpolated field values (blended if using time-varying grid with weight > 0).
+        """
+        if not hasattr(self.mesh, "get_interpolation_weight"):
+            return field_values
+
+        weight = self.mesh.get_interpolation_weight()
+        if weight == 0.0 or not self.mesh.has_next_grid:
+            return field_values
+
+        if weight == 1.0:
+            # Use next grid entirely (nearest mode at midpoint)
+            next_ptsout = self.mesh.next_probe3d.GetOutput().GetPointData()
+            return numpy_support.vtk_to_numpy(next_ptsout.GetArray(field_name))
+
+        # Linear blend between current and next
+        next_ptsout = self.mesh.next_probe3d.GetOutput().GetPointData()
+        field_next = numpy_support.vtk_to_numpy(next_ptsout.GetArray(field_name))
+        return (1.0 - weight) * field_values + weight * field_next
+
     def interp_3d_field(self, px=None, py=None, pz=None):
         """Interpolate 3D velocity field at current particle positions.
 
@@ -449,6 +503,10 @@ class Particles:
         ptsout = self.mesh.probe3d.GetOutput().GetPointData()
         dataout = ptsout.GetArray("velocity")
         vel = numpy_support.vtk_to_numpy(dataout)
+
+        # Apply temporal interpolation for time-varying grids
+        vel = self._apply_temporal_interpolation_3d(vel, "velocity")
+
         # Interpolation on cell-centered ordered integer array gives cell index number
         cellidxvtk = ptsout.GetArray("CellIndex")
         cellidx = numpy_support.vtk_to_numpy(cellidxvtk)
@@ -506,6 +564,10 @@ class Particles:
                 # Get 2D Velocity components
                 vel = ptsout.GetArray("velocity")
                 vel_np = numpy_support.vtk_to_numpy(vel)
+
+                # Apply temporal interpolation for time-varying grids
+                vel_np = self._apply_temporal_interpolation_2d(vel_np, "velocity")
+
                 if idx is None:
                     self.velx = vel_np[:, 0]
                     self.vely = vel_np[:, 1]

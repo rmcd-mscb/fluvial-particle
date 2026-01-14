@@ -5,12 +5,11 @@ Particle tracking in river flows using VTK structured grids.
 ## Quick Reference
 
 ```bash
-# Always use uv run for commands
-uv run pytest              # run tests
-uv run ruff check .        # lint
-uv run ruff format .       # format
-uv run mypy src/           # type check
-uv run sphinx-build docs docs/_build/html  # build docs
+# All commands run in conda environment
+conda run -n fluvial-particle pytest              # run tests
+conda run -n fluvial-particle ruff check .        # lint
+conda run -n fluvial-particle ruff format .       # format
+conda run -n fluvial-particle pre-commit run --all-files  # pre-commit
 ```
 
 ## Project Structure

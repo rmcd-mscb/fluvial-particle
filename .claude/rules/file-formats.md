@@ -1,54 +1,71 @@
-# Supported Input File Formats
+# Working with Input File Formats
 
-## Grid Formats
+## Supported Grid Formats
 
-| Format | Extension | Description |
-|--------|-----------|-------------|
-| VTK XML Structured Grid | `.vts` | **Recommended** - Binary with compression |
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| VTK XML Structured Grid | `.vts` | **Preferred** - Binary with compression |
 | VTK Legacy | `.vtk` | ASCII or binary, widely compatible |
-| NumPy Archive | `.npz` | Python-specific compressed format |
+| NumPy Archive | `.npz` | Python-specific, fixed field names |
 
 ## Field Name Mapping
 
-Different hydrodynamic models use different array names. Use `field_map_2d` and `field_map_3d` to map model names to standard internal names.
+Different hydrodynamic models use different array names. Map model names to standard internal names using `field_map_2d` and `field_map_3d` in the options file.
 
-### Standard 2D Fields (required)
+### Required 2D Fields
 - `bed_elevation` - bed/bottom elevation
 - `shear_stress` - shear stress magnitude
-- `velocity` - velocity vector
+- `velocity` - velocity vector (3 components)
 - `water_surface_elevation` - water surface elevation
 
 ### Optional 2D Fields
-- `wet_dry` - wet/dry indicator (1=wet, 0=dry). If omitted, computed from depth using `min_depth` threshold.
+- `wet_dry` - wet/dry indicator (1=wet, 0=dry). If omitted, auto-computed from depth using `min_depth`.
 
-### Standard 3D Fields
-- `velocity` - velocity vector
+### Required 3D Fields
+- `velocity` - velocity vector (3 components)
 
-### Example (Delft-FM)
-
+### Example Field Map
 ```python
 field_map_2d = {
     "bed_elevation": "Elevation",
-    "wet_dry": "IBC",  # optional
     "shear_stress": "ShearStress (magnitude)",
     "velocity": "Velocity",
     "water_surface_elevation": "WaterSurfaceElevation",
+    # wet_dry optional - omit to auto-compute
 }
-field_map_3d = {
-    "velocity": "Velocity",
-}
+field_map_3d = {"velocity": "Velocity"}
 ```
 
-## VTS Time Metadata
+## Adding a New Input Format
 
-VTS files can include time metadata in FieldData:
-- `TimeValue` (Float64): Time in seconds for ParaView
-- `TimeStep` (Int32): Integer timestep index
+1. Add reader method in `RiverGrid.py` (see `read_2d_data()`, `read_3d_data()`)
+2. Handle file extension detection in the suffix check
+3. Apply field mapping with `_apply_field_mapping()`
+4. Add tests with sample data in `tests/data/`
 
-## NPZ Format
+## Time-Varying Grids
 
-For `.npz` files, field mappings are not used. NPZ uses fixed internal names:
-- `x`, `y`, `z` (optional) - coordinates
-- `elev`, `wse`, `shear` - scalar fields
-- `vx`, `vy`, `vz` (optional) - velocity components
-- `ibc` (optional) - wet/dry indicator
+For unsteady simulations, provide a file sequence instead of single files:
+
+```python
+time_dependent = True
+file_pattern_2d = "./data/flow_2d_{}.vts"  # {} = file index
+file_pattern_3d = "./data/flow_3d_{}.vts"
+grid_start_index = 2
+grid_end_index = 6
+grid_dt = 1.0  # seconds between files
+grid_interpolation = "linear"  # or "nearest", "hold"
+```
+
+The `TimeVaryingGrid` class handles:
+- Sliding window loading (2 grids in memory)
+- Automatic advancement during simulation
+- Temporal interpolation between timesteps
+
+## NPZ Format Details
+
+NPZ files use fixed internal names (no field mapping):
+- Coordinates: `x`, `y`, `z` (optional)
+- Scalars: `elev`, `wse`, `shear`
+- Velocity: `vx`, `vy`, `vz` (optional)
+- Wet/dry: `ibc` (optional)

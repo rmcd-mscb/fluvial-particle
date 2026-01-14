@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import numpy as np
 
+from .grids import TimeVaryingGrid
 from .Helpers import get_prng, load_checkpoint, load_variable_source
 from .io import PVDWriter, VTPWriter
 from .RiverGrid import RiverGrid
@@ -65,13 +66,33 @@ def simulate(settings, argvars, timer, comm=None):
     # Type of Particles class or subclass to simulate
     particles = settings["ParticleType"]
 
-    # Initialize RiverGrid object with field name mappings
+    # Initialize grid object with field name mappings
     field_map_2d = settings["field_map_2d"]
     field_map_3d = settings["field_map_3d"]
     min_depth = settings.get(
         "min_depth"
     )  # Optional threshold for auto-computing wet_dry from depth (if wet_dry not in field_map_2d)
-    river = RiverGrid(track3d, file_name_2d, file_name_3d, field_map_2d, field_map_3d, min_depth)
+
+    # Check for time-dependent grid mode
+    time_dependent = settings.get("time_dependent", False)
+    if time_dependent:
+        # Time-varying grid from file sequence
+        river = TimeVaryingGrid(
+            track3d=track3d,
+            file_pattern_2d=settings["file_pattern_2d"],
+            file_pattern_3d=settings["file_pattern_3d"],
+            field_map_2d=field_map_2d,
+            field_map_3d=field_map_3d,
+            grid_start_index=settings["grid_start_index"],
+            grid_end_index=settings["grid_end_index"],
+            grid_dt=settings["grid_dt"],
+            grid_start_time=settings.get("grid_start_time", 0.0),
+            interpolation=settings.get("grid_interpolation", "linear"),
+            min_depth=min_depth,
+        )
+    else:
+        # Static grid (default behavior)
+        river = RiverGrid(track3d, file_name_2d, file_name_3d, field_map_2d, field_map_3d, min_depth)
 
     # Initialize particle positions
     if isinstance(settings["StartLoc"], tuple):
@@ -167,6 +188,11 @@ def simulate(settings, argvars, timer, comm=None):
             print("Velocity field will be interpolated from 3D grid", flush=True)
         else:
             print("Velocity field will be interpolated from 2D grid", flush=True)
+        if time_dependent:
+            print(
+                f"Time-dependent grids enabled: {len(river.grid_times)} timesteps, interpolation={river.interpolation}",
+                flush=True,
+            )
         print(
             f"Simulation start time is {starttime}, maximum end time is {endtime}, \
             using timesteps of {dt} (all in seconds).",
@@ -176,6 +202,10 @@ def simulate(settings, argvars, timer, comm=None):
     t0 = timer()
 
     for i in range(n_times):
+        # Advance time-varying grid if applicable
+        if time_dependent:
+            river.advance_to_time(times[i])
+
         particles.move(times[i], dt)
 
         # Check that there are still active particles

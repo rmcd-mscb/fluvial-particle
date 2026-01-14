@@ -18,11 +18,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "h5py>=3.15.1",
-    # Note: h5py and vtk are installed from conda (see environment.yml)
-    # They are NOT listed here to avoid conflicts with conda-installed versions
-    "numpy>=2.2.6",
-    "vtk>=9.5.2",
+    # For local development: conda provides these (see environment.yml)
+    # For CI/pip installs: PyPI versions are used
+    "h5py>=3.7.0",
+    "numpy>=1.20",
+    "vtk>=9.3.0",
 ]
 
 [project.optional-dependencies]
@@ -130,7 +130,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401", "D104", "RUF067"]  # Unused imports (re-exports), missing docstring, module-level variables OK
+"__init__.py" = ["F401", "D104", "RUF067"]  # Unused imports (re-exports), missing docstring OK, allow metadata vars
 "simulation.py" = ["PLR0912"]  # Too many branches (complex simulation logic)
 "noxfile.py" = ["D", "S"]         # Skip docstring and security checks
 "tests/**/*.py" = ["D", "S101", "PLR2004"]  # Skip docstrings, allow assert and magic values
