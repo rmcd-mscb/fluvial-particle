@@ -10,11 +10,165 @@ import vtk
 from vtk.util import numpy_support
 
 
-def checkcommandarguments():
-    """Check the user's command line arguments."""
-    parser = create_parser()
+# Template for user settings file
+SETTINGS_TEMPLATE = '''\
+"""User options file for fluvial-particle simulation.
 
+This file defines all simulation parameters. Edit the values below to configure
+your particle tracking simulation. See the documentation for detailed descriptions:
+https://fluvial-particle.readthedocs.io/en/latest/optionsfile.html
+"""
+
+from fluvial_particle.Particles import Particles
+
+# =============================================================================
+# REQUIRED: Field name mappings
+# =============================================================================
+# Map standard field names to the names used in your mesh files.
+# These depend on the hydrodynamic model that generated your mesh.
+
+field_map_2d = {
+    "bed_elevation": "Elevation",           # Bed/bottom elevation
+    "shear_stress": "ShearStress (magnitude)",  # Shear stress magnitude
+    "velocity": "Velocity",                 # Velocity vector
+    "water_surface_elevation": "WaterSurfaceElevation",  # Water surface elevation
+    # "wet_dry": "IBC",                     # Optional: wet/dry indicator (1=wet, 0=dry)
+                                            # If omitted, computed from depth using min_depth
+}
+
+field_map_3d = {
+    "velocity": "Velocity",                 # 3D velocity vector
+}
+
+# =============================================================================
+# REQUIRED: Input mesh files
+# =============================================================================
+# Paths to your mesh files. Supported formats: .vts (recommended), .vtk, .npz
+
+file_name_2d = "./path/to/your/mesh_2d.vts"
+file_name_3d = "./path/to/your/mesh_3d.vts"
+
+# =============================================================================
+# REQUIRED: Simulation timing
+# =============================================================================
+
+SimTime = 60.0       # Maximum simulation time [seconds]
+dt = 0.25            # Time step [seconds]
+PrintAtTick = 10.0   # Output interval [seconds]
+
+# =============================================================================
+# REQUIRED: Simulation mode and particles
+# =============================================================================
+
+Track3D = 1          # 1 = 3D velocity field, 0 = 2D velocity field
+NumPart = 100        # Number of particles per processor
+
+# Starting location: tuple (x, y, z) or path to checkpoint file (.h5) or CSV (.csv)
+StartLoc = (0.0, 0.0, 0.0)
+
+# =============================================================================
+# REQUIRED: Particle type
+# =============================================================================
+# Use Particles for basic transport, or subclasses for specialized behavior:
+# - LarvalTopParticles, LarvalBotParticles: Sinusoidal swimming behavior
+# - FallingParticles: Settling/falling particles
+
+ParticleType = Particles  # noqa: F401
+
+# =============================================================================
+# OPTIONAL: Particle parameters
+# =============================================================================
+
+# startfrac = 0.5            # Initial vertical position as fraction of depth (0=bed, 1=surface)
+# beta = (0.067, 0.067, 0.067)  # 3D diffusion coefficients
+# lev = 0.25                 # Lateral eddy viscosity
+# min_depth = 0.02           # Minimum depth threshold [meters]
+# vertbound = 0.01           # Vertical boundary buffer (prevents particles at exact bed/surface)
+
+# =============================================================================
+# OPTIONAL: Output settings
+# =============================================================================
+
+# output_vtp = True          # Also write VTK PolyData (.vtp) files for ParaView
+
+# =============================================================================
+# OPTIONAL: Time-varying grids (for unsteady flow simulations)
+# =============================================================================
+# Uncomment and configure these to use time-dependent velocity fields.
+
+# time_dependent = True
+# file_pattern_2d = "./data/unsteady/Result_2D_{}.vts"  # {} = file index
+# file_pattern_3d = "./data/unsteady/Result_3D_{}.vts"
+# grid_start_index = 0       # First file index
+# grid_end_index = 10        # Last file index (inclusive)
+# grid_dt = 60.0             # Time between grid files [seconds]
+# grid_start_time = 0.0      # Simulation time of first grid file
+# grid_interpolation = "linear"  # "linear", "nearest", or "hold"
+
+# =============================================================================
+# OPTIONAL: LarvalParticles parameters (only for LarvalTopParticles/LarvalBotParticles)
+# =============================================================================
+
+# amp = 0.2                  # Amplitude of sinusoidal swimming
+# period = 60.0              # Period of swimming behavior [seconds]
+
+# =============================================================================
+# OPTIONAL: FallingParticles parameters (only for FallingParticles)
+# =============================================================================
+
+# c1 = 20.0                  # Viscous drag coefficient
+# c2 = 1.1                   # Turbulent wake drag coefficient
+# radius = 0.0005            # Particle radius [meters]
+# rho = 2650.0               # Particle density [kg/m^3]
+'''
+
+
+def generate_settings_template(output_path: str = "user_options.py") -> None:
+    """Generate a template settings file for the user.
+
+    Args:
+        output_path: Path where the template file will be written.
+                    Defaults to 'user_options.py' in the current directory.
+    """
+    output_file = pathlib.Path(output_path)
+
+    if output_file.exists():
+        print(f"Error: {output_file} already exists. Aborting to avoid overwriting.")
+        raise SystemExit(1)
+
+    output_file.write_text(SETTINGS_TEMPLATE, encoding="utf-8")
+    print(f"Created settings template: {output_file}")
+    print("\nNext steps:")
+    print("  1. Edit the file to configure your simulation parameters")
+    print("  2. Update file paths to point to your mesh files")
+    print("  3. Adjust field_map_2d/field_map_3d for your hydrodynamic model")
+    print("  4. Run: fluvial-particle user_options.py ./output")
+
+
+def checkcommandarguments():
+    """Check the user's command line arguments.
+
+    Returns:
+        dict: Parsed command-line arguments as a dictionary.
+
+    Raises:
+        SystemExit: If --init flag is provided (after generating template).
+        FileNotFoundError: If settings_file does not exist.
+        NotADirectoryError: If output_directory does not exist.
+    """
+    parser = create_parser()
     argdict = vars(parser.parse_args())
+
+    # Handle --init flag
+    if argdict.get("init"):
+        generate_settings_template()
+        raise SystemExit(0)
+
+    # Validate required positional arguments for simulation
+    if argdict["settings_file"] is None:
+        parser.error("settings_file is required (unless using --init)")
+    if argdict["output_directory"] is None:
+        parser.error("output_directory is required (unless using --init)")
 
     inputfile = pathlib.Path(argdict["settings_file"])
     if not inputfile.exists():
@@ -121,7 +275,7 @@ def convert_particles_hdf5tocsv(h5fname, output_dir, output_prefix="particles"):
         cellidx2d = props["cellidx2d"][()]
         cellidx3d = props["cellidx3d"][()]
         depth = props["depth"][()]
-        htbabvbed = props["htabvbed"][()]
+        htabvbed = props["htabvbed"][()]
         velvec = props["velvec"][()]
         wse = props["wse"][()]
         vx = velvec[..., 0]
@@ -165,7 +319,7 @@ def convert_particles_hdf5tocsv(h5fname, output_dir, output_prefix="particles"):
                     cellidx2d[idx],
                     cellidx3d[idx],
                     depth[idx],
-                    htbabvbed[idx],
+                    htabvbed[idx],
                     vx[idx],
                     vy[idx],
                     vz[idx],
@@ -180,25 +334,75 @@ def create_parser():
     Returns:
         argparse.ArgumentParser: the container for command line argument specifications
     """
+    from . import __version__
+
     parser = argparse.ArgumentParser(
-        description="fluvial_particle",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        prog="fluvial-particle",
+        description=(
+            "Lagrangian particle tracking for fluvial environments. "
+            "Simulates particle transport in rivers using velocity fields "
+            "from hydrodynamic models (Delft-FM, iRIC, HEC-RAS, etc.)."
+        ),
+        epilog=(
+            "Example usage:\n"
+            "  fluvial-particle settings.py ./output      Run simulation\n"
+            "  fluvial-particle --init                    Generate template settings file\n"
+            "  fluvial-particle --version                 Show version information\n"
+            "\n"
+            "Documentation: https://fluvial-particle.readthedocs.io/"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("settings_file", help="User settings file")
-    parser.add_argument("output_directory", help="Output directory for results")
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
+
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Generate a template settings file (user_options.py) in the current directory.",
+    )
+
+    parser.add_argument(
+        "settings_file",
+        nargs="?",
+        help=(
+            "Path to the user settings file (Python script defining simulation parameters). "
+            "See documentation for required and optional parameters."
+        ),
+    )
+
+    parser.add_argument(
+        "output_directory",
+        nargs="?",
+        help=(
+            "Directory where output files (particles.h5, particles.xmf, cells.h5, etc.) "
+            "will be written. Must exist before running."
+        ),
+    )
+
     parser.add_argument(
         "--seed",
         dest="seed",
         type=int,
         default=None,
-        help="Specify a single integer to fix the seed of the random number generator. Only used in serial mode.",
+        metavar="INT",
+        help=(
+            "Random seed for reproducible simulations. If not specified, "
+            "a seed is generated from the current time and process ID. "
+            "Only used in serial mode."
+        ),
     )
+
     parser.add_argument(
         "--no-postprocess",
         "--no_postprocess",
         action="store_false",
-        help="Include this flag to prevent RiverGrid post-processing.",
-    )  # note: argparse will convert to key="no_postprocess"
+        help="Skip RiverGrid post-processing (XDMF file generation, cell counters).",
+    )  # argparse converts dest to "no_postprocess"; store_false means default=True
 
     return parser
 

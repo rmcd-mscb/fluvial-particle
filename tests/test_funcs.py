@@ -1,5 +1,6 @@
 """Test cases for the Settings and Helpers modules."""
 
+import pathlib
 import time
 from os.path import join
 from tempfile import TemporaryDirectory
@@ -11,9 +12,11 @@ from numpy.testing import assert_allclose, assert_equal, assert_string_equal
 from vtk.util import numpy_support
 
 from fluvial_particle.Helpers import (
+    SETTINGS_TEMPLATE,
     convert_grid_hdf5tovtk,
     convert_particles_hdf5tocsv,
     create_parser,
+    generate_settings_template,
     get_prng,
     load_checkpoint,
     load_variable_source,
@@ -80,6 +83,79 @@ def test_create_parser():
 
     assert_equal(ns_2.seed, 10)
     assert_equal(ns_2.no_postprocess, False)
+
+
+def test_create_parser_init_flag():
+    """Test that --init flag is recognized."""
+    parser = create_parser()
+
+    args = parser.parse_args(["--init"])
+    assert_equal(args.init, True)
+    assert args.settings_file is None
+    assert args.output_directory is None
+
+
+def test_create_parser_version_flag():
+    """Test that --version flag is recognized."""
+    parser = create_parser()
+
+    # --version raises SystemExit, so we need to catch it
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["--version"])
+    assert exc_info.value.code == 0
+
+
+def test_generate_settings_template():
+    """Test the settings template generator."""
+    with TemporaryDirectory() as tmpdir:
+        output_path = join(tmpdir, "test_options.py")
+        generate_settings_template(output_path)
+
+        # Verify file was created
+        assert pathlib.Path(output_path).exists()
+
+        # Verify contents
+        content = pathlib.Path(output_path).read_text(encoding="utf-8")
+        assert "field_map_2d" in content
+        assert "field_map_3d" in content
+        assert "file_name_2d" in content
+        assert "SimTime" in content
+        assert "ParticleType" in content
+
+
+def test_generate_settings_template_no_overwrite():
+    """Test that template generator refuses to overwrite existing files."""
+    with TemporaryDirectory() as tmpdir:
+        output_path = join(tmpdir, "existing.py")
+
+        # Create existing file
+        pathlib.Path(output_path).write_text("existing content", encoding="utf-8")
+
+        # Should raise SystemExit when trying to overwrite
+        with pytest.raises(SystemExit) as exc_info:
+            generate_settings_template(output_path)
+        assert exc_info.value.code == 1
+
+
+def test_settings_template_content():
+    """Test that the settings template contains all required sections."""
+    # Check required fields are documented
+    assert "field_map_2d" in SETTINGS_TEMPLATE
+    assert "field_map_3d" in SETTINGS_TEMPLATE
+    assert "file_name_2d" in SETTINGS_TEMPLATE
+    assert "file_name_3d" in SETTINGS_TEMPLATE
+    assert "SimTime" in SETTINGS_TEMPLATE
+    assert "dt" in SETTINGS_TEMPLATE
+    assert "PrintAtTick" in SETTINGS_TEMPLATE
+    assert "Track3D" in SETTINGS_TEMPLATE
+    assert "NumPart" in SETTINGS_TEMPLATE
+    assert "StartLoc" in SETTINGS_TEMPLATE
+    assert "ParticleType" in SETTINGS_TEMPLATE
+
+    # Check optional fields are documented
+    assert "time_dependent" in SETTINGS_TEMPLATE
+    assert "grid_interpolation" in SETTINGS_TEMPLATE
+    assert "output_vtp" in SETTINGS_TEMPLATE
 
 
 def test_get_prng():
