@@ -2,7 +2,7 @@
 
 __author__ = "Richard McDonald"
 __email__ = "rmcd@usgs.gov"
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 
 # Re-export public API
 from .cli import track_mpi, track_serial

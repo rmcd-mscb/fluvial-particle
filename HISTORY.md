@@ -1,5 +1,51 @@
 # History
 
+## 0.0.5 (2026-01-14)
+
+### New Features
+
+#### Time-Varying Grid Support
+- Added `TimeVaryingGrid` class for unsteady flow simulations with pre-computed velocity fields
+- Supports temporal interpolation between grid timesteps: `linear`, `nearest`, and `hold` modes
+- Sliding window approach keeps only 2 grids in memory for efficient large simulations
+- Velocity blending between timesteps for smooth particle transport
+
+#### VTP/PVD Output Format
+- Added optional VTK PolyData (.vtp) output for native ParaView support
+- PVD collection files with timestamp information for time-series visualization
+- Enable with `output_vtp = True` in settings file
+
+#### Notebook Convenience API
+- New `SimulationResults` class for easy access to simulation output
+  - `get_positions()`, `get_positions_2d()` for particle coordinates
+  - `get_property()`, `get_velocities()`, `get_depths()` for particle data
+  - `to_dataframe()` for optional pandas DataFrame export
+  - `summary()` for quick overview of results
+- New `run_simulation()` function wrapping verbose setup into single call
+- Context manager support for automatic HDF5 file cleanup
+
+#### CLI Improvements
+- Added comprehensive `--help` with program description and usage examples
+- Added `--version` flag
+- Added `--init` flag to generate template settings file (`user_options.py`)
+
+#### Multi-Model Support
+- Added `field_map_2d` and `field_map_3d` for mapping standard field names to model-specific names
+- Supports output from Delft-FM, iRIC, HEC-RAS, and other hydrodynamic models
+- Optional `wet_dry` field - auto-computed from depth when not provided
+
+#### VTS File Format Support
+- Added VTK XML Structured Grid (.vts) format as recommended input format
+- Binary format with compression, 5-10x smaller than legacy VTK
+
+### Documentation
+- Added time-varying grid settings documentation
+- Added Copilot code review instructions (`.github/copilot-instructions.md`)
+- Updated options file reference with all new parameters
+
+### Bug Fixes
+- Fixed velocity blending for time-varying grids (interpolation weight was calculated but not applied)
+
 ## 0.0.4 (2026-01-07)
 
 ### Bug Fixes
