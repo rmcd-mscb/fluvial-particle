@@ -39,6 +39,25 @@ field_map_3d = {
 }
 ```
 
+## Time-Varying Grids (PR #22)
+
+For time-dependent simulations, use file sequences instead of single grid files:
+
+```python
+time_dependent = True
+file_pattern_2d = "./data/flow_2d_{}.vts"  # {} replaced with index
+file_pattern_3d = "./data/flow_3d_{}.vts"
+grid_start_index = 2      # First file index
+grid_end_index = 6        # Last file index
+grid_dt = 1.0             # Seconds between grid files
+grid_interpolation = "linear"  # linear | nearest | hold
+```
+
+The `TimeVaryingGrid` class in `src/fluvial_particle/grids/` manages:
+- Sliding window loading (2 grids in memory)
+- Automatic grid advancement during simulation
+- Temporal interpolation between grid timesteps
+
 ## VTS Time Metadata
 
 VTS files can include time metadata in FieldData:

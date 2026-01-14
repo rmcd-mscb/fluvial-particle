@@ -1,6 +1,13 @@
 # Output Code Refactoring Plan
 
-Status: **Planned** (not yet implemented)
+Status: **Partially Implemented**
+
+## Completed (PR #19)
+
+- VTP/PVD output implemented in `src/fluvial_particle/io/`
+- `VTPWriter` class for particle VTP output
+- `PVDWriter` class for time series collections
+- Enable with `output_vtp = True` in settings
 
 ## Current Architecture
 
