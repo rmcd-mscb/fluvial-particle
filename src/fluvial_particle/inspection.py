@@ -164,13 +164,15 @@ def _inspect_time_dependent(settings: dict, timestep: int | None) -> dict[str, A
 
     # Calculate the actual timestep index
     n_grids = grid_end_index - grid_start_index + 1
+    original_timestep = timestep
     if timestep is None:
         timestep = 0
     elif timestep < 0:
         timestep = n_grids + timestep
 
     if timestep < 0 or timestep >= n_grids:
-        raise ValueError(f"timestep {timestep} out of range [0, {n_grids - 1}]")
+        bad_timestep = original_timestep if original_timestep is not None else timestep
+        raise ValueError(f"timestep {bad_timestep} out of range [0, {n_grids - 1}]")
 
     # Load the time-varying grid
     river = TimeVaryingGrid(
