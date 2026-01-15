@@ -1,6 +1,6 @@
 [project]
 name = "fluvial-particle"
-version = "0.0.5"
+version = "0.0.6"
 description = "Lagrangian particle-tracking for fluvial environments."
 authors = [
     {name = "Richard McDonald", email = "rmcd@usgs.gov"}
@@ -202,7 +202,7 @@ warn_unreachable = false
 disallow_untyped_decorators = false
 
 [tool.bumpversion]
-current_version = "0.0.5"
+current_version = "0.0.6"
 commit = true
 tag = true
 tag_name = "v{new_version}"

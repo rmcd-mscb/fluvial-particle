@@ -1,5 +1,39 @@
 # History
 
+## 0.0.6 (2026-01-15)
+
+### New Features
+
+#### Multiple Shear Velocity (u*) Computation Methods
+- Support for 7 different methods to compute shear velocity:
+  - Direct `ustar` field mapping
+  - `shear_stress` field (τ_b) - existing default
+  - `manning_n` - Manning's roughness coefficient (scalar or field)
+  - `chezy_c` - Chézy coefficient (scalar or field)
+  - `darcy_f` - Darcy-Weisbach friction factor (scalar or field)
+  - `energy_slope` field
+  - `tke` field (turbulent kinetic energy for RANS models)
+- Automatic method detection with priority-based selection
+- Optional `ustar_method` setting to force specific method
+- Configurable `water_density` for shear stress conversion (default: 1000 kg/m³)
+
+#### Grid Inspection API
+- New `inspect_grid()` function for exploring grid data before simulation
+- Returns comprehensive dict with grid dimensions, bounds, field statistics
+- Displays hydraulic summary (depth, velocity, shear stress ranges)
+- Shows detected u* computation method and available alternatives
+- Supports time-varying grids with timestep selection
+
+#### PyVista Visualization Helpers
+- New `SimulationResults.to_pyvista()` - convert particle positions to PyVista PolyData
+- New `SimulationResults.trajectories_to_pyvista()` - create polylines for particle paths
+- New `SimulationResults.to_pyvista_sequence()` - get all timesteps for animations
+- All methods use lazy imports (pyvista is optional dependency)
+
+### Infrastructure
+- Fixed hybrid conda + uv dependency management workflow
+- Updated environment.yml and pyproject.toml for better local development
+
 ## 0.0.5 (2026-01-14)
 
 ### New Features
