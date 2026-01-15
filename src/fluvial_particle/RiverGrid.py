@@ -44,6 +44,17 @@ DEFAULT_WATER_DENSITY = 1000.0  # kg/m³
 GRAVITY = 9.81  # m/s²
 CMU = 0.09  # C_mu constant for k-epsilon turbulence model
 
+# Mapping from u* method names to their corresponding field names
+USTAR_METHOD_TO_FIELD_MAP = {
+    "ustar": "ustar",
+    "shear_stress": "shear_stress",
+    "manning": "manning_n",
+    "chezy": "chezy_c",
+    "darcy": "darcy_f",
+    "energy_slope": "energy_slope",
+    "tke": "tke",
+}
+
 
 class RiverGrid:
     """A class of hydrodynamic data and tools defined on VTK structured grids."""
@@ -230,11 +241,12 @@ class RiverGrid:
             selected = available[0]  # Highest priority
 
         # Store whether field-based or scalar
-        self._ustar_uses_field = selected in self.field_map_2d or (
-            selected in {"manning", "chezy", "darcy"}
-            and f"{selected}_{'n' if selected == 'manning' else 'c' if selected == 'chezy' else 'f'}"
-            in self.field_map_2d
-        )
+        field_suffix_map = {"manning": "n", "chezy": "c", "darcy": "f"}
+        selected_has_suffix_field = False
+        if selected in field_suffix_map:
+            field_name = f"{selected}_{field_suffix_map[selected]}"
+            selected_has_suffix_field = field_name in self.field_map_2d
+        self._ustar_uses_field = selected in self.field_map_2d or selected_has_suffix_field
 
         print(f"u* method: {selected} (available: {', '.join(available)})")
         return selected
@@ -850,16 +862,7 @@ class RiverGrid:
         keys = list(CORE_REQUIRED_FIELDS_2D)
 
         # Add the u* source field if it's field-based
-        ustar_field_map = {
-            "ustar": "ustar",
-            "shear_stress": "shear_stress",
-            "manning": "manning_n",
-            "chezy": "chezy_c",
-            "darcy": "darcy_f",
-            "energy_slope": "energy_slope",
-            "tke": "tke",
-        }
-        ustar_field = ustar_field_map.get(self._ustar_method)
+        ustar_field = USTAR_METHOD_TO_FIELD_MAP.get(self._ustar_method)
         if ustar_field and ustar_field in self.field_map_2d:
             keys.append(ustar_field)
 

@@ -63,13 +63,13 @@ class Particles:
         self._velz = np.zeros(nparts)
         self._shearstress = np.zeros(nparts)
         self._ustar = np.zeros(nparts)
-        # Additional u* source field arrays (initialized on demand)
-        self._ustar_field = None
-        self._manning_n_field = None
-        self._chezy_c_field = None
-        self._darcy_f_field = None
-        self._energy_slope_field = None
-        self._tke_field = None
+        # Additional u* source field arrays
+        self._ustar_field = np.zeros(nparts)
+        self._manning_n_field = np.zeros(nparts)
+        self._chezy_c_field = np.zeros(nparts)
+        self._darcy_f_field = np.zeros(nparts)
+        self._energy_slope_field = np.zeros(nparts)
+        self._tke_field = np.zeros(nparts)
         self._diffx = np.zeros(nparts)
         self._diffy = np.zeros(nparts)
         self._diffz = np.zeros(nparts)
@@ -118,10 +118,12 @@ class Particles:
         """
         method = self.mesh._ustar_method
 
-        # Get velocity magnitude for friction-based methods
-        vel_mag = np.sqrt(self.velx**2 + self.vely**2)
+        # Get velocity magnitude only for methods that require it
+        vel_mag = None
+        if method in {"manning", "chezy", "darcy"}:
+            vel_mag = np.sqrt(self.velx**2 + self.vely**2)
 
-        # Get depth (ensure positive)
+        # Get depth (ensure positive) - needed for manning and energy_slope
         h = np.maximum(self.depth, 1e-6)
 
         if method == "ustar":
@@ -189,19 +191,19 @@ class Particles:
 
     def _get_manning_n(self):
         """Get Manning's n values (from interpolated field or scalar)."""
-        if hasattr(self, "_manning_n_field") and self._manning_n_field is not None:
+        if self.mesh._ustar_uses_field:
             return self._manning_n_field
         return np.full(self.nparts, self.mesh._manning_n_scalar)
 
     def _get_chezy_c(self):
         """Get Chezy C values (from interpolated field or scalar)."""
-        if hasattr(self, "_chezy_c_field") and self._chezy_c_field is not None:
+        if self.mesh._ustar_uses_field:
             return self._chezy_c_field
         return np.full(self.nparts, self.mesh._chezy_c_scalar)
 
     def _get_darcy_f(self):
         """Get Darcy-Weisbach f values (from interpolated field or scalar)."""
-        if hasattr(self, "_darcy_f_field") and self._darcy_f_field is not None:
+        if self.mesh._ustar_uses_field:
             return self._darcy_f_field
         return np.full(self.nparts, self.mesh._darcy_f_scalar)
 

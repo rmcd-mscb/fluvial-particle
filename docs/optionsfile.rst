@@ -48,7 +48,7 @@ Core required keys:
 Shear velocity source (at least one required):
 
 * ``ustar``: direct shear velocity field [m/s] (preferred if available)
-* ``shear_stress``: bed shear stress [Pa] (most common)
+* ``shear_stress``: bed shear stress [Pa] (commonly available from hydrodynamic models)
 * ``manning_n``: Manning's n field [-] (or use scalar option below)
 * ``chezy_c``: Chézy C field [m^0.5/s] (or use scalar option)
 * ``darcy_f``: Darcy-Weisbach f field [-] (or use scalar option)
@@ -59,7 +59,7 @@ Optional key:
 
 * ``wet_dry``: wet/dry indicator, 1=wet, 0=dry (e.g., "IBC" in Delft-FM). If ``wet_dry`` is omitted from ``field_map_2d``, this field will be computed automatically from depth using the ``min_depth`` threshold (defaults to 0.02m if not specified in the options file): cells with depth > min_depth are wet (1), otherwise dry (0).
 
-Example with shear stress (most common):
+Example with shear stress:
 
 .. code-block:: python
 
@@ -137,7 +137,7 @@ If your hydrodynamic model outputs shear velocity directly, map it in ``field_ma
         "water_surface_elevation": "WaterSurfaceElevation",
     }
 
-**Method 2: Bed shear stress** (most common)
+**Method 2: Bed shear stress**
 
 Computes u* = √(τ_b / ρ), where τ_b is bed shear stress and ρ is water density.
 
