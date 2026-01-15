@@ -60,6 +60,7 @@ def inspect_grid(
             - grid_3d: 3D grid info (only if Track3D=1)
             - hydraulics: Reach-averaged statistics (depth, velocity, shear_stress, ustar)
             - time_dependent: Boolean or timestep info dict
+            - ustar_method: String indicating the u* computation method being used
 
     Raises:
         FileNotFoundError: If settings file or grid files don't exist.
