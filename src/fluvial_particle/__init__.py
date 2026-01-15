@@ -6,6 +6,7 @@ __version__ = "0.0.6"
 
 # Re-export public API
 from .cli import track_mpi, track_serial
+from .Helpers import get_settings_template
 from .inspection import inspect_grid
 from .results import SimulationResults, run_simulation
 from .simulation import simulate
@@ -13,6 +14,7 @@ from .simulation import simulate
 
 __all__ = [
     "SimulationResults",
+    "get_settings_template",
     "inspect_grid",
     "run_simulation",
     "simulate",

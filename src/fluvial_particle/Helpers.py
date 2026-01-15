@@ -123,6 +123,34 @@ ParticleType = Particles  # noqa: F401
 '''
 
 
+def get_settings_template() -> str:
+    """Get the settings template as a string.
+
+    Returns the default settings template that can be customized and
+    written to a file. Useful in notebooks where you want to display
+    or modify the template programmatically.
+
+    Returns:
+        Template string with all configuration options.
+
+    Example::
+
+        from fluvial_particle import get_settings_template
+        from pathlib import Path
+
+        # Get template and customize
+        template = get_settings_template()
+        customized = template.replace(
+            'file_name_2d = "./path/to/your/mesh_2d.vts"',
+            'file_name_2d = "./data/my_grid_2d.vts"'
+        )
+
+        # Write to file
+        Path("my_settings.py").write_text(customized)
+    """
+    return SETTINGS_TEMPLATE
+
+
 def generate_settings_template(output_path: str = "user_options.py") -> None:
     """Generate a template settings file for the user.
 
