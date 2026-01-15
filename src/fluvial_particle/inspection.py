@@ -468,10 +468,14 @@ def _print_summary(info: dict[str, Any]) -> None:
     td = info["time_dependent"]
     if td and isinstance(td, dict):
         lines.append("\nTime-Dependent: Yes")
-        lines.append(f"  Timestep: {td['timestep']} of {td['total_timesteps']}")
+        lines.append(
+            f"  Timestep: {td['timestep'] + 1} of {td['total_timesteps']}"
+        )
         lines.append(f"  Time: {td['time']:.2f} s")
         lines.append(f"  Grid dt: {td['grid_dt']:.2f} s")
-        lines.append(f"  Time range: [{td['time_range'][0]:.2f}, {td['time_range'][1]:.2f}] s")
+        lines.append(
+            f"  Time range: [{td['time_range'][0]:.2f}, {td['time_range'][1]:.2f}] s"
+        )
 
     # Available fields
     lines.append("\nAvailable Fields (2D):")
