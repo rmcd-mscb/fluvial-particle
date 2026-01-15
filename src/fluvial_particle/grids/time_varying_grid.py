@@ -35,6 +35,11 @@ class TimeVaryingGrid:
         grid_start_time: float = 0.0,
         interpolation: Literal["linear", "nearest", "hold"] = "linear",
         min_depth: float | None = None,
+        manning_n: float | None = None,
+        chezy_c: float | None = None,
+        darcy_f: float | None = None,
+        water_density: float | None = None,
+        ustar_method: str | None = None,
     ):
         """Initialize the time-varying grid manager.
 
@@ -53,6 +58,11 @@ class TimeVaryingGrid:
                 - 'nearest': Use the nearest grid timestep.
                 - 'hold': Use the most recent grid (hold until next).
             min_depth: Minimum depth threshold for computing wet_dry.
+            manning_n: Scalar Manning's n value for computing u*.
+            chezy_c: Scalar Chezy C value for computing u*.
+            darcy_f: Scalar Darcy-Weisbach f value for computing u*.
+            water_density: Water density in kg/m³ for shear stress conversion.
+            ustar_method: Force a specific u* computation method.
         """
         self.track3d = track3d
         self.file_pattern_2d = file_pattern_2d
@@ -65,6 +75,12 @@ class TimeVaryingGrid:
         self.grid_start_time = grid_start_time
         self.interpolation = interpolation
         self.min_depth = min_depth
+        # u* configuration options
+        self._manning_n = manning_n
+        self._chezy_c = chezy_c
+        self._darcy_f = darcy_f
+        self._water_density = water_density
+        self._ustar_method = ustar_method
 
         # Calculate grid times
         n_grids = grid_end_index - grid_start_index + 1
@@ -129,6 +145,11 @@ class TimeVaryingGrid:
             field_map_2d=self.field_map_2d,
             field_map_3d=self.field_map_3d,
             min_depth=self.min_depth,
+            manning_n=self._manning_n,
+            chezy_c=self._chezy_c,
+            darcy_f=self._darcy_f,
+            water_density=self._water_density,
+            ustar_method=self._ustar_method,
         )
 
     def _load_initial_grids(self) -> None:

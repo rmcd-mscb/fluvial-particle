@@ -6,6 +6,8 @@ import h5py
 import numpy as np
 from vtk.util import numpy_support  # type: ignore[import]
 
+from fluvial_particle.RiverGrid import CMU, GRAVITY
+
 
 class Particles:
     """A class of particles, each with a velocity, size, and mass.
@@ -61,6 +63,13 @@ class Particles:
         self._velz = np.zeros(nparts)
         self._shearstress = np.zeros(nparts)
         self._ustar = np.zeros(nparts)
+        # Additional u* source field arrays (initialized on demand)
+        self._ustar_field = None
+        self._manning_n_field = None
+        self._chezy_c_field = None
+        self._darcy_f_field = None
+        self._energy_slope_field = None
+        self._tke_field = None
         self._diffx = np.zeros(nparts)
         self._diffy = np.zeros(nparts)
         self._diffz = np.zeros(nparts)
@@ -88,6 +97,113 @@ class Particles:
         self.diffx = self.lev + self.beta[0] * ustarh
         self.diffy = self.lev + self.beta[1] * ustarh
         self.diffz = self.beta[2] * ustarh
+
+    def _compute_ustar(self, idx=None):
+        """Compute shear velocity (u*) using the configured method.
+
+        Computes u* based on the method selected in mesh._ustar_method.
+        The result is stored in self.ustar.
+
+        Args:
+            idx: Indices of active particles (None = all).
+
+        Supported methods:
+            - ustar: Direct from interpolated field (no computation needed)
+            - shear_stress: u* = sqrt(tau_b / rho)
+            - manning: u* = U * n * sqrt(g) / h^(1/6)
+            - chezy: u* = U * sqrt(g) / C
+            - darcy: u* = U * sqrt(f / 8)
+            - energy_slope: u* = sqrt(g * h * S)
+            - tke: u* = C_mu^(1/4) * sqrt(k)
+        """
+        method = self.mesh._ustar_method
+
+        # Get velocity magnitude for friction-based methods
+        vel_mag = np.sqrt(self.velx**2 + self.vely**2)
+
+        # Get depth (ensure positive)
+        h = np.maximum(self.depth, 1e-6)
+
+        if method == "ustar":
+            # Direct field - already interpolated to self._ustar_field
+            if idx is None:
+                self.ustar = np.maximum(self._ustar_field, 0.0)
+            else:
+                self.ustar[idx] = np.maximum(self._ustar_field[idx], 0.0)
+
+        elif method == "shear_stress":
+            # u* = sqrt(tau_b / rho)
+            rho = self.mesh._water_density
+            tau = np.maximum(self.shearstress, 0.0)
+            if idx is None:
+                self.ustar = np.sqrt(tau / rho)
+            else:
+                self.ustar[idx] = np.sqrt(tau[idx] / rho)
+
+        elif method == "manning":
+            # u* = U * n * sqrt(g) / h^(1/6)
+            n = self._get_manning_n()
+            ustar_vals = vel_mag * n * np.sqrt(GRAVITY) / np.power(h, 1.0 / 6.0)
+            if idx is None:
+                self.ustar = np.maximum(ustar_vals, 0.0)
+            else:
+                self.ustar[idx] = np.maximum(ustar_vals[idx], 0.0)
+
+        elif method == "chezy":
+            # u* = U * sqrt(g) / C
+            c = self._get_chezy_c()
+            # Avoid division by zero
+            c = np.maximum(c, 1e-6)
+            ustar_vals = vel_mag * np.sqrt(GRAVITY) / c
+            if idx is None:
+                self.ustar = np.maximum(ustar_vals, 0.0)
+            else:
+                self.ustar[idx] = np.maximum(ustar_vals[idx], 0.0)
+
+        elif method == "darcy":
+            # u* = U * sqrt(f / 8)
+            f = self._get_darcy_f()
+            ustar_vals = vel_mag * np.sqrt(np.maximum(f, 0.0) / 8.0)
+            if idx is None:
+                self.ustar = np.maximum(ustar_vals, 0.0)
+            else:
+                self.ustar[idx] = np.maximum(ustar_vals[idx], 0.0)
+
+        elif method == "energy_slope":
+            # u* = sqrt(g * h * S)
+            s = np.maximum(self._energy_slope_field, 0.0)
+            ustar_vals = np.sqrt(GRAVITY * h * s)
+            if idx is None:
+                self.ustar = ustar_vals
+            else:
+                self.ustar[idx] = ustar_vals[idx]
+
+        elif method == "tke":
+            # u* = C_mu^(1/4) * sqrt(k)
+            k = np.maximum(self._tke_field, 0.0)
+            ustar_vals = np.power(CMU, 0.25) * np.sqrt(k)
+            if idx is None:
+                self.ustar = ustar_vals
+            else:
+                self.ustar[idx] = ustar_vals[idx]
+
+    def _get_manning_n(self):
+        """Get Manning's n values (from interpolated field or scalar)."""
+        if hasattr(self, "_manning_n_field") and self._manning_n_field is not None:
+            return self._manning_n_field
+        return np.full(self.nparts, self.mesh._manning_n_scalar)
+
+    def _get_chezy_c(self):
+        """Get Chezy C values (from interpolated field or scalar)."""
+        if hasattr(self, "_chezy_c_field") and self._chezy_c_field is not None:
+            return self._chezy_c_field
+        return np.full(self.nparts, self.mesh._chezy_c_scalar)
+
+    def _get_darcy_f(self):
+        """Get Darcy-Weisbach f values (from interpolated field or scalar)."""
+        if hasattr(self, "_darcy_f_field") and self._darcy_f_field is not None:
+            return self._darcy_f_field
+        return np.full(self.nparts, self.mesh._darcy_f_scalar)
 
     def calc_hdf5_chunksizes(self, nprints):
         """Calculate chunksizes for datasets in particles HDF5 output.
@@ -547,19 +663,62 @@ class Particles:
             ptsout = self.mesh.probe2d.GetOutput().GetPointData()
             elev = ptsout.GetArray("bed_elevation")
             wse = ptsout.GetArray("water_surface_elevation")
-            shear = ptsout.GetArray("shear_stress")
             # Interpolation on cell-centered ordered integer array gives cell index number
             cellidx = ptsout.GetArray("CellIndex")
             if idx is None:
                 self.bedelev = numpy_support.vtk_to_numpy(elev)
                 self.wse = numpy_support.vtk_to_numpy(wse)
-                self.shearstress = numpy_support.vtk_to_numpy(shear)
                 self.cellindex2d = numpy_support.vtk_to_numpy(cellidx)
             else:
                 self.bedelev[idx] = numpy_support.vtk_to_numpy(elev)
                 self.wse[idx] = numpy_support.vtk_to_numpy(wse)
-                self.shearstress[idx] = numpy_support.vtk_to_numpy(shear)
                 self.cellindex2d[idx] = numpy_support.vtk_to_numpy(cellidx)
+
+            # Interpolate u* source field based on configured method
+            ustar_method = self.mesh._ustar_method
+            if ustar_method == "ustar":
+                ustar_arr = ptsout.GetArray("ustar")
+                if idx is None:
+                    self._ustar_field = numpy_support.vtk_to_numpy(ustar_arr)
+                else:
+                    self._ustar_field[idx] = numpy_support.vtk_to_numpy(ustar_arr)
+            elif ustar_method == "shear_stress":
+                shear = ptsout.GetArray("shear_stress")
+                if idx is None:
+                    self.shearstress = numpy_support.vtk_to_numpy(shear)
+                else:
+                    self.shearstress[idx] = numpy_support.vtk_to_numpy(shear)
+            elif ustar_method == "manning" and "manning_n" in self.mesh.field_map_2d:
+                manning_arr = ptsout.GetArray("manning_n")
+                if idx is None:
+                    self._manning_n_field = numpy_support.vtk_to_numpy(manning_arr)
+                else:
+                    self._manning_n_field[idx] = numpy_support.vtk_to_numpy(manning_arr)
+            elif ustar_method == "chezy" and "chezy_c" in self.mesh.field_map_2d:
+                chezy_arr = ptsout.GetArray("chezy_c")
+                if idx is None:
+                    self._chezy_c_field = numpy_support.vtk_to_numpy(chezy_arr)
+                else:
+                    self._chezy_c_field[idx] = numpy_support.vtk_to_numpy(chezy_arr)
+            elif ustar_method == "darcy" and "darcy_f" in self.mesh.field_map_2d:
+                darcy_arr = ptsout.GetArray("darcy_f")
+                if idx is None:
+                    self._darcy_f_field = numpy_support.vtk_to_numpy(darcy_arr)
+                else:
+                    self._darcy_f_field[idx] = numpy_support.vtk_to_numpy(darcy_arr)
+            elif ustar_method == "energy_slope":
+                slope_arr = ptsout.GetArray("energy_slope")
+                if idx is None:
+                    self._energy_slope_field = numpy_support.vtk_to_numpy(slope_arr)
+                else:
+                    self._energy_slope_field[idx] = numpy_support.vtk_to_numpy(slope_arr)
+            elif ustar_method == "tke":
+                tke_arr = ptsout.GetArray("tke")
+                if idx is None:
+                    self._tke_field = numpy_support.vtk_to_numpy(tke_arr)
+                else:
+                    self._tke_field[idx] = numpy_support.vtk_to_numpy(tke_arr)
+
             if not self.track3d:
                 # Get 2D Velocity components
                 vel = ptsout.GetArray("velocity")
@@ -575,8 +734,9 @@ class Particles:
                     self.velx[idx] = vel_np[:, 0]
                     self.vely[idx] = vel_np[:, 1]
             self.depth = self.wse - self.bedelev
-            self.shearstress = np.where(self.shearstress < 0.0, 0.0, self.shearstress)
-            self.ustar = (self.shearstress / 1000.0) ** 0.5
+
+            # Compute u* using the configured method
+            self._compute_ustar(idx)
 
         if self.track3d and threed:
             self.normdepth = (self.z - self.bedelev) / self.depth

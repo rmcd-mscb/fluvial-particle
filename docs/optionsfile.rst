@@ -39,36 +39,44 @@ Required keyword arguments
 
 **field_map_2d**, dict: A dictionary mapping standard internal field names to the model-specific names in your 2D mesh file. This allows *fluvial-particle* to work with output from different hydrodynamic models (e.g., Delft-FM, iRIC, HEC-RAS) that use different naming conventions.
 
-Required keys:
+Core required keys:
 
 * ``bed_elevation``: bed/bottom elevation (e.g., "Elevation" in Delft-FM)
-* ``shear_stress``: shear stress magnitude (e.g., "ShearStress (magnitude)")
 * ``velocity``: velocity vector (e.g., "Velocity")
 * ``water_surface_elevation``: water surface elevation (e.g., "WaterSurfaceElevation")
+
+Shear velocity source (at least one required):
+
+* ``ustar``: direct shear velocity field [m/s] (preferred if available)
+* ``shear_stress``: bed shear stress [Pa] (most common)
+* ``manning_n``: Manning's n field [-] (or use scalar option below)
+* ``chezy_c``: Chézy C field [m^0.5/s] (or use scalar option)
+* ``darcy_f``: Darcy-Weisbach f field [-] (or use scalar option)
+* ``energy_slope``: energy slope field [-]
+* ``tke``: turbulent kinetic energy field [m²/s²]
 
 Optional key:
 
 * ``wet_dry``: wet/dry indicator, 1=wet, 0=dry (e.g., "IBC" in Delft-FM). If ``wet_dry`` is omitted from ``field_map_2d``, this field will be computed automatically from depth using the ``min_depth`` threshold (defaults to 0.02m if not specified in the options file): cells with depth > min_depth are wet (1), otherwise dry (0).
 
-Example for Delft-FM output (with wet_dry):
+Example with shear stress (most common):
 
 .. code-block:: python
 
     field_map_2d = {
         "bed_elevation": "Elevation",
-        "wet_dry": "IBC",
         "shear_stress": "ShearStress (magnitude)",
         "velocity": "Velocity",
         "water_surface_elevation": "WaterSurfaceElevation",
     }
 
-Example without wet_dry (computed from depth):
+Example with direct ustar field:
 
 .. code-block:: python
 
     field_map_2d = {
         "bed_elevation": "Elevation",
-        "shear_stress": "ShearStress (magnitude)",
+        "ustar": "FrictionVelocity",
         "velocity": "Velocity",
         "water_surface_elevation": "WaterSurfaceElevation",
     }
@@ -107,6 +115,111 @@ These arguments can be specified in the options file. Otherwise, the default val
 **startfrac**, float: If provided, will initialize particles to a vertical position as bed elevation + water depth multiplied with startfrac. startfrac should be between 0 and 1 -- values outside this range will initialize particles at the bed and water surface, respectively. A numpy array of length NumPart can also be used to vary the startfrac for every particle. Default value: None
 
 **vertbound**, float: Bounds the particles in the fractional water column of [vertbound, 1-vertbound]. This prevents particles from moving out of the vertical domain, either by going below the channel bed or above the water surface. Default value: 0.01
+
+
+Shear velocity (u*) configuration
+====================================
+
+*fluvial-particle* uses shear velocity (u*) to compute turbulent diffusion coefficients.
+There are several methods to provide or compute u*, listed here in priority order.
+If multiple sources are available, the highest priority method is automatically selected.
+
+**Method 1: Direct u* field** (highest priority)
+
+If your hydrodynamic model outputs shear velocity directly, map it in ``field_map_2d``:
+
+.. code-block:: python
+
+    field_map_2d = {
+        "bed_elevation": "Elevation",
+        "ustar": "FrictionVelocity",  # Direct u* [m/s]
+        "velocity": "Velocity",
+        "water_surface_elevation": "WaterSurfaceElevation",
+    }
+
+**Method 2: Bed shear stress** (most common)
+
+Computes u* = √(τ_b / ρ), where τ_b is bed shear stress and ρ is water density.
+
+.. code-block:: python
+
+    field_map_2d = {
+        "bed_elevation": "Elevation",
+        "shear_stress": "ShearStress (magnitude)",  # Bed shear stress [Pa]
+        "velocity": "Velocity",
+        "water_surface_elevation": "WaterSurfaceElevation",
+    }
+
+    # Optional: customize water density (default 1000 kg/m³)
+    water_density = 1025.0  # for seawater
+
+**Method 3: Manning's n**
+
+Computes u* = U · n · √g / h^(1/6). Can be provided as a field or scalar:
+
+.. code-block:: python
+
+    # As a scalar (uniform friction):
+    manning_n = 0.03
+
+    # Or as a spatially-varying field:
+    field_map_2d = {
+        "bed_elevation": "Elevation",
+        "manning_n": "ManningN",
+        "velocity": "Velocity",
+        "water_surface_elevation": "WaterSurfaceElevation",
+    }
+
+**Method 4: Chézy C**
+
+Computes u* = U · √g / C:
+
+.. code-block:: python
+
+    chezy_c = 50.0  # scalar value
+
+**Method 5: Darcy-Weisbach f**
+
+Computes u* = U · √(f / 8):
+
+.. code-block:: python
+
+    darcy_f = 0.02  # scalar value
+
+**Method 6: Energy slope**
+
+Computes u* = √(g · h · S), where S is the energy slope:
+
+.. code-block:: python
+
+    field_map_2d = {
+        "bed_elevation": "Elevation",
+        "energy_slope": "WaterSurfaceSlope",
+        "velocity": "Velocity",
+        "water_surface_elevation": "WaterSurfaceElevation",
+    }
+
+**Method 7: Turbulent kinetic energy (TKE)**
+
+Computes u* = C_μ^(1/4) · √k, where C_μ = 0.09. Appropriate for RANS CFD outputs:
+
+.. code-block:: python
+
+    field_map_2d = {
+        "bed_elevation": "Elevation",
+        "tke": "TurbulentKineticEnergy",
+        "velocity": "Velocity",
+        "water_surface_elevation": "WaterSurfaceElevation",
+    }
+
+**Forcing a specific method**
+
+If multiple u* sources are available, the highest-priority method is used by default.
+To override this, use ``ustar_method``:
+
+.. code-block:: python
+
+    ustar_method = "manning"  # Force Manning's n method even if shear_stress is available
 
 
 Time-varying grid settings

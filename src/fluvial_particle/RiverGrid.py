@@ -11,30 +11,58 @@ from vtk.util import numpy_support  # type: ignore[import]
 # from numba import jit
 
 # Standard internal field names used by fluvial-particle
-# Required fields must be provided in field_map_2d
-REQUIRED_FIELDS_2D = (
+# Core required fields must always be provided in field_map_2d
+CORE_REQUIRED_FIELDS_2D = (
     "bed_elevation",
-    "shear_stress",
     "velocity",
     "water_surface_elevation",
+)
+
+# Fields that can provide shear velocity (u*) - at least one is required
+# Listed in priority order (highest priority first)
+USTAR_SOURCE_FIELDS = (
+    "ustar",  # Direct shear velocity field [m/s]
+    "shear_stress",  # Bed shear stress [Pa] -> u* = sqrt(tau/rho)
+    "manning_n",  # Manning's n field [-] -> u* = U*n*sqrt(g)/h^(1/6)
+    "chezy_c",  # Chezy C field [m^0.5/s] -> u* = U*sqrt(g)/C
+    "darcy_f",  # Darcy-Weisbach f field [-] -> u* = U*sqrt(f/8)
+    "energy_slope",  # Energy slope field [-] -> u* = sqrt(g*h*S)
+    "tke",  # Turbulent kinetic energy [m²/s²] -> u* = C_mu^0.25*sqrt(k)
 )
 
 # Optional fields - if not provided, they will be computed internally
 OPTIONAL_FIELDS_2D = ("wet_dry",)
 
-# All standard 2D fields (required + optional)
-STANDARD_FIELDS_2D = REQUIRED_FIELDS_2D + OPTIONAL_FIELDS_2D
+# All standard 2D fields that may be present after loading
+STANDARD_FIELDS_2D = CORE_REQUIRED_FIELDS_2D + USTAR_SOURCE_FIELDS + OPTIONAL_FIELDS_2D
 
 STANDARD_FIELDS_3D = ("velocity",)
 
-# Default minimum depth threshold for computing wet_dry (meters)
-DEFAULT_MIN_DEPTH = 0.02
+# Physical constants
+DEFAULT_MIN_DEPTH = 0.02  # meters, threshold for computing wet_dry
+DEFAULT_WATER_DENSITY = 1000.0  # kg/m³
+GRAVITY = 9.81  # m/s²
+CMU = 0.09  # C_mu constant for k-epsilon turbulence model
 
 
 class RiverGrid:
     """A class of hydrodynamic data and tools defined on VTK structured grids."""
 
-    def __init__(self, track3d, filename2d, filename3d=None, field_map_2d=None, field_map_3d=None, min_depth=None):
+    def __init__(
+        self,
+        track3d,
+        filename2d,
+        filename3d=None,
+        field_map_2d=None,
+        field_map_3d=None,
+        min_depth=None,
+        *,
+        manning_n=None,
+        chezy_c=None,
+        darcy_f=None,
+        water_density=None,
+        ustar_method=None,
+    ):
         """Initialize instance of class RiverGrid.
 
         Args:
@@ -47,27 +75,52 @@ class RiverGrid:
             filename3d (str, optional): path to the input 3D grid. Required for 3D simulations.
                 Supports the same formats as filename2d.
             field_map_2d (dict): Mapping from standard field names to model-specific names for
-                the 2D grid. Required keys: bed_elevation, shear_stress, velocity,
-                water_surface_elevation. Optional key: wet_dry (computed from depth if not provided).
-                Example: {"bed_elevation": "Elevation", ...}
+                the 2D grid. Required keys: bed_elevation, velocity, water_surface_elevation.
+                Plus at least one u* source: ustar, shear_stress, manning_n, chezy_c, darcy_f,
+                energy_slope, or tke. Optional key: wet_dry (computed from depth if not provided).
+                Example: {"bed_elevation": "Elevation", "shear_stress": "TauBed", ...}
             field_map_3d (dict): Mapping from standard field names to model-specific names for
                 the 3D grid. Required keys: velocity. Example: {"velocity": "Velocity"}
             min_depth (float, optional): Minimum depth threshold for computing wet_dry if not
                 provided in field_map_2d. Cells with depth > min_depth are considered wet (1),
                 and cells with depth <= min_depth are considered dry (0). Defaults to 0.02 meters.
+            manning_n (float, optional): Scalar Manning's n value for computing u*. Use when
+                friction is uniform across the domain. Formula: u* = U*n*sqrt(g)/h^(1/6)
+            chezy_c (float, optional): Scalar Chezy C value for computing u*. Use when friction
+                is uniform across the domain. Formula: u* = U*sqrt(g)/C
+            darcy_f (float, optional): Scalar Darcy-Weisbach f value for computing u*. Use when
+                friction is uniform across the domain. Formula: u* = U*sqrt(f/8)
+            water_density (float, optional): Water density in kg/m³ for shear stress conversion.
+                Defaults to 1000.0 kg/m³.
+            ustar_method (str, optional): Force a specific u* computation method. Options:
+                'auto' (default), 'ustar', 'shear_stress', 'manning', 'chezy', 'darcy',
+                'energy_slope', 'tke'. If 'auto', uses the highest priority available method.
 
         Raises:
             ValueError: track3d is 1 but no filename provided for input 3D grid.
-            ValueError: field_map_2d is missing required standard field names.
+            ValueError: field_map_2d is missing required core field names.
             ValueError: field_map_3d is missing required standard field names.
+            ValueError: No method available to compute shear velocity (u*).
         """
+        # Store scalar friction parameters
+        self._manning_n_scalar = manning_n
+        self._chezy_c_scalar = chezy_c
+        self._darcy_f_scalar = darcy_f
+        self._water_density = water_density if water_density is not None else DEFAULT_WATER_DENSITY
+        self._ustar_method_override = ustar_method
+
         # Validate field mappings
         if field_map_2d is None:
             raise ValueError("field_map_2d is required")
-        missing_2d = [k for k in REQUIRED_FIELDS_2D if k not in field_map_2d]
-        if missing_2d:
-            raise ValueError(f"field_map_2d is missing required keys: {missing_2d}")
+
+        # Check core required fields
+        missing_core = [k for k in CORE_REQUIRED_FIELDS_2D if k not in field_map_2d]
+        if missing_core:
+            raise ValueError(f"field_map_2d is missing required keys: {missing_core}")
         self.field_map_2d = field_map_2d
+
+        # Determine u* computation method
+        self._ustar_method = self._determine_ustar_method()
 
         # Check if wet_dry needs to be computed
         self._compute_wet_dry = "wet_dry" not in field_map_2d
@@ -122,6 +175,69 @@ class RiverGrid:
                 model_name = arr.GetName()
                 if model_name in reverse_map:
                     arr.SetName(reverse_map[model_name])
+
+    def _determine_ustar_method(self):
+        """Determine which method will be used to compute shear velocity (u*).
+
+        Checks available u* sources in priority order and selects the highest priority
+        available method, or the explicitly requested method if ustar_method is set.
+
+        Returns:
+            str: The selected u* computation method ('ustar', 'shear_stress', 'manning',
+                'chezy', 'darcy', 'energy_slope', or 'tke').
+
+        Raises:
+            ValueError: If no method is available to compute u*.
+            ValueError: If the requested method is not available.
+        """
+        available = []
+
+        # Check field-based methods (in priority order)
+        if "ustar" in self.field_map_2d:
+            available.append("ustar")
+        if "shear_stress" in self.field_map_2d:
+            available.append("shear_stress")
+        if "manning_n" in self.field_map_2d or self._manning_n_scalar is not None:
+            available.append("manning")
+        if "chezy_c" in self.field_map_2d or self._chezy_c_scalar is not None:
+            available.append("chezy")
+        if "darcy_f" in self.field_map_2d or self._darcy_f_scalar is not None:
+            available.append("darcy")
+        if "energy_slope" in self.field_map_2d:
+            available.append("energy_slope")
+        if "tke" in self.field_map_2d:
+            available.append("tke")
+
+        if not available:
+            raise ValueError(
+                "No method to compute shear velocity (u*). Provide one of:\n"
+                "  - ustar field in field_map_2d\n"
+                "  - shear_stress field in field_map_2d\n"
+                "  - manning_n (scalar option or field in field_map_2d)\n"
+                "  - chezy_c (scalar option or field in field_map_2d)\n"
+                "  - darcy_f (scalar option or field in field_map_2d)\n"
+                "  - energy_slope field in field_map_2d\n"
+                "  - tke field in field_map_2d"
+            )
+
+        # Use explicit method if specified, else highest priority
+        method = self._ustar_method_override or "auto"
+        if method != "auto":
+            if method not in available:
+                raise ValueError(f"ustar_method='{method}' requested but not available. Available methods: {available}")
+            selected = method
+        else:
+            selected = available[0]  # Highest priority
+
+        # Store whether field-based or scalar
+        self._ustar_uses_field = selected in self.field_map_2d or (
+            selected in {"manning", "chezy", "darcy"}
+            and f"{selected}_{'n' if selected == 'manning' else 'c' if selected == 'chezy' else 'f'}"
+            in self.field_map_2d
+        )
+
+        print(f"u* method: {selected} (available: {', '.join(available)})")
+        return selected
 
     def _compute_wet_dry_from_depth(self):
         """Compute wet_dry field from depth (water_surface_elevation - bed_elevation).
@@ -728,11 +844,29 @@ class RiverGrid:
     def required_keys2d(self):
         """tuple(str): standard array names that will be present in the 2D grid.
 
-        Returns all standard fields. This includes required fields from field_map_2d
-        plus optional fields (like wet_dry) that are either mapped or computed.
+        Returns core required fields plus the u* source field being used, plus wet_dry.
         """
-        # Always include all standard fields since optional ones are computed if not mapped
-        return STANDARD_FIELDS_2D
+        # Start with core required fields
+        keys = list(CORE_REQUIRED_FIELDS_2D)
+
+        # Add the u* source field if it's field-based
+        ustar_field_map = {
+            "ustar": "ustar",
+            "shear_stress": "shear_stress",
+            "manning": "manning_n",
+            "chezy": "chezy_c",
+            "darcy": "darcy_f",
+            "energy_slope": "energy_slope",
+            "tke": "tke",
+        }
+        ustar_field = ustar_field_map.get(self._ustar_method)
+        if ustar_field and ustar_field in self.field_map_2d:
+            keys.append(ustar_field)
+
+        # wet_dry is always present (either mapped or computed)
+        keys.append("wet_dry")
+
+        return tuple(keys)
 
     @property
     def required_keys3d(self):
