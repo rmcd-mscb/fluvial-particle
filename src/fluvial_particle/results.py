@@ -31,6 +31,10 @@ Example usage::
     # Convert to pandas DataFrame
     df = results.to_dataframe(timestep=-1)
 
+    # Convert to PyVista for 3D visualization (requires pyvista)
+    particles = results.to_pyvista(timestep=-1)
+    trajectories = results.trajectories_to_pyvista()
+
     # Use as context manager for automatic cleanup
     with SimulationResults("./output") as results:
         positions = results.get_positions(timestep=-1)
@@ -344,6 +348,207 @@ class SimulationResults:
             ])
 
         return "\n".join(lines)
+
+    def to_pyvista(self, timestep: int = -1, include_inactive: bool = False):
+        """Convert particle positions to a PyVista PolyData object.
+
+        Creates a point cloud with particle positions and all available
+        scalar properties attached as point data arrays.
+
+        Args:
+            timestep: Timestep index to convert. Supports negative indexing
+                     (-1 for last timestep). Default is -1.
+            include_inactive: If True, include inactive particles (NaN positions).
+                            If False (default), only include active particles.
+
+        Returns:
+            pyvista.PolyData with particle positions as points and properties
+            as point data arrays.
+
+        Raises:
+            ImportError: If pyvista is not installed.
+
+        Example::
+
+            import pyvista as pv
+
+            results = SimulationResults("./output")
+            particles = results.to_pyvista(timestep=-1)
+
+            # Plot with PyVista
+            particles.plot(scalars="depth", cmap="viridis")
+
+            # Or add to a plotter with the grid
+            grid = pv.read("grid.vts")
+            plotter = pv.Plotter()
+            plotter.add_mesh(grid, opacity=0.5)
+            plotter.add_points(particles, scalars="depth", point_size=10)
+            plotter.show()
+        """
+        try:
+            import pyvista as pv
+        except ImportError as err:
+            raise ImportError("pyvista is required for to_pyvista(). Install with: pip install pyvista") from err
+
+        positions = self.get_positions(timestep)
+        time_val = self.times[timestep]
+
+        # Filter inactive particles (NaN positions) unless requested
+        if not include_inactive:
+            active_mask = ~np.isnan(positions[:, 0])
+            positions = positions[active_mask]
+        else:
+            active_mask = np.ones(positions.shape[0], dtype=bool)
+
+        # Create PolyData from points
+        cloud = pv.PolyData(positions)
+
+        # Add time as field data
+        cloud.field_data["time"] = np.array([time_val])
+
+        # Add scalar properties
+        for prop in self.property_names:
+            prop_data = self.get_property(prop, timestep)
+
+            # Filter by active mask
+            if not include_inactive:
+                prop_data = prop_data[active_mask]
+
+            # Handle different property shapes
+            if prop_data.ndim == 1:
+                cloud.point_data[prop] = prop_data
+            elif prop == "velvec" and prop_data.shape[-1] == 3:
+                # Store velocity as a vector
+                cloud.point_data["velocity"] = prop_data
+                # Also add magnitude for convenience
+                vel_mag = np.linalg.norm(prop_data, axis=-1)
+                cloud.point_data["velocity_magnitude"] = vel_mag
+            elif prop_data.ndim == 2:
+                # Store multi-component arrays
+                cloud.point_data[prop] = prop_data
+
+        return cloud
+
+    def trajectories_to_pyvista(self, particle_ids: list[int] | None = None):
+        """Convert particle trajectories to PyVista polylines.
+
+        Creates a PolyData object with particle trajectories as connected
+        line segments, useful for visualizing particle paths over time.
+
+        Args:
+            particle_ids: List of particle indices to include. If None,
+                         includes all particles.
+
+        Returns:
+            pyvista.PolyData with trajectories as polylines. Each trajectory
+            is a separate line, with time stored as point data.
+
+        Raises:
+            ImportError: If pyvista is not installed.
+
+        Example::
+
+            import pyvista as pv
+
+            results = SimulationResults("./output")
+
+            # Get all trajectories
+            trajectories = results.trajectories_to_pyvista()
+
+            # Or specific particles
+            trajectories = results.trajectories_to_pyvista(particle_ids=[0, 1, 2])
+
+            # Plot colored by time
+            trajectories.plot(scalars="time", cmap="viridis", line_width=2)
+        """
+        try:
+            import pyvista as pv
+        except ImportError as err:
+            raise ImportError(
+                "pyvista is required for trajectories_to_pyvista(). Install with: pip install pyvista"
+            ) from err
+
+        all_positions = self.get_positions()  # (n_timesteps, n_particles, 3)
+        times = self.times
+
+        if particle_ids is None:
+            particle_ids = list(range(self.num_particles))
+
+        # Build points and lines for all trajectories
+        all_points = []
+        all_lines = []
+        all_times = []
+        all_particle_ids_data = []
+        point_offset = 0
+
+        for pid in particle_ids:
+            # Get trajectory for this particle
+            trajectory = all_positions[:, pid, :]
+
+            # Find valid (non-NaN) positions
+            valid_mask = ~np.isnan(trajectory[:, 0])
+            valid_positions = trajectory[valid_mask]
+            valid_times = times[valid_mask]
+
+            if len(valid_positions) < 2:
+                # Need at least 2 points to make a line
+                continue
+
+            n_points = len(valid_positions)
+            all_points.append(valid_positions)
+            all_times.extend(valid_times)
+            all_particle_ids_data.extend([pid] * n_points)
+
+            # Create line connectivity: [n_pts, idx0, idx1, idx2, ...]
+            line = [n_points, *range(point_offset, point_offset + n_points)]
+            all_lines.append(line)
+            point_offset += n_points
+
+        if not all_points:
+            # Return empty PolyData if no valid trajectories
+            return pv.PolyData()
+
+        # Combine all points
+        points = np.vstack(all_points)
+
+        # Create PolyData with lines
+        # Lines format: [n1, p1_0, p1_1, ..., n2, p2_0, p2_1, ...]
+        lines_flat = []
+        for line in all_lines:
+            lines_flat.extend(line)
+
+        polydata = pv.PolyData(points, lines=lines_flat)
+        polydata.point_data["time"] = np.array(all_times)
+        polydata.point_data["particle_id"] = np.array(all_particle_ids_data)
+
+        return polydata
+
+    def to_pyvista_sequence(self):
+        """Get all timesteps as a list of PyVista PolyData objects.
+
+        Useful for creating animations or iterating through timesteps.
+
+        Returns:
+            List of pyvista.PolyData objects, one per timestep.
+
+        Note:
+            Requires pyvista to be installed.
+
+        Example::
+
+            results = SimulationResults("./output")
+            timesteps = results.to_pyvista_sequence()
+
+            # Create animation
+            plotter = pv.Plotter(off_screen=True)
+            plotter.open_gif("particles.gif")
+            for particles in timesteps:
+                plotter.clear_actors()
+                plotter.add_points(particles, color="red")
+                plotter.write_frame()
+            plotter.close()
+        """
+        return [self.to_pyvista(timestep=t) for t in range(self.num_timesteps)]
 
 
 def run_simulation(
