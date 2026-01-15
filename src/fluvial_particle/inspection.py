@@ -245,6 +245,8 @@ def _extract_grid_info(vtk_grid, filename: str, is_3d: bool) -> dict[str, Any]:
 
     for i in range(point_data.GetNumberOfArrays()):
         arr = point_data.GetArray(i)
+        if arr is None:
+            continue
         name = arr.GetName()
         n_components = arr.GetNumberOfComponents()
 
