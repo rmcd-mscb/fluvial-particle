@@ -73,6 +73,13 @@ def simulate(settings, argvars, timer, comm=None):
         "min_depth"
     )  # Optional threshold for auto-computing wet_dry from depth (if wet_dry not in field_map_2d)
 
+    # Extract u* configuration options (scalar friction coefficients)
+    manning_n = settings.get("manning_n")
+    chezy_c = settings.get("chezy_c")
+    darcy_f = settings.get("darcy_f")
+    water_density = settings.get("water_density")
+    ustar_method = settings.get("ustar_method")
+
     # Check for time-dependent grid mode
     time_dependent = settings.get("time_dependent", False)
     if time_dependent:
@@ -89,10 +96,27 @@ def simulate(settings, argvars, timer, comm=None):
             grid_start_time=settings.get("grid_start_time", 0.0),
             interpolation=settings.get("grid_interpolation", "linear"),
             min_depth=min_depth,
+            manning_n=manning_n,
+            chezy_c=chezy_c,
+            darcy_f=darcy_f,
+            water_density=water_density,
+            ustar_method=ustar_method,
         )
     else:
         # Static grid (default behavior)
-        river = RiverGrid(track3d, file_name_2d, file_name_3d, field_map_2d, field_map_3d, min_depth)
+        river = RiverGrid(
+            track3d,
+            file_name_2d,
+            file_name_3d,
+            field_map_2d,
+            field_map_3d,
+            min_depth,
+            manning_n=manning_n,
+            chezy_c=chezy_c,
+            darcy_f=darcy_f,
+            water_density=water_density,
+            ustar_method=ustar_method,
+        )
 
     # Initialize particle positions
     if isinstance(settings["StartLoc"], tuple):
