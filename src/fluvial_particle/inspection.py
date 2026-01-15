@@ -51,7 +51,7 @@ def inspect_grid(
     Args:
         settings_file: Path to the user settings file (Python script).
         timestep: For time-dependent grids, which timestep index to inspect.
-                 If None and time-dependent, uses the first timestep.
+                 If None and time-dependent, defaults to 0 (first timestep).
         quiet: If True, suppress printed summary. Default False.
 
     Returns:
