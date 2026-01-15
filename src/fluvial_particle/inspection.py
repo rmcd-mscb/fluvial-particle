@@ -50,8 +50,8 @@ def inspect_grid(
 
     Args:
         settings_file: Path to the user settings file (Python script).
-        timestep: For time-dependent grids, which timestep index to inspect.
-                 If None and time-dependent, defaults to 0 (first timestep).
+        timestep: For time-dependent grids, which timestep index to inspect (0-indexed).
+                 Defaults to 0 (first timestep). Negative values supported (-1 = last).
         quiet: If True, suppress printed summary. Default False.
 
     Returns:
@@ -60,7 +60,7 @@ def inspect_grid(
             - grid_3d: 3D grid info (only if Track3D=1)
             - hydraulics: Reach-averaged statistics (depth, velocity, shear_stress, ustar)
             - time_dependent: Boolean or timestep info dict
-            - ustar_method: String indicating the u* computation method being used
+            - ustar_method: The method used to compute shear velocity
 
     Raises:
         FileNotFoundError: If settings file or grid files don't exist.
@@ -96,6 +96,26 @@ def inspect_grid(
     return grid_info
 
 
+def _extract_ustar_options(settings: dict) -> dict[str, Any]:
+    """Extract u* configuration options from settings.
+
+    Args:
+        settings: Settings dictionary.
+
+    Returns:
+        Dictionary with keys: manning_n, chezy_c, darcy_f, water_density,
+        ustar_method, min_depth (values may be None if not configured).
+    """
+    return {
+        "manning_n": settings.get("manning_n"),
+        "chezy_c": settings.get("chezy_c"),
+        "darcy_f": settings.get("darcy_f"),
+        "water_density": settings.get("water_density"),
+        "ustar_method": settings.get("ustar_method"),
+        "min_depth": settings.get("min_depth"),
+    }
+
+
 def _inspect_static(settings: dict) -> dict[str, Any]:
     """Inspect static (single timestep) grid files."""
     track3d = settings["Track3D"]
@@ -105,12 +125,7 @@ def _inspect_static(settings: dict) -> dict[str, Any]:
     field_map_3d = settings["field_map_3d"]
 
     # Extract u* configuration options
-    manning_n = settings.get("manning_n")
-    chezy_c = settings.get("chezy_c")
-    darcy_f = settings.get("darcy_f")
-    water_density = settings.get("water_density")
-    ustar_method = settings.get("ustar_method")
-    min_depth = settings.get("min_depth")
+    ustar_opts = _extract_ustar_options(settings)
 
     # Load the grid
     river = RiverGrid(
@@ -119,12 +134,7 @@ def _inspect_static(settings: dict) -> dict[str, Any]:
         filename3d=file_3d if track3d else None,
         field_map_2d=field_map_2d,
         field_map_3d=field_map_3d,
-        min_depth=min_depth,
-        manning_n=manning_n,
-        chezy_c=chezy_c,
-        darcy_f=darcy_f,
-        water_density=water_density,
-        ustar_method=ustar_method,
+        **ustar_opts,
     )
 
     result = {
@@ -155,12 +165,7 @@ def _inspect_time_dependent(settings: dict, timestep: int | None) -> dict[str, A
     grid_start_time = settings.get("grid_start_time", 0.0)
 
     # Extract u* configuration options
-    manning_n = settings.get("manning_n")
-    chezy_c = settings.get("chezy_c")
-    darcy_f = settings.get("darcy_f")
-    water_density = settings.get("water_density")
-    ustar_method = settings.get("ustar_method")
-    min_depth = settings.get("min_depth")
+    ustar_opts = _extract_ustar_options(settings)
 
     # Calculate the actual timestep index
     n_grids = grid_end_index - grid_start_index + 1
@@ -171,8 +176,10 @@ def _inspect_time_dependent(settings: dict, timestep: int | None) -> dict[str, A
         timestep = n_grids + timestep
 
     if timestep < 0 or timestep >= n_grids:
-        bad_timestep = original_timestep if original_timestep is not None else timestep
-        raise ValueError(f"timestep {bad_timestep} out of range [0, {n_grids - 1}]")
+        raise ValueError(
+            f"timestep {original_timestep} out of range for {n_grids} available timesteps "
+            f"(valid range: 0 to {n_grids - 1}, or -{n_grids} to -1)"
+        )
 
     # Load the time-varying grid
     river = TimeVaryingGrid(
@@ -185,12 +192,7 @@ def _inspect_time_dependent(settings: dict, timestep: int | None) -> dict[str, A
         grid_end_index=grid_end_index,
         grid_dt=grid_dt,
         grid_start_time=grid_start_time,
-        min_depth=min_depth,
-        manning_n=manning_n,
-        chezy_c=chezy_c,
-        darcy_f=darcy_f,
-        water_density=water_density,
-        ustar_method=ustar_method,
+        **ustar_opts,
     )
 
     # Advance to the requested timestep if needed
@@ -471,14 +473,10 @@ def _print_summary(info: dict[str, Any]) -> None:
     td = info["time_dependent"]
     if td and isinstance(td, dict):
         lines.append("\nTime-Dependent: Yes")
-        lines.append(
-            f"  Timestep: {td['timestep'] + 1} of {td['total_timesteps']}"
-        )
+        lines.append(f"  Timestep: {td['timestep'] + 1} of {td['total_timesteps']}")
         lines.append(f"  Time: {td['time']:.2f} s")
         lines.append(f"  Grid dt: {td['grid_dt']:.2f} s")
-        lines.append(
-            f"  Time range: [{td['time_range'][0]:.2f}, {td['time_range'][1]:.2f}] s"
-        )
+        lines.append(f"  Time range: [{td['time_range'][0]:.2f}, {td['time_range'][1]:.2f}] s")
 
     # Available fields
     lines.append("\nAvailable Fields (2D):")
