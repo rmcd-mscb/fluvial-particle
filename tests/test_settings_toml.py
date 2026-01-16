@@ -215,6 +215,24 @@ class TestGetDefaultConfig:
 
         assert config2["particles"]["count"] == 100  # Original value
 
+    def test_get_default_config_includes_particle_type_params(self):
+        """Default config should include falling and larval particle parameters."""
+        from fluvial_particle import get_default_config
+
+        config = get_default_config()
+
+        # Check falling particle parameters
+        assert "falling" in config["particles"]
+        assert config["particles"]["falling"]["radius"] == 0.0005
+        assert config["particles"]["falling"]["density"] == 2650.0
+        assert config["particles"]["falling"]["c1"] == 20.0
+        assert config["particles"]["falling"]["c2"] == 1.1
+
+        # Check larval particle parameters
+        assert "larval" in config["particles"]
+        assert config["particles"]["larval"]["amplitude"] == 0.2
+        assert config["particles"]["larval"]["period"] == 60.0
+
 
 class TestSaveConfig:
     """Tests for save_config helper function."""
