@@ -25,6 +25,7 @@ import pathlib
 from typing import Any
 
 import numpy as np
+import vtk
 from vtk.util import numpy_support
 
 from .RiverGrid import (
@@ -34,6 +35,29 @@ from .RiverGrid import (
     RiverGrid,
 )
 from .Settings import Settings
+
+
+def _read_raw_vtk_grid(filename: str):
+    """Read a VTK grid file without any processing.
+
+    Args:
+        filename: Path to VTK/VTS file.
+
+    Returns:
+        VTK structured grid object with all original arrays.
+    """
+    suffix = pathlib.Path(filename).suffix.lower()
+    if suffix == ".vts":
+        reader = vtk.vtkXMLStructuredGridReader()
+    elif suffix == ".vtk":
+        reader = vtk.vtkStructuredGridReader()
+    else:
+        # For unsupported formats, return None
+        return None
+
+    reader.SetFileName(filename)
+    reader.Update()
+    return reader.GetOutput()
 
 
 def inspect_grid(
@@ -127,6 +151,9 @@ def _inspect_static(settings: dict) -> dict[str, Any]:
     # Extract u* configuration options
     ustar_opts = _extract_ustar_options(settings)
 
+    # Read the raw 2D grid BEFORE RiverGrid processes it (to get velocity for stats)
+    raw_grid_2d = _read_raw_vtk_grid(file_2d)
+
     # Load the grid
     river = RiverGrid(
         track3d=track3d,
@@ -137,9 +164,10 @@ def _inspect_static(settings: dict) -> dict[str, Any]:
         **ustar_opts,
     )
 
+    # Extract grid info from raw grid (before processing removes arrays)
     result = {
-        "grid_2d": _extract_grid_info(river.vtksgrid2d, file_2d, is_3d=False),
-        "hydraulics": _compute_hydraulics(river, settings),
+        "grid_2d": _extract_grid_info(raw_grid_2d, file_2d, is_3d=False),
+        "hydraulics": _compute_hydraulics(river, settings, raw_grid_2d=raw_grid_2d),
         "time_dependent": False,
         "ustar_method": river._ustar_method,
     }
@@ -205,9 +233,12 @@ def _inspect_time_dependent(settings: dict, timestep: int | None) -> dict[str, A
     file_2d = file_pattern_2d.format(file_idx)
     file_3d = file_pattern_3d.format(file_idx) if track3d else None
 
+    # Read raw 2D grid to get all fields including velocity
+    raw_grid_2d = _read_raw_vtk_grid(file_2d)
+
     result = {
-        "grid_2d": _extract_grid_info(river._current_grid.vtksgrid2d, file_2d, is_3d=False),
-        "hydraulics": _compute_hydraulics(river._current_grid, settings),
+        "grid_2d": _extract_grid_info(raw_grid_2d, file_2d, is_3d=False),
+        "hydraulics": _compute_hydraulics(river._current_grid, settings, raw_grid_2d=raw_grid_2d),
         "time_dependent": {
             "enabled": True,
             "timestep": timestep,
@@ -271,10 +302,19 @@ def _extract_grid_info(vtk_grid, filename: str, is_3d: bool) -> dict[str, Any]:
     }
 
 
-def _compute_hydraulics(river: RiverGrid, settings: dict) -> dict[str, dict[str, float]]:
+def _compute_hydraulics(
+    river: RiverGrid,
+    settings: dict,
+    raw_grid_2d=None,
+) -> dict[str, dict[str, float]]:
     """Compute reach-averaged hydraulic statistics from the 2D grid.
 
     Computes statistics only for wet cells (where wet_dry > 0).
+
+    Args:
+        river: RiverGrid object (post-processed).
+        settings: Settings dictionary.
+        raw_grid_2d: Optional raw VTK grid for reading velocity before processing.
     """
     ptdata = river.vtksgrid2d.GetPointData()
 
@@ -310,9 +350,20 @@ def _compute_hydraulics(river: RiverGrid, settings: dict) -> dict[str, dict[str,
     else:
         result["depth"] = {"mean": np.nan, "std": np.nan, "min": np.nan, "max": np.nan}
 
-    # Velocity magnitude
+    # Velocity magnitude - check processed grid first, then raw grid
     vel_arr = ptdata.GetArray("velocity")
-    if vel_arr is not None:
+    if vel_arr is None and raw_grid_2d is not None:
+        # Use raw grid to get velocity (before RiverGrid processing removes it)
+        raw_ptdata = raw_grid_2d.GetPointData()
+        # Try common velocity array names
+        for name in ("Velocity", "velocity", "vel", "U"):
+            vel_arr = raw_ptdata.GetArray(name)
+            if vel_arr is not None and vel_arr.GetNumberOfComponents() == 3:
+                break
+        else:
+            vel_arr = None
+
+    if vel_arr is not None and vel_arr.GetNumberOfComponents() >= 2:
         vel = numpy_support.vtk_to_numpy(vel_arr)
         vel_mag = np.sqrt(vel[:, 0] ** 2 + vel[:, 1] ** 2)
         vel_mag_wet = vel_mag[wet_mask]
@@ -330,7 +381,7 @@ def _compute_hydraulics(river: RiverGrid, settings: dict) -> dict[str, dict[str,
         result["shear_stress"] = {"mean": np.nan, "std": np.nan, "min": np.nan, "max": np.nan}
 
     # Compute u* based on the method
-    result["ustar"] = _compute_ustar_stats(river, settings, wet_mask)
+    result["ustar"] = _compute_ustar_stats(river, settings, wet_mask, raw_grid_2d=raw_grid_2d)
 
     return result
 
@@ -339,6 +390,7 @@ def _compute_ustar_stats(
     river: RiverGrid,
     settings: dict,
     wet_mask: np.ndarray,
+    raw_grid_2d=None,
 ) -> dict[str, float]:
     """Compute u* statistics based on the configured method."""
     ptdata = river.vtksgrid2d.GetPointData()
@@ -356,7 +408,17 @@ def _compute_ustar_stats(
     wse = numpy_support.vtk_to_numpy(wse_arr)
     depth = np.maximum(wse - bed_elev, 1e-6)
 
-    if vel_arr is not None:
+    # Try processed grid first, then raw grid for velocity
+    if vel_arr is None and raw_grid_2d is not None:
+        raw_ptdata = raw_grid_2d.GetPointData()
+        for name in ("Velocity", "velocity", "vel", "U"):
+            vel_arr = raw_ptdata.GetArray(name)
+            if vel_arr is not None and vel_arr.GetNumberOfComponents() == 3:
+                break
+        else:
+            vel_arr = None
+
+    if vel_arr is not None and vel_arr.GetNumberOfComponents() >= 2:
         vel = numpy_support.vtk_to_numpy(vel_arr)
         vel_mag = np.sqrt(vel[:, 0] ** 2 + vel[:, 1] ** 2)
     else:
