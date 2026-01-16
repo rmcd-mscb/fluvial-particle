@@ -36,7 +36,7 @@ Command Line Usage
 
 .. code:: bash
 
- fluvial_particle <config_file> <output_directory>
+    fluvial_particle <config_file> <output_directory>
 
 Where ``<config_file>`` is the path to a TOML or Python configuration file, and ``<output_directory>`` is where output HDF5 and XDMF files will be written.
 
@@ -46,7 +46,7 @@ For an MPI-enabled installation, run in parallel (e.g., with 4 cores):
 
 .. code:: bash
 
- mpiexec -n 4 fluvial_particle_mpi <config_file> <output_directory>
+    mpiexec -n 4 fluvial_particle_mpi <config_file> <output_directory>
 
 
 Command Line Options
@@ -100,6 +100,6 @@ For programmatic use in scripts or Jupyter notebooks:
 
     # Access results
     positions = results.get_positions(timestep=-1)
-    df = results.to_dataframe()
+    df = results.to_dataframe(timestep=-1)
 
 See the :doc:`example` page for detailed examples.

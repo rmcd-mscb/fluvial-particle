@@ -254,6 +254,7 @@ For Jupyter notebooks and scripts, use the programmatic API instead of files:
     # Access results
     print(f"Simulated {results.num_particles} particles over {results.num_timesteps} timesteps")
     positions = results.get_positions(timestep=-1)  # Final positions
+    df = results.to_dataframe()  # Full particle trajectories as DataFrame
 
 
 Python Configuration (Legacy)

@@ -25,31 +25,31 @@ To run the simulation:
 
 .. code-block:: bash
 
- fluvial_particle settings.toml ./output
+    fluvial_particle settings.toml ./output
 
 Which prints to stdout:
 
 .. code-block:: bash
 
- Beginning simulation
- Using seed 54059
- Simulating 1000 particles
- Particle class: Particles
- Velocity field will be interpolated from 3D grid
- Simulation start time is 0.0, maximum end time is 1000.0, using timesteps of 0.25 (all in seconds).
- Remaining time steps 3600/4000 || Elapsed Time: 0:00:02.532642 h:m:s || ETA 0:00:22.857252 h:m:s
- Remaining time steps 3200/4000 || Elapsed Time: 0:00:05.175054 h:m:s || ETA 0:00:20.732601 h:m:s
- Remaining time steps 2800/4000 || Elapsed Time: 0:00:07.856087 h:m:s || ETA 0:00:18.352711 h:m:s
- Remaining time steps 2400/4000 || Elapsed Time: 0:00:12.652966 h:m:s || ETA 0:00:18.999232 h:m:s
- Remaining time steps 2000/4000 || Elapsed Time: 0:00:16.042314 h:m:s || ETA 0:00:16.058364 h:m:s
- Remaining time steps 1600/4000 || Elapsed Time: 0:00:19.357288 h:m:s || ETA 0:00:12.918307 h:m:s
- Remaining time steps 1200/4000 || Elapsed Time: 0:00:22.243454 h:m:s || ETA 0:00:09.544262 h:m:s
- Remaining time steps 800/4000 || Elapsed Time: 0:00:25.076732 h:m:s || ETA 0:00:06.278982 h:m:s
- Remaining time steps 400/4000 || Elapsed Time: 0:00:27.967835 h:m:s || ETA 0:00:03.116172 h:m:s
- Remaining time steps 0/4000 || Elapsed Time: 0:00:30.928731 h:m:s || ETA 0:00:00.007734 h:m:s
- Finished simulation in 0:00:30.931503 h:m:s
- Post-processing...
- Finished in 0:00:30.968555 h:m:s
+    Beginning simulation
+    Using seed 54059
+    Simulating 1000 particles
+    Particle class: Particles
+    Velocity field will be interpolated from 3D grid
+    Simulation start time is 0.0, maximum end time is 1000.0, using timesteps of 0.25 (all in seconds).
+    Remaining time steps 3600/4000 || Elapsed Time: 0:00:02.532642 h:m:s || ETA 0:00:22.857252 h:m:s
+    Remaining time steps 3200/4000 || Elapsed Time: 0:00:05.175054 h:m:s || ETA 0:00:20.732601 h:m:s
+    Remaining time steps 2800/4000 || Elapsed Time: 0:00:07.856087 h:m:s || ETA 0:00:18.352711 h:m:s
+    Remaining time steps 2400/4000 || Elapsed Time: 0:00:12.652966 h:m:s || ETA 0:00:18.999232 h:m:s
+    Remaining time steps 2000/4000 || Elapsed Time: 0:00:16.042314 h:m:s || ETA 0:00:16.058364 h:m:s
+    Remaining time steps 1600/4000 || Elapsed Time: 0:00:19.357288 h:m:s || ETA 0:00:12.918307 h:m:s
+    Remaining time steps 1200/4000 || Elapsed Time: 0:00:22.243454 h:m:s || ETA 0:00:09.544262 h:m:s
+    Remaining time steps 800/4000 || Elapsed Time: 0:00:25.076732 h:m:s || ETA 0:00:06.278982 h:m:s
+    Remaining time steps 400/4000 || Elapsed Time: 0:00:27.967835 h:m:s || ETA 0:00:03.116172 h:m:s
+    Remaining time steps 0/4000 || Elapsed Time: 0:00:30.928731 h:m:s || ETA 0:00:00.007734 h:m:s
+    Finished simulation in 0:00:30.931503 h:m:s
+    Post-processing...
+    Finished in 0:00:30.968555 h:m:s
 
 The output from the run can be visualized in Paraview by opening an XDMF file and reading it with the XDMF Reader. Here are the example outputs at t=500 seconds from the particles.xmf and cells2d.xmf files -- in the first image, the mesh is colored by flow depth:
 
@@ -153,31 +153,31 @@ Python configuration files are still supported. Update :python:`"path/to/repo"` 
 
 .. code-block:: python
 
- """Options file for fluvial particle model."""
- from fluvial_particle.Particles import Particles
+    """Options file for fluvial particle model."""
+    from fluvial_particle.Particles import Particles
 
- # Required keyword arguments
- file_name_2d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_2D1.vtk"
- file_name_3d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_3D1_new.vtk"
- SimTime = 1000.0
- dt = 0.25
- PrintAtTick = 10.0
- Track3D = 1
- NumPart = 1000
- StartLoc = (6.14, 9.09, 10.3)
- ParticleType = Particles
+    # Required keyword arguments
+    file_name_2d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_2D1.vtk"
+    file_name_3d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_3D1_new.vtk"
+    SimTime = 1000.0
+    dt = 0.25
+    PrintAtTick = 10.0
+    Track3D = 1
+    NumPart = 1000
+    StartLoc = (6.14, 9.09, 10.3)
+    ParticleType = Particles
 
- # Field name mappings (Delft-FM example)
- field_map_2d = {
-     "bed_elevation": "Elevation",
-     "wet_dry": "IBC",
-     "shear_stress": "ShearStress (magnitude)",
-     "velocity": "Velocity",
-     "water_surface_elevation": "WaterSurfaceElevation",
- }
- field_map_3d = {
-     "velocity": "Velocity",
- }
+    # Field name mappings (Delft-FM example)
+    field_map_2d = {
+        "bed_elevation": "Elevation",
+        "wet_dry": "IBC",
+        "shear_stress": "ShearStress (magnitude)",
+        "velocity": "Velocity",
+        "water_surface_elevation": "WaterSurfaceElevation",
+    }
+    field_map_3d = {
+        "velocity": "Velocity",
+    }
 
- # Optional keyword arguments
- lev = 0.00025  # reach-averaged lateral eddy viscosity
+    # Optional keyword arguments
+    lev = 0.00025  # reach-averaged lateral eddy viscosity
