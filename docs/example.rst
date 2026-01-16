@@ -10,11 +10,22 @@ Example
 
 This simulation example releases 1000 particles from a point-source in an idealized meandering river.
 
-To run the example, copy the example options file given below into a new script and update the path to the *fluvial-particle* repository, then run in serial:
+Running from Command Line
+--------------------------
+
+First, create a configuration file. You can generate a template with:
 
 .. code-block:: bash
 
- fluvial_particle  path/to/options/file path/to/output/dir
+    fluvial_particle --init
+
+Then edit the generated ``settings.toml`` file to match your simulation needs.
+
+To run the simulation:
+
+.. code-block:: bash
+
+ fluvial_particle settings.toml ./output
 
 Which prints to stdout:
 
@@ -51,31 +62,112 @@ Notice the discontinuous concentrations in the cells2d.xmf plot. Additional simu
 .. image:: data/meander_cells_example2.png
 
 
-Example options file
+Running from Python/Notebooks
+------------------------------
+
+For Jupyter notebooks or Python scripts, use the programmatic API:
+
+.. code-block:: python
+
+    from fluvial_particle import get_default_config, run_simulation
+
+    # Get default configuration as a dictionary
+    config = get_default_config()
+
+    # Customize the configuration
+    config["simulation"]["time"] = 1000.0
+    config["simulation"]["dt"] = 0.25
+    config["simulation"]["print_interval"] = 10.0
+
+    config["particles"]["count"] = 1000
+    config["particles"]["start_location"] = [6.14, 9.09, 10.3]
+
+    config["grid"]["track_3d"] = True
+    config["grid"]["file_2d"] = "./tests/data/Result_FM_MEander_1_long_2D1.vtk"
+    config["grid"]["file_3d"] = "./tests/data/Result_FM_MEander_1_long_3D1_new.vtk"
+
+    # Run simulation directly with dict (no file needed)
+    results = run_simulation(config, output_dir="./output", seed=42)
+
+    # Access results
+    print(f"Simulated {results.num_particles} particles")
+    print(f"Over {results.num_timesteps} timesteps")
+    print(f"Times: {results.times[:5]}...")
+
+    # Get particle positions at final timestep
+    positions = results.get_positions(timestep=-1)
+    print(f"Final positions shape: {positions.shape}")
+
+    # Convert to DataFrame for analysis
+    df = results.to_dataframe(timestep=-1)
+    print(df.head())
+
+
+Example TOML Configuration
 ----------------------------
 
-This file can be run in either serial or parallel execution mode. The input mesh data paths are relative to the repository root directory -- be sure to update :python:`"path/to/repo"` with the correct path on your machine.
+This is the recommended configuration format for new projects:
+
+.. code-block:: toml
+
+    # Fluvial-particle simulation configuration
+    # Meandering river example
+
+    [simulation]
+    time = 1000.0            # Maximum simulation time [seconds]
+    dt = 0.25                # Time step [seconds]
+    print_interval = 10.0    # Output interval [seconds]
+
+    [particles]
+    type = "Particles"
+    count = 1000             # Particles per processor
+    start_location = [6.14, 9.09, 10.3]
+
+    [particles.physics]
+    lev = 0.00025            # Reach-averaged lateral eddy viscosity
+
+    [grid]
+    track_3d = true
+    file_2d = "./tests/data/Result_FM_MEander_1_long_2D1.vtk"
+    file_3d = "./tests/data/Result_FM_MEander_1_long_3D1_new.vtk"
+
+    [grid.field_map_2d]
+    bed_elevation = "Elevation"
+    wet_dry = "IBC"
+    shear_stress = "ShearStress (magnitude)"
+    velocity = "Velocity"
+    water_surface_elevation = "WaterSurfaceElevation"
+
+    [grid.field_map_3d]
+    velocity = "Velocity"
+
+
+Example Python Configuration (Legacy)
+--------------------------------------
+
+Python configuration files are still supported. Update :python:`"path/to/repo"` with the correct path on your machine:
 
 .. note::
-   This example uses legacy VTK (``.vtk``) files. For large meshes, consider using VTK XML (``.vts``) format which offers better compression and faster I/O. See the options file documentation for supported formats.
+   This example uses legacy VTK (``.vtk``) files. For large meshes, consider using VTK XML (``.vts``) format which offers better compression and faster I/O. See the configuration file documentation for supported formats.
 
 
 .. code-block:: python
 
  """Options file for fluvial particle model."""
+ from fluvial_particle.Particles import Particles
 
  # Required keyword arguments
- file_name_2d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_2D1.vtk"  # path to 2D mesh file
- file_name_3d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_3D1_new.vtk"  # path to 3D mesh file
- SimTime = 1000.0  # maximum simulation time [seconds]
- dt = 0.25  # simulation time step [seconds]
- PrintAtTick = 10.0  # Print every PrintAtTick seconds
- Track3D = 1  # 1 to use 3D velocity field, 0 to use 2D velocity field
- NumPart = 1000  # Number of particles to simulate per processor
- StartLoc = (6.14, 9.09, 10.3)  # Starting location from a single point
- ParticleType = Particles  # Particle type to simulate
+ file_name_2d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_2D1.vtk"
+ file_name_3d = "path/to/repo" + "//tests/data/Result_FM_MEander_1_long_3D1_new.vtk"
+ SimTime = 1000.0
+ dt = 0.25
+ PrintAtTick = 10.0
+ Track3D = 1
+ NumPart = 1000
+ StartLoc = (6.14, 9.09, 10.3)
+ ParticleType = Particles
 
- # Field name mappings from standard names to model-specific names (Delft-FM example)
+ # Field name mappings (Delft-FM example)
  field_map_2d = {
      "bed_elevation": "Elevation",
      "wet_dry": "IBC",
@@ -87,8 +179,5 @@ This file can be run in either serial or parallel execution mode. The input mesh
      "velocity": "Velocity",
  }
 
- # Some optional keyword arguments
+ # Optional keyword arguments
  lev = 0.00025  # reach-averaged lateral eddy viscosity
- # beta = (0.067, 0.067, 0.067)  # eddy viscosity coefficient
- # min_depth = 0.02  # minimum depth particles may enter [meters]
- # vertbound = 0.01  # depth fraction that bounds particles from bed and water surface

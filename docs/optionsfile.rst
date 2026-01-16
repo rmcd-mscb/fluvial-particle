@@ -1,302 +1,372 @@
 =======================
-The user options file
+Configuration Files
 =======================
 
-Simulation parameters are set in a user options file that is read in by *fluvial-particle* and evaluated as a Python script. See the examples section for a sample user options file.
+Simulation parameters are defined in a configuration file. *fluvial-particle* supports two formats:
 
-Some parameters are required in the options file, while others are optional.
+* **TOML** (recommended) - Standard configuration format, easy to read and edit
+* **Python** (legacy) - Original format, still fully supported
 
-Required keyword arguments
-============================
+TOML Configuration (Recommended)
+=================================
 
-**file_name_2d**, str: Path to the 2D input mesh. Supported formats:
+TOML files use a structured, human-readable format. Generate a template with:
 
-* ``.vts`` - VTK XML Structured Grid format (**recommended**). Modern binary format with compression, 5-10x smaller than legacy VTK.
-* ``.vtk`` - VTK legacy format (ASCII or binary). Widely compatible with older tools.
-* ``.npz`` - NumPy compressed archive. Python-specific format for custom workflows.
+.. code-block:: bash
 
-**file_name_3d**, str: Path to the 3D input mesh. Supports the same formats as file_name_2d. In the case of a 2D simulation, this entry will be ignored but it is still required.
+    fluvial_particle --init
 
-**SimTime**, float: Maximum allowable simulation time, in seconds. The simulation will end before this time only if all of the tracked particles leave the domain before SimTime.
+This creates ``settings.toml`` in the current directory.
 
-**dt**, float: The time step used in the simulation, in seconds.
+Complete TOML Example
+----------------------
 
-**PrintAtTick**, float: The printing interval, in seconds. Data will be printed to stdout and written to the HDF5 files at intervals of less than or equal to PrintAtTick.
+.. code-block:: toml
 
-**Track3D**, bool (int 0 or 1): Indicates whether to run a 2D or 3D simulation. If set to 1, the simulation will be 3D and velocity vectors will be interpolated from the 3D mesh. Else, the simulation will be 2D with velocities from the 2D mesh.
+    # Fluvial-particle simulation configuration
 
-**NumPart**, int: The number of particles to simulate, *per core*. This means that in parallel execution mode with *N* cores, the total number of simulated particles will be *N* * NumPart.
+    [simulation]
+    time = 60.0              # Maximum simulation time [seconds]
+    dt = 0.25                # Time step [seconds]
+    print_interval = 10.0    # Output interval [seconds]
 
-**StartLoc**, tuple or str: Indicates the starting location of the particles, can be given as a tuple of length 3 or as a string. Particles can be initialized from a single point, from an existing HDF5 file of particle locations, or from a time-delayed collection of points specified in a CSV file.
+    [particles]
+    type = "Particles"       # Options: Particles, FallingParticles, LarvalParticles,
+                             #          LarvalTopParticles, LarvalBotParticles
+    count = 100              # Number of particles per processor
+    start_location = [5.0, 0.0, 9.5]  # Starting (x, y, z) coordinates
+    start_depth_fraction = 0.5        # Optional: initial vertical position (0=bed, 1=surface)
 
-* tuple (x, y, z): all particles will be initiated from the same point
-* str: path to a file from which these starting positions will be loaded; either an HDF5 or CSV file
+    [particles.physics]
+    beta = [0.067, 0.067, 0.067]  # 3D diffusion coefficients
+    lev = 0.25                    # Lateral eddy viscosity
+    min_depth = 0.02              # Minimum depth threshold [meters]
+    vertical_bound = 0.01         # Vertical boundary buffer
 
- - ".h5" suffix: the starting locations will be loaded from the HDF5 file as a checkpoint file generated from a previous *fluvial-particle* simulation. The checkpoint file must have the same *total* number of particles as the current simulation, i.e. summed across all CPU cores. By default, data are loaded from the final entry in the HDF5 file, but a particular index to slice into along the time dimension (axis 0) can be provided with the *StartIdx* optional keyword argument.
- - ".csv" suffix: the starting locations will be loaded from a CSV file with 5 columns: start_time, x, y, z, numpart. For example, if a given row in the CSV file is "10.0, 6.14, 9.09, 10.3, 100", then 100 particles will be initiated from the point (6.14, 9.09, 10.3) starting at a simulation time of 10.0 seconds.
+    [grid]
+    track_3d = true                          # true = 3D velocity field, false = 2D
+    file_2d = "./data/mesh_2d.vts"           # Path to 2D mesh file
+    file_3d = "./data/mesh_3d.vts"           # Path to 3D mesh file
 
-**ParticleType**: The type of particles to simulate, either the Particles class or a subclass (e.g. LarvalBotParticles). This argument should not be placed inside quotes or brackets of any kind.
+    [grid.field_map_2d]
+    bed_elevation = "Elevation"
+    shear_stress = "ShearStress (magnitude)"
+    velocity = "Velocity"
+    water_surface_elevation = "WaterSurfaceElevation"
 
-**field_map_2d**, dict: A dictionary mapping standard internal field names to the model-specific names in your 2D mesh file. This allows *fluvial-particle* to work with output from different hydrodynamic models (e.g., Delft-FM, iRIC, HEC-RAS) that use different naming conventions.
+    [grid.field_map_3d]
+    velocity = "Velocity"
 
-Core required keys:
+    [output]
+    vtp = false              # Also write VTP files for ParaView visualization
 
-* ``bed_elevation``: bed/bottom elevation (e.g., "Elevation" in Delft-FM)
-* ``velocity``: velocity vector (e.g., "Velocity")
-* ``water_surface_elevation``: water surface elevation (e.g., "WaterSurfaceElevation")
 
-Shear velocity source (at least one required):
+TOML Section Reference
+-----------------------
 
-* ``ustar``: direct shear velocity field [m/s] (preferred if available)
-* ``shear_stress``: bed shear stress [Pa] (commonly available from hydrodynamic models)
-* ``manning_n``: Manning's n field [-] (or use scalar option below)
-* ``chezy_c``: Chézy C field [m^0.5/s] (or use scalar option)
-* ``darcy_f``: Darcy-Weisbach f field [-] (or use scalar option)
-* ``energy_slope``: energy slope field [-]
-* ``tke``: turbulent kinetic energy field [m²/s²]
+[simulation]
+^^^^^^^^^^^^
 
-Optional key:
+**time** (required): Maximum simulation time in seconds. The simulation ends when all particles leave the domain or this time is reached.
 
-* ``wet_dry``: wet/dry indicator, 1=wet, 0=dry (e.g., "IBC" in Delft-FM). If ``wet_dry`` is omitted from ``field_map_2d``, this field will be computed automatically from depth using the ``min_depth`` threshold (defaults to 0.02m if not specified in the options file): cells with depth > min_depth are wet (1), otherwise dry (0).
+**dt** (required): Time step in seconds.
 
-Example with shear stress:
+**print_interval** (required): Output interval in seconds. Data is written to HDF5 files at this interval.
+
+
+[particles]
+^^^^^^^^^^^
+
+**type** (optional): Particle class to use. Options:
+
+* ``"Particles"`` (default) - Standard passive particles
+* ``"FallingParticles"`` - Settling particles with fall velocity
+* ``"LarvalParticles"`` - Particles with sinusoidal swimming behavior
+* ``"LarvalTopParticles"`` - Larval particles biased toward surface
+* ``"LarvalBotParticles"`` - Larval particles biased toward bed
+
+**count** (required): Number of particles to simulate *per processor*. In parallel mode with N cores, total particles = N × count.
+
+**start_location** (required): Starting position as ``[x, y, z]`` array, or path to checkpoint/CSV file:
+
+.. code-block:: toml
+
+    # Single point release
+    start_location = [5.0, 0.0, 9.5]
+
+    # Resume from checkpoint
+    start_location = "./previous_run/particles.h5"
+
+    # Time-varying release from CSV
+    start_location = "./release_schedule.csv"
+
+**start_depth_fraction** (optional): Initial vertical position as fraction of water depth (0=bed, 1=surface). Default: None (uses z from start_location).
+
+
+[particles.physics]
+^^^^^^^^^^^^^^^^^^^
+
+**beta** (optional): Diffusion coefficients as ``[x, y, z]`` or scalar. Default: ``[0.067, 0.067, 0.067]``
+
+**lev** (optional): Lateral eddy viscosity. Default: 0.25
+
+**min_depth** (optional): Minimum water depth threshold in meters. Default: 0.02
+
+**vertical_bound** (optional): Vertical boundary buffer as fraction of depth. Default: 0.01
+
+
+[particles.falling]
+^^^^^^^^^^^^^^^^^^^
+
+For ``type = "FallingParticles"`` only:
+
+**radius** (optional): Particle radius in meters. Default: 0.0005
+
+**density** (optional): Particle density in kg/m³. Default: 2650.0
+
+**c1** (optional): Viscous drag coefficient. Default: 20.0
+
+**c2** (optional): Turbulent wake drag coefficient. Default: 1.1
+
+
+[particles.larval]
+^^^^^^^^^^^^^^^^^^
+
+For ``LarvalParticles``, ``LarvalTopParticles``, or ``LarvalBotParticles``:
+
+**amplitude** (optional): Swimming amplitude as fraction of depth. Default: 0.2
+
+**period** (optional): Swimming period in seconds. Default: 60.0
+
+
+[grid]
+^^^^^^
+
+**track_3d** (required): Use 3D velocity field (``true``) or 2D (``false``).
+
+**file_2d** (required): Path to 2D mesh file. Supported formats:
+
+* ``.vts`` - VTK XML Structured Grid (**recommended**)
+* ``.vtk`` - VTK legacy format
+* ``.npz`` - NumPy compressed archive
+
+**file_3d** (required): Path to 3D mesh file. Required even for 2D simulations (use any valid file).
+
+
+[grid.field_map_2d]
+^^^^^^^^^^^^^^^^^^^
+
+Maps standard field names to your model's naming convention.
+
+**Required fields:**
+
+* ``bed_elevation``: Bed/bottom elevation
+* ``velocity``: Velocity vector
+* ``water_surface_elevation``: Water surface elevation
+
+**Shear velocity source** (at least one required):
+
+* ``shear_stress``: Bed shear stress [Pa] (most common)
+* ``ustar``: Direct shear velocity [m/s]
+* ``manning_n``: Manning's n field
+* ``chezy_c``: Chézy C field
+* ``darcy_f``: Darcy-Weisbach f field
+* ``energy_slope``: Energy slope field
+* ``tke``: Turbulent kinetic energy [m²/s²]
+
+**Optional:**
+
+* ``wet_dry``: Wet/dry indicator (1=wet, 0=dry). Auto-computed from depth if omitted.
+
+
+[grid.field_map_3d]
+^^^^^^^^^^^^^^^^^^^
+
+**Required:**
+
+* ``velocity``: 3D velocity vector
+
+
+[grid.friction]
+^^^^^^^^^^^^^^^
+
+Scalar friction coefficients (alternative to field mapping):
+
+.. code-block:: toml
+
+    [grid.friction]
+    manning_n = 0.03      # Manning's n
+    # chezy_c = 50.0      # OR Chézy C
+    # darcy_f = 0.02      # OR Darcy-Weisbach f
+    water_density = 1000.0  # Water density [kg/m³], default 1000
+
+
+[grid.time_varying]
+^^^^^^^^^^^^^^^^^^^
+
+For unsteady flow simulations with time-varying velocity fields:
+
+.. code-block:: toml
+
+    [grid.time_varying]
+    enabled = true
+    file_pattern_2d = "./data/flow_2d_{}.vts"  # {} = file index
+    file_pattern_3d = "./data/flow_3d_{}.vts"
+    start_index = 0        # First file index
+    end_index = 10         # Last file index (inclusive)
+    dt = 60.0              # Time between grid files [seconds]
+    start_time = 0.0       # Simulation time of first grid file
+    interpolation = "linear"  # linear, nearest, or hold
+
+
+[output]
+^^^^^^^^
+
+**vtp** (optional): Write VTP files for ParaView in addition to HDF5. Default: false
+
+
+Programmatic Configuration (Notebooks)
+=======================================
+
+For Jupyter notebooks and scripts, use the programmatic API instead of files:
 
 .. code-block:: python
 
+    from fluvial_particle import get_default_config, run_simulation, save_config
+
+    # Get default configuration as a nested dictionary
+    config = get_default_config()
+
+    # Modify settings programmatically
+    config["particles"]["count"] = 200
+    config["particles"]["start_location"] = [5.0, 0.0, 9.5]
+    config["simulation"]["time"] = 120.0
+    config["grid"]["file_2d"] = "./data/mesh_2d.vts"
+    config["grid"]["file_3d"] = "./data/mesh_3d.vts"
+
+    # Option 1: Run directly with dict (no file needed)
+    results = run_simulation(config, output_dir="./output")
+
+    # Option 2: Save to file first
+    save_config(config, "my_settings.toml")
+    results = run_simulation("my_settings.toml", output_dir="./output")
+
+    # Access results
+    print(f"Simulated {results.num_particles} particles over {results.num_timesteps} timesteps")
+    positions = results.get_positions(timestep=-1)  # Final positions
+
+
+Python Configuration (Legacy)
+==============================
+
+Python configuration files are still fully supported for backwards compatibility.
+
+To generate a Python template:
+
+.. code-block:: bash
+
+    fluvial_particle --init --format python
+
+Example Python configuration:
+
+.. code-block:: python
+
+    """Options file for fluvial particle model."""
+    from fluvial_particle.Particles import Particles
+
+    # Required parameters
+    file_name_2d = "./data/mesh_2d.vts"
+    file_name_3d = "./data/mesh_3d.vts"
+    SimTime = 60.0
+    dt = 0.25
+    PrintAtTick = 10.0
+    Track3D = 1
+    NumPart = 100
+    StartLoc = (5.0, 0.0, 9.5)
+    ParticleType = Particles
+
+    # Field mappings
     field_map_2d = {
         "bed_elevation": "Elevation",
         "shear_stress": "ShearStress (magnitude)",
         "velocity": "Velocity",
         "water_surface_elevation": "WaterSurfaceElevation",
     }
+    field_map_3d = {"velocity": "Velocity"}
 
-Example with direct ustar field:
-
-.. code-block:: python
-
-    field_map_2d = {
-        "bed_elevation": "Elevation",
-        "ustar": "FrictionVelocity",
-        "velocity": "Velocity",
-        "water_surface_elevation": "WaterSurfaceElevation",
-    }
-
-**field_map_3d**, dict: A dictionary mapping standard internal field names to the model-specific names in your 3D mesh file. Required keys:
-
-* ``velocity``: velocity vector (e.g., "Velocity")
-
-Example:
-
-.. code-block:: python
-
-    field_map_3d = {
-        "velocity": "Velocity",
-    }
-
-.. note::
-   For ``.npz`` files, the ``ibc`` field (wet/dry indicator) is optional. If not present in the npz file, ``wet_dry`` will be computed from depth using the ``min_depth`` threshold.
+    # Optional parameters
+    beta = (0.067, 0.067, 0.067)
+    lev = 0.25
+    min_depth = 0.02
+    vertbound = 0.01
 
 
-Optional keyword arguments
-============================
+TOML to Python Key Mapping
+---------------------------
 
-These arguments can be specified in the options file. Otherwise, the default values will be used.
+.. list-table::
+   :header-rows: 1
+   :widths: 40 40
 
-**beta**, float or tuple: Scales the 3D diffusion coefficients, can be specified as a scalar or a tuple of length 3. Default value: (0.067, 0.067, 0.067)
+   * - TOML Key
+     - Python Key
+   * - ``simulation.time``
+     - ``SimTime``
+   * - ``simulation.dt``
+     - ``dt``
+   * - ``simulation.print_interval``
+     - ``PrintAtTick``
+   * - ``particles.type``
+     - ``ParticleType``
+   * - ``particles.count``
+     - ``NumPart``
+   * - ``particles.start_location``
+     - ``StartLoc``
+   * - ``particles.start_depth_fraction``
+     - ``startfrac``
+   * - ``particles.physics.beta``
+     - ``beta``
+   * - ``particles.physics.lev``
+     - ``lev``
+   * - ``particles.physics.min_depth``
+     - ``min_depth``
+   * - ``particles.physics.vertical_bound``
+     - ``vertbound``
+   * - ``particles.falling.radius``
+     - ``radius``
+   * - ``particles.falling.density``
+     - ``rho``
+   * - ``particles.larval.amplitude``
+     - ``amp``
+   * - ``particles.larval.period``
+     - ``period``
+   * - ``grid.track_3d``
+     - ``Track3D``
+   * - ``grid.file_2d``
+     - ``file_name_2d``
+   * - ``grid.file_3d``
+     - ``file_name_3d``
+   * - ``output.vtp``
+     - ``output_vtp``
 
-**lev**, float: Lateral eddy viscosity. Default value: 0.25
 
-**min_depth**, float: The minimum depth that a particle may enter. If a depth update is less than min_depth, then the update is not permitted. Default value: 0.02
+Shear Velocity (u*) Configuration
+==================================
 
-**StartIdx**, int: The index used to slice into the HDF5 particles checkpoint file along the 0th axis, i.e. the printing step axis. Only used if an HDF5 file is provided via the StartLoc keyword argument. Default value: -1
+*fluvial-particle* uses shear velocity (u*) to compute turbulent diffusion. Multiple methods are supported, listed in priority order:
 
-**output_vtp**, bool: If True, write particle output to VTK PolyData (.vtp) files in addition to HDF5. A PVD collection file (particles.pvd) is also created to reference all VTP files with timestamp information. VTP files are natively supported by ParaView without plugins and provide a simpler alternative to XDMF+HDF5 for visualization. Output is written to a ``vtp/`` subdirectory within the output directory. Default value: False
+1. **Direct u* field** - Map ``ustar`` in field_map_2d
+2. **Bed shear stress** - Map ``shear_stress`` (most common)
+3. **Manning's n** - Field or scalar ``manning_n``
+4. **Chézy C** - Field or scalar ``chezy_c``
+5. **Darcy-Weisbach f** - Field or scalar ``darcy_f``
+6. **Energy slope** - Map ``energy_slope``
+7. **TKE** - Map ``tke``
 
-**startfrac**, float: If provided, will initialize particles to a vertical position as bed elevation + water depth multiplied with startfrac. startfrac should be between 0 and 1 -- values outside this range will initialize particles at the bed and water surface, respectively. A numpy array of length NumPart can also be used to vary the startfrac for every particle. Default value: None
+To force a specific method, use ``ustar_method``:
 
-**vertbound**, float: Bounds the particles in the fractional water column of [vertbound, 1-vertbound]. This prevents particles from moving out of the vertical domain, either by going below the channel bed or above the water surface. Default value: 0.01
+.. code-block:: toml
 
-
-Shear velocity (u*) configuration
-====================================
-
-*fluvial-particle* uses shear velocity (u*) to compute turbulent diffusion coefficients.
-There are several methods to provide or compute u*, listed here in priority order.
-If multiple sources are available, the highest priority method is automatically selected.
-
-**Method 1: Direct u* field** (highest priority)
-
-If your hydrodynamic model outputs shear velocity directly, map it in ``field_map_2d``:
-
-.. code-block:: python
-
-    field_map_2d = {
-        "bed_elevation": "Elevation",
-        "ustar": "FrictionVelocity",  # Direct u* [m/s]
-        "velocity": "Velocity",
-        "water_surface_elevation": "WaterSurfaceElevation",
-    }
-
-**Method 2: Bed shear stress**
-
-Computes u* = √(τ_b / ρ), where τ_b is bed shear stress and ρ is water density.
-
-.. code-block:: python
-
-    field_map_2d = {
-        "bed_elevation": "Elevation",
-        "shear_stress": "ShearStress (magnitude)",  # Bed shear stress [Pa]
-        "velocity": "Velocity",
-        "water_surface_elevation": "WaterSurfaceElevation",
-    }
-
-    # Optional: customize water density (default 1000 kg/m³)
-    water_density = 1025.0  # for seawater
-
-**Method 3: Manning's n**
-
-Computes u* = U · n · √g / h^(1/6). Can be provided as a field or scalar:
-
-.. code-block:: python
-
-    # As a scalar (uniform friction):
+    [grid.friction]
     manning_n = 0.03
-
-    # Or as a spatially-varying field:
-    field_map_2d = {
-        "bed_elevation": "Elevation",
-        "manning_n": "ManningN",
-        "velocity": "Velocity",
-        "water_surface_elevation": "WaterSurfaceElevation",
-    }
-
-**Method 4: Chézy C**
-
-Computes u* = U · √g / C:
-
-.. code-block:: python
-
-    chezy_c = 50.0  # scalar value
-
-**Method 5: Darcy-Weisbach f**
-
-Computes u* = U · √(f / 8):
-
-.. code-block:: python
-
-    darcy_f = 0.02  # scalar value
-
-**Method 6: Energy slope**
-
-Computes u* = √(g · h · S), where S is the energy slope:
-
-.. code-block:: python
-
-    field_map_2d = {
-        "bed_elevation": "Elevation",
-        "energy_slope": "WaterSurfaceSlope",
-        "velocity": "Velocity",
-        "water_surface_elevation": "WaterSurfaceElevation",
-    }
-
-**Method 7: Turbulent kinetic energy (TKE)**
-
-Computes u* = C_μ^(1/4) · √k, where C_μ = 0.09. Appropriate for RANS CFD outputs:
-
-.. code-block:: python
-
-    field_map_2d = {
-        "bed_elevation": "Elevation",
-        "tke": "TurbulentKineticEnergy",
-        "velocity": "Velocity",
-        "water_surface_elevation": "WaterSurfaceElevation",
-    }
-
-**Forcing a specific method**
-
-If multiple u* sources are available, the highest-priority method is used by default.
-To override this, use ``ustar_method``:
-
-.. code-block:: python
-
-    ustar_method = "manning"  # Force Manning's n method even if shear_stress is available
-
-
-Time-varying grid settings
-=============================
-
-For simulations with unsteady (time-varying) flow conditions, *fluvial-particle* can load a sequence of pre-computed velocity fields and interpolate between them during the simulation. This is useful when:
-
-* Flow conditions change significantly during the simulation period
-* You have output from an unsteady CFD simulation
-* You want to capture tidal, flood, or other transient flow effects
-
-To enable time-varying grids, set ``time_dependent = True`` and provide the following settings:
-
-**time_dependent**, bool: Enable time-varying grid mode. When True, velocity fields are loaded from a sequence of grid files and interpolated temporally. Default value: False
-
-**file_pattern_2d**, str: Format string for 2D grid files with ``{}`` as placeholder for the file index. Example: ``"./data/flow_2d_{}.vts"`` will load ``flow_2d_0.vts``, ``flow_2d_1.vts``, etc.
-
-**file_pattern_3d**, str: Format string for 3D grid files, same pattern as file_pattern_2d.
-
-**grid_start_index**, int: Index of the first grid file in the sequence.
-
-**grid_end_index**, int: Index of the last grid file in the sequence (inclusive).
-
-**grid_dt**, float: Time interval between grid files in seconds.
-
-**grid_start_time**, float: Simulation time corresponding to the first grid file. Default value: 0.0
-
-**grid_interpolation**, str: Temporal interpolation method between grid timesteps. Options:
-
-* ``"linear"`` (default): Linear interpolation between grid timesteps. Provides smooth velocity transitions.
-* ``"nearest"``: Use the nearest grid timestep. Snaps to the closest available timestep.
-* ``"hold"``: Use the most recent grid until the next timestep. Step-function behavior.
-
-Example time-varying configuration:
-
-.. code-block:: python
-
-    # Enable time-varying mode
-    time_dependent = True
-
-    # File patterns (grid files: Result_2D_0.vts through Result_2D_10.vts)
-    file_pattern_2d = "./data/unsteady/Result_2D_{}.vts"
-    file_pattern_3d = "./data/unsteady/Result_3D_{}.vts"
-
-    # Grid file indices
-    grid_start_index = 0
-    grid_end_index = 10
-
-    # Timing: each grid file represents 60 seconds of flow
-    grid_dt = 60.0
-    grid_start_time = 0.0
-
-    # Linear interpolation between timesteps
-    grid_interpolation = "linear"
-
-.. note::
-   When using time-varying grids, ``file_name_2d`` and ``file_name_3d`` are ignored. The grid files are loaded based on the file patterns instead.
-
-.. note::
-   The ``TimeVaryingGrid`` class uses a sliding window approach, keeping only 2 grids in memory at a time. This allows simulations with many timesteps without excessive memory usage.
-
-
-LarvalParticles optional keyword arguments
-=============================================
-
-**amp**, float or np.ndarray: The amplitude of larval sinusoidal swimming behavior. If a NumPy ndarray is provided, then it must be 1D and have length equal to NumPart. Only for the LarvalParticles subclasses. Default value: 0.2
-
-**period**, float or np.ndarray: The temporal period of larval sinusoidal swimming behavior, in seconds. If a NumPy ndarray is provided, then it must be 1D and have length equal to NumPart. Only for the LarvalParticles subclasses. Default value: 60.0
-
-
-FallingParticles optional keyword arguments
-=============================================
-
-**c1**, float or np.ndarray: The viscous drag coefficient, dimensionless. If a NumPy ndarray is provided, then it must be 1D and have length equal to NumPart. Only for the FallingParticles subclasses. Default value: 20.0
-
-**c2**, float or np.ndarray: The turbulent wake drag coefficient, dimensionless. If a NumPy ndarray is provided, then it must be 1D and have length equal to NumPart. Only for the FallingParticles subclasses. Default value: 1.1
-
-**radius**, float or np.ndarray: The particle radii, meters. If a NumPy ndarray is provided, then it must be 1D and have length equal to NumPart. Only for the FallingParticles subclasses. Default value: 0.0005
-
-**rho**, float or np.ndarray: The particle density, kilograms per cubic meter. If a NumPy ndarray is provided, then it must be 1D and have length equal to NumPart. Only for the FallingParticles subclasses. Default value: 0.0005
+    ustar_method = "manning"  # Force this method even if others available
