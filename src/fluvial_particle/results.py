@@ -552,7 +552,7 @@ class SimulationResults:
 
 
 def run_simulation(
-    settings_file: str | pathlib.Path,
+    settings: dict | str | pathlib.Path,
     output_dir: str | pathlib.Path,
     *,
     seed: int | None = None,
@@ -565,7 +565,8 @@ def run_simulation(
     into a single call, useful for notebooks and scripts.
 
     Args:
-        settings_file: Path to the user settings file (Python script).
+        settings: Configuration as a dict (from get_default_config()), or
+                 path to settings file (.toml recommended, or .py).
         output_dir: Directory where output files will be written.
                    Will be created if it doesn't exist.
         seed: Random seed for reproducible simulations. If None, a seed
@@ -578,14 +579,21 @@ def run_simulation(
         SimulationResults object for accessing the output.
 
     Raises:
-        FileNotFoundError: If settings_file doesn't exist.
+        FileNotFoundError: If settings is a path that doesn't exist.
 
     Example::
 
-        from fluvial_particle.results import run_simulation
+        from fluvial_particle import run_simulation, get_default_config
 
-        # Run simulation and get results
-        results = run_simulation("my_settings.py", "./output", seed=42)
+        # Option 1: Run with dict config (recommended for notebooks)
+        config = get_default_config()
+        config["particles"]["count"] = 200
+        config["grid"]["file_2d"] = "./my_mesh_2d.vts"
+        config["grid"]["file_3d"] = "./my_mesh_3d.vts"
+        results = run_simulation(config, "./output", seed=42)
+
+        # Option 2: Run with settings file
+        results = run_simulation("my_settings.toml", "./output", seed=42)
 
         # Access results
         print(results.summary())
@@ -594,30 +602,38 @@ def run_simulation(
     import contextlib
     import io
     import time
+    from typing import Any
 
     from .Settings import Settings
     from .simulation import simulate
 
-    settings_path = pathlib.Path(settings_file)
-    if not settings_path.exists():
-        raise FileNotFoundError(f"Settings file not found: {settings_file}")
-
     output_path = pathlib.Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # Handle dict config vs file path
+    if isinstance(settings, dict):
+        # Dict config - flatten TOML structure to internal format
+        options = Settings(**Settings._flatten_toml_config(settings))
+        settings_file_str = "(dict config)"
+    else:
+        # File path
+        settings_path = pathlib.Path(settings)
+        if not settings_path.exists():
+            raise FileNotFoundError(f"Settings file not found: {settings}")
+        options = Settings.read(str(settings_path))
+        settings_file_str = str(settings_path)
 
     # Legacy API uses confusing 'no_postprocess' key where:
     #   no_postprocess=True  → DO run postprocessing (default)
     #   no_postprocess=False → DON'T run postprocessing
     # This is backwards from what the name suggests. We use clear 'postprocess'
     # parameter and translate here.
-    argdict = {
-        "settings_file": str(settings_path),
+    argdict: dict[str, Any] = {
+        "settings_file": settings_file_str,
         "output_directory": str(output_path),
         "seed": seed,
         "no_postprocess": postprocess,
     }
-
-    options = Settings.read(str(settings_path))
 
     if quiet:
         with contextlib.redirect_stdout(io.StringIO()):

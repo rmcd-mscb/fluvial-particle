@@ -106,15 +106,15 @@ def test_create_parser_version_flag():
 
 
 def test_generate_settings_template():
-    """Test the settings template generator."""
+    """Test the settings template generator with Python format."""
     with TemporaryDirectory() as tmpdir:
         output_path = join(tmpdir, "test_options.py")
-        generate_settings_template(output_path)
+        generate_settings_template(output_path, format="python")
 
         # Verify file was created
         assert pathlib.Path(output_path).exists()
 
-        # Verify contents
+        # Verify contents (Python format)
         content = pathlib.Path(output_path).read_text(encoding="utf-8")
         assert "field_map_2d" in content
         assert "field_map_3d" in content
@@ -123,10 +123,28 @@ def test_generate_settings_template():
         assert "ParticleType" in content
 
 
+def test_generate_settings_template_toml():
+    """Test the settings template generator with TOML format (default)."""
+    with TemporaryDirectory() as tmpdir:
+        output_path = join(tmpdir, "test_options.toml")
+        generate_settings_template(output_path)  # Default is TOML
+
+        # Verify file was created
+        assert pathlib.Path(output_path).exists()
+
+        # Verify contents (TOML format)
+        content = pathlib.Path(output_path).read_text(encoding="utf-8")
+        assert "[simulation]" in content
+        assert "[particles]" in content
+        assert "[grid]" in content
+        assert "field_map_2d" in content
+        assert 'type = "Particles"' in content
+
+
 def test_generate_settings_template_no_overwrite():
     """Test that template generator refuses to overwrite existing files."""
     with TemporaryDirectory() as tmpdir:
-        output_path = join(tmpdir, "existing.py")
+        output_path = join(tmpdir, "existing.toml")
 
         # Create existing file
         pathlib.Path(output_path).write_text("existing content", encoding="utf-8")

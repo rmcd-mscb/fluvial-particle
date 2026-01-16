@@ -17,7 +17,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-dependencies = []
+dependencies = [
+    "tomli>=2.0.0; python_version < '3.11'",  # TOML parser backport for Python 3.10
+]
 
 [project.optional-dependencies]
 # Compiled dependencies - conda provides these locally (see environment.yml)

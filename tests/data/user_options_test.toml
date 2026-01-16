@@ -1,0 +1,33 @@
+# Test TOML configuration file for fluvial-particle
+
+[simulation]
+time = 60.0
+dt = 0.25
+print_interval = 20.0
+
+[particles]
+type = "Particles"
+count = 20
+start_location = [5.0, 0.0, 9.5]
+start_depth_fraction = 0.5
+
+[particles.physics]
+beta = [0.067, 0.067, 0.067]
+lev = 0.00025
+min_depth = 0.02
+vertical_bound = 0.01
+
+[grid]
+track_3d = true
+file_2d = "./tests/data/Result_straight_2d_1.vts"
+file_3d = "./tests/data/Result_straight_3d_1_new.vts"
+
+[grid.field_map_2d]
+bed_elevation = "Elevation"
+wet_dry = "IBC"
+shear_stress = "ShearStress (magnitude)"
+velocity = "Velocity"
+water_surface_elevation = "WaterSurfaceElevation"
+
+[grid.field_map_3d]
+velocity = "Velocity"
