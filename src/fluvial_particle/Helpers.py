@@ -230,6 +230,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "min_depth": 0.02,
             "vertical_bound": 0.01,
         },
+        "falling": {
+            "radius": 0.0005,
+            "density": 2650.0,
+            "c1": 20.0,
+            "c2": 1.1,
+        },
+        "larval": {
+            "amplitude": 0.2,
+            "period": 60.0,
+        },
     },
     "grid": {
         "track_3d": True,
