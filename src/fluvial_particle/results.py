@@ -613,7 +613,7 @@ def run_simulation(
     # Handle dict config vs file path
     if isinstance(settings, dict):
         # Dict config - flatten TOML structure to internal format
-        options = Settings(**Settings._flatten_toml_config(settings))
+        options = Settings.from_dict(settings)
         settings_file_str = "(dict config)"
     else:
         # File path

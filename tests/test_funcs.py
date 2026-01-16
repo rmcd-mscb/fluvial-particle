@@ -95,6 +95,23 @@ def test_create_parser_init_flag():
     assert args.output_directory is None
 
 
+def test_create_parser_format_flag():
+    """Test that --format flag works with --init."""
+    parser = create_parser()
+
+    # Default format is toml
+    args = parser.parse_args(["--init"])
+    assert_equal(args.format, "toml")
+
+    # Explicit toml format
+    args = parser.parse_args(["--init", "--format", "toml"])
+    assert_equal(args.format, "toml")
+
+    # Python format
+    args = parser.parse_args(["--init", "--format", "python"])
+    assert_equal(args.format, "python")
+
+
 def test_create_parser_version_flag():
     """Test that --version flag is recognized."""
     parser = create_parser()

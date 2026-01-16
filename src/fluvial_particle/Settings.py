@@ -88,6 +88,8 @@ class Settings(dict):
             return cls._read_toml(path)
         if suffix == ".py":
             return cls._read_python(path)
+        if not suffix:
+            raise ValueError(f"No file extension found for '{path}'. Settings file must have .toml or .py extension.")
         raise ValueError(f"Unsupported settings file format: {suffix}. Use .toml (recommended) or .py")
 
     @classmethod
@@ -113,6 +115,31 @@ class Settings(dict):
         # Convert nested TOML structure to flat settings dict
         options = cls._flatten_toml_config(toml_config)
 
+        return cls(**options)
+
+    @classmethod
+    def from_dict(cls, config: dict[str, Any]) -> Settings:
+        """Create Settings from a nested configuration dictionary.
+
+        This is the public API for creating Settings from dict configs,
+        such as those returned by get_default_config().
+
+        Args:
+            config: Nested configuration dict with TOML-style structure.
+
+        Returns:
+            Settings object with flattened configuration.
+
+        Example::
+
+            from fluvial_particle import get_default_config
+            from fluvial_particle.Settings import Settings
+
+            config = get_default_config()
+            config["particles"]["count"] = 200
+            settings = Settings.from_dict(config)
+        """
+        options = cls._flatten_toml_config(config)
         return cls(**options)
 
     @classmethod
@@ -209,6 +236,8 @@ class Settings(dict):
         if "grid" in config:
             grid = config["grid"]
             if "track_3d" in grid:
+                # Track3D uses 0/1 integers for backwards compatibility with
+                # Python settings files and existing simulation code
                 result["Track3D"] = 1 if grid["track_3d"] else 0
             if "file_2d" in grid:
                 result["file_name_2d"] = grid["file_2d"]

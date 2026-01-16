@@ -291,3 +291,161 @@ velocity = "Velocity"
             assert "time_dependent" not in settings
         finally:
             path.unlink()
+
+
+class TestRunSimulationWithDict:
+    """Tests for run_simulation with dict config."""
+
+    def test_run_simulation_with_dict_config(self, tmp_path):
+        """run_simulation should work with dict config directly."""
+        from fluvial_particle import get_default_config, run_simulation
+
+        config = get_default_config()
+        config["particles"]["count"] = 5
+        config["particles"]["start_location"] = [5.0, 0.0, 9.5]
+        config["particles"]["start_depth_fraction"] = 0.5
+        config["simulation"]["time"] = 1.0
+        config["simulation"]["print_interval"] = 1.0
+        config["grid"]["file_2d"] = "./tests/data/Result_straight_2d_1.vts"
+        config["grid"]["file_3d"] = "./tests/data/Result_straight_3d_1_new.vts"
+
+        output_dir = tmp_path / "output"
+        results = run_simulation(config, output_dir, seed=42, quiet=True)
+
+        assert results.num_particles == 5
+
+
+class TestSaveConfigRoundTrip:
+    """Tests for save_config round-trip compatibility."""
+
+    def test_save_config_round_trip(self):
+        """Saved config should be readable by Settings.read()."""
+        from fluvial_particle import get_default_config, save_config
+
+        config = get_default_config()
+        config["simulation"]["time"] = 120.0
+        config["particles"]["count"] = 50
+        config["grid"]["file_2d"] = "./tests/data/Result_straight_2d_1.vts"
+        config["grid"]["file_3d"] = "./tests/data/Result_straight_3d_1_new.vts"
+
+        with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as f:
+            path = pathlib.Path(f.name)
+
+        path.unlink()  # Remove so save_config can create it
+
+        try:
+            save_config(config, path)
+            settings = Settings.read(path)
+
+            assert settings["SimTime"] == 120.0
+            assert settings["NumPart"] == 50
+            assert settings["file_name_2d"] == "./tests/data/Result_straight_2d_1.vts"
+        finally:
+            if path.exists():
+                path.unlink()
+
+
+class TestLarvalParticlesType:
+    """Tests for LarvalParticles type in TOML."""
+
+    def test_larval_particles_type(self):
+        """LarvalParticles type should be correctly resolved."""
+        toml_content = """
+[simulation]
+time = 60.0
+dt = 0.25
+print_interval = 20.0
+
+[particles]
+type = "LarvalParticles"
+count = 10
+start_location = [5.0, 0.0, 9.5]
+
+[particles.larval]
+amplitude = 0.15
+period = 30.0
+
+[grid]
+track_3d = true
+file_2d = "./tests/data/Result_straight_2d_1.vts"
+file_3d = "./tests/data/Result_straight_3d_1_new.vts"
+
+[grid.field_map_2d]
+bed_elevation = "Elevation"
+shear_stress = "ShearStress (magnitude)"
+velocity = "Velocity"
+water_surface_elevation = "WaterSurfaceElevation"
+
+[grid.field_map_3d]
+velocity = "Velocity"
+"""
+        with tempfile.NamedTemporaryFile(suffix=".toml", delete=False, mode="w", encoding="utf-8") as f:
+            f.write(toml_content)
+            path = pathlib.Path(f.name)
+
+        try:
+            settings = Settings.read(path)
+            from fluvial_particle.LarvalParticles import LarvalParticles
+
+            assert settings["ParticleType"] == LarvalParticles
+            assert settings["amp"] == 0.15
+            assert settings["period"] == 30.0
+        finally:
+            path.unlink()
+
+
+class TestSettingsFromDict:
+    """Tests for Settings.from_dict() public API."""
+
+    def test_from_dict_creates_settings(self):
+        """Settings.from_dict() should create valid Settings object."""
+        from fluvial_particle import get_default_config
+
+        config = get_default_config()
+        config["grid"]["file_2d"] = "./tests/data/Result_straight_2d_1.vts"
+        config["grid"]["file_3d"] = "./tests/data/Result_straight_3d_1_new.vts"
+
+        settings = Settings.from_dict(config)
+
+        assert isinstance(settings, Settings)
+        assert settings["SimTime"] == 60.0
+        assert settings["NumPart"] == 100
+
+
+class TestSettingsErrorHandling:
+    """Tests for Settings error handling."""
+
+    def test_no_extension_error(self):
+        """File without extension should raise clear error."""
+        with pytest.raises(ValueError, match="No file extension found"):
+            Settings.read("settings_file_without_extension")
+
+    def test_string_escaping_in_save_config(self):
+        """Strings with special characters should be properly escaped."""
+        from fluvial_particle import get_default_config, save_config
+
+        config = get_default_config()
+        config["grid"]["file_2d"] = './path/with "quotes" and \\ backslash.vts'
+
+        with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as f:
+            path = pathlib.Path(f.name)
+
+        path.unlink()
+
+        try:
+            save_config(config, path)
+
+            # Verify it's valid TOML that can be loaded
+            import sys
+
+            if sys.version_info >= (3, 11):
+                import tomllib
+            else:
+                import tomli as tomllib
+
+            with path.open("rb") as f:
+                loaded = tomllib.load(f)
+            assert loaded["grid"]["file_2d"] == './path/with "quotes" and \\ backslash.vts'
+        finally:
+            if path.exists():
+                path.unlink()

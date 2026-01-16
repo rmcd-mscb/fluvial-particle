@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import copy
 import pathlib
-import sys
 from os import getpid
 from typing import Any
 
@@ -13,11 +12,6 @@ import h5py
 import numpy as np
 import vtk
 from vtk.util import numpy_support
-
-
-# Use tomllib (Python 3.11+) or tomli (backport)
-if sys.version_info >= (3, 11):
-    pass
 
 
 # Template for user settings file
@@ -329,17 +323,22 @@ def _dict_to_toml(d: dict[str, Any], prefix: str = "") -> list[str]:
 
 
 def _toml_value(value: Any) -> str:
-    """Format a Python value as a TOML value."""
+    """Format a Python value as a TOML value.
+
+    Note: bool check must come before int check because bool is a subclass of int.
+    """
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
-        return f'"{value}"'
+        # Escape backslashes and double quotes for valid TOML strings
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
     if isinstance(value, (list, tuple)):
         items = ", ".join(_toml_value(v) for v in value)
         return f"[{items}]"
     if isinstance(value, (float, int)):
         return str(value)
-    return repr(value)
+    raise TypeError(f"Cannot serialize {type(value).__name__} to TOML: {value!r}")
 
 
 def get_settings_template(format: str = "toml") -> str:
@@ -627,7 +626,7 @@ def create_parser():
         dest="format",
         choices=["toml", "python"],
         default="toml",
-        help="Format for --init template: 'toml' (default, recommended) or 'python' (legacy).",
+        help="Format for --init template: 'toml' (default) or 'python'. Only used with --init.",
     )
 
     parser.add_argument(
