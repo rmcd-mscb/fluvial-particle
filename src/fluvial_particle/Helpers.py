@@ -1,8 +1,12 @@
 """General helper functions."""
 
+from __future__ import annotations
+
 import argparse
+import copy
 import pathlib
 from os import getpid
+from typing import Any
 
 import h5py
 import numpy as np
@@ -122,13 +126,229 @@ ParticleType = Particles  # noqa: F401
 # rho = 2650.0               # Particle density [kg/m^3]
 '''
 
+# TOML template for user settings file (recommended for new projects)
+TOML_TEMPLATE = """\
+# Fluvial-particle simulation configuration
+# See: https://fluvial-particle.readthedocs.io/en/latest/optionsfile.html
 
-def get_settings_template() -> str:
+# =============================================================================
+# Simulation timing
+# =============================================================================
+
+[simulation]
+time = 60.0              # Maximum simulation time [seconds]
+dt = 0.25                # Time step [seconds]
+print_interval = 10.0    # Output interval [seconds]
+
+# =============================================================================
+# Particle configuration
+# =============================================================================
+
+[particles]
+type = "Particles"       # Options: Particles, FallingParticles, LarvalParticles,
+                         #          LarvalTopParticles, LarvalBotParticles
+count = 100              # Number of particles per processor
+start_location = [0.0, 0.0, 0.0]  # Starting (x, y, z) coordinates
+# start_depth_fraction = 0.5       # Optional: initial vertical position (0=bed, 1=surface)
+
+[particles.physics]
+beta = [0.067, 0.067, 0.067]  # 3D diffusion coefficients
+lev = 0.25                    # Lateral eddy viscosity
+min_depth = 0.02              # Minimum depth threshold [meters]
+vertical_bound = 0.01         # Vertical boundary buffer
+
+# Uncomment for FallingParticles:
+# [particles.falling]
+# radius = 0.0005       # Particle radius [meters]
+# density = 2650.0      # Particle density [kg/m³]
+# c1 = 20.0             # Viscous drag coefficient
+# c2 = 1.1              # Turbulent wake drag coefficient
+
+# Uncomment for LarvalParticles:
+# [particles.larval]
+# amplitude = 0.2       # Amplitude of sinusoidal swimming (fraction of depth)
+# period = 60.0         # Period of swimming behavior [seconds]
+
+# =============================================================================
+# Grid configuration
+# =============================================================================
+
+[grid]
+track_3d = true                              # true = 3D velocity field, false = 2D
+file_2d = "./path/to/your/mesh_2d.vts"       # Path to 2D mesh file
+file_3d = "./path/to/your/mesh_3d.vts"       # Path to 3D mesh file
+
+# Field name mappings - map standard names to your model's field names
+[grid.field_map_2d]
+bed_elevation = "Elevation"
+shear_stress = "ShearStress (magnitude)"
+velocity = "Velocity"
+water_surface_elevation = "WaterSurfaceElevation"
+# wet_dry = "IBC"  # Optional: wet/dry indicator (auto-computed if omitted)
+
+[grid.field_map_3d]
+velocity = "Velocity"
+
+# Optional: friction parameters for u* calculation
+# [grid.friction]
+# manning_n = 0.03      # Manning's n coefficient
+# chezy_c = 50.0        # Chézy C coefficient
+# darcy_f = 0.02        # Darcy-Weisbach f coefficient
+
+# Optional: time-varying grids for unsteady flow
+# [grid.time_varying]
+# enabled = true
+# file_pattern_2d = "./data/unsteady/Result_2D_{}.vts"  # {} = file index
+# file_pattern_3d = "./data/unsteady/Result_3D_{}.vts"
+# start_index = 0       # First file index
+# end_index = 10        # Last file index (inclusive)
+# dt = 60.0             # Time between grid files [seconds]
+# interpolation = "linear"  # Options: linear, nearest, hold
+
+# =============================================================================
+# Output settings
+# =============================================================================
+
+[output]
+vtp = false              # Also write VTP files for ParaView visualization
+"""
+
+# Default configuration as a nested dictionary (for programmatic use)
+DEFAULT_CONFIG: dict[str, Any] = {
+    "simulation": {
+        "time": 60.0,
+        "dt": 0.25,
+        "print_interval": 10.0,
+    },
+    "particles": {
+        "type": "Particles",
+        "count": 100,
+        "start_location": [0.0, 0.0, 0.0],
+        "physics": {
+            "beta": [0.067, 0.067, 0.067],
+            "lev": 0.25,
+            "min_depth": 0.02,
+            "vertical_bound": 0.01,
+        },
+    },
+    "grid": {
+        "track_3d": True,
+        "file_2d": "./path/to/your/mesh_2d.vts",
+        "file_3d": "./path/to/your/mesh_3d.vts",
+        "field_map_2d": {
+            "bed_elevation": "Elevation",
+            "shear_stress": "ShearStress (magnitude)",
+            "velocity": "Velocity",
+            "water_surface_elevation": "WaterSurfaceElevation",
+        },
+        "field_map_3d": {
+            "velocity": "Velocity",
+        },
+    },
+    "output": {
+        "vtp": False,
+    },
+}
+
+
+def get_default_config() -> dict[str, Any]:
+    """Get the default configuration as a nested dictionary.
+
+    Returns a deep copy of the default configuration that can be modified
+    programmatically. This is the recommended way to create configurations
+    in notebooks.
+
+    Returns:
+        Nested dictionary with all configuration options.
+
+    Example::
+
+        from fluvial_particle import get_default_config, run_simulation
+
+        # Get default config and customize
+        config = get_default_config()
+        config["particles"]["count"] = 200
+        config["simulation"]["time"] = 120.0
+        config["grid"]["file_2d"] = "./my_mesh_2d.vts"
+        config["grid"]["file_3d"] = "./my_mesh_3d.vts"
+
+        # Run simulation directly with config dict
+        results = run_simulation(config, output_dir="./output")
+    """
+    return copy.deepcopy(DEFAULT_CONFIG)
+
+
+def save_config(config: dict[str, Any], path: str | pathlib.Path) -> None:
+    """Save a configuration dictionary to a TOML file.
+
+    Args:
+        config: Nested configuration dictionary (as returned by get_default_config()).
+        path: Path where the TOML file will be written.
+
+    Example::
+
+        from fluvial_particle import get_default_config, save_config
+
+        config = get_default_config()
+        config["particles"]["count"] = 200
+        save_config(config, "my_settings.toml")
+    """
+    # We need to write TOML manually since tomllib is read-only
+    # Use a simple recursive formatter
+    lines = _dict_to_toml(config)
+    pathlib.Path(path).write_text("\n".join(lines), encoding="utf-8")
+
+
+def _dict_to_toml(d: dict[str, Any], prefix: str = "") -> list[str]:
+    """Convert a nested dict to TOML format lines."""
+    lines: list[str] = []
+    tables: list[tuple[str, dict]] = []
+
+    for key, value in d.items():
+        full_key = f"{prefix}.{key}" if prefix else key
+
+        if isinstance(value, dict):
+            # Defer nested tables to write after scalar values
+            tables.append((full_key, value))
+        else:
+            lines.append(f"{key} = {_toml_value(value)}")
+
+    # Write nested tables
+    for table_key, table_value in tables:
+        lines.append("")
+        lines.append(f"[{table_key}]")
+        lines.extend(_dict_to_toml(table_value, table_key))
+
+    return lines
+
+
+def _toml_value(value: Any) -> str:
+    """Format a Python value as a TOML value.
+
+    Note: bool check must come before int check because bool is a subclass of int.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        # Escape backslashes and double quotes for valid TOML strings
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    if isinstance(value, (list, tuple)):
+        items = ", ".join(_toml_value(v) for v in value)
+        return f"[{items}]"
+    if isinstance(value, (float, int)):
+        return str(value)
+    raise TypeError(f"Cannot serialize {type(value).__name__} to TOML: {value!r}")
+
+
+def get_settings_template(format: str = "toml") -> str:
     """Get the settings template as a string.
 
     Returns the default settings template that can be customized and
-    written to a file. Useful in notebooks where you want to display
-    or modify the template programmatically.
+    written to a file.
+
+    Args:
+        format: Template format - "toml" (default, recommended) or "python".
 
     Returns:
         Template string with all configuration options.
@@ -138,39 +358,45 @@ def get_settings_template() -> str:
         from fluvial_particle import get_settings_template
         from pathlib import Path
 
-        # Get template and customize
+        # Get TOML template (recommended)
         template = get_settings_template()
-        customized = template.replace(
-            'file_name_2d = "./path/to/your/mesh_2d.vts"',
-            'file_name_2d = "./data/my_grid_2d.vts"'
-        )
+        Path("my_settings.toml").write_text(template)
 
-        # Write to file
-        Path("my_settings.py").write_text(customized)
+        # Or get Python template (legacy)
+        py_template = get_settings_template(format="python")
     """
-    return SETTINGS_TEMPLATE
+    if format == "toml":
+        return TOML_TEMPLATE
+    if format == "python":
+        return SETTINGS_TEMPLATE
+    raise ValueError(f"Unknown format: {format}. Use 'toml' or 'python'.")
 
 
-def generate_settings_template(output_path: str = "user_options.py") -> None:
+def generate_settings_template(output_path: str | None = None, format: str = "toml") -> None:
     """Generate a template settings file for the user.
 
     Args:
         output_path: Path where the template file will be written.
-                    Defaults to 'user_options.py' in the current directory.
+                    Defaults to 'user_options.toml' (or .py for python format).
+        format: Template format - "toml" (default, recommended) or "python".
     """
+    if output_path is None:
+        output_path = "user_options.toml" if format == "toml" else "user_options.py"
+
     output_file = pathlib.Path(output_path)
 
     if output_file.exists():
         print(f"Error: {output_file} already exists. Aborting to avoid overwriting.")
         raise SystemExit(1)
 
-    output_file.write_text(SETTINGS_TEMPLATE, encoding="utf-8")
+    template = get_settings_template(format=format)
+    output_file.write_text(template, encoding="utf-8")
     print(f"Created settings template: {output_file}")
     print("\nNext steps:")
     print("  1. Edit the file to configure your simulation parameters")
     print("  2. Update file paths to point to your mesh files")
     print("  3. Adjust field_map_2d/field_map_3d for your hydrodynamic model")
-    print("  4. Run: fluvial-particle user_options.py ./output")
+    print(f"  4. Run: fluvial-particle {output_file} ./output")
 
 
 def checkcommandarguments():
@@ -189,7 +415,7 @@ def checkcommandarguments():
 
     # Handle --init flag
     if argdict.get("init"):
-        generate_settings_template()
+        generate_settings_template(format=argdict.get("format", "toml"))
         raise SystemExit(0)
 
     # Validate required positional arguments for simulation
@@ -373,8 +599,9 @@ def create_parser():
         ),
         epilog=(
             "Example usage:\n"
-            "  fluvial-particle settings.py ./output      Run simulation\n"
-            "  fluvial-particle --init                    Generate template settings file\n"
+            "  fluvial-particle settings.toml ./output    Run simulation\n"
+            "  fluvial-particle --init                    Generate TOML template\n"
+            "  fluvial-particle --init --format python    Generate Python template (legacy)\n"
             "  fluvial-particle --version                 Show version information\n"
             "\n"
             "Documentation: https://fluvial-particle.readthedocs.io/"
@@ -391,14 +618,22 @@ def create_parser():
     parser.add_argument(
         "--init",
         action="store_true",
-        help="Generate a template settings file (user_options.py) in the current directory.",
+        help="Generate a template settings file in the current directory.",
+    )
+
+    parser.add_argument(
+        "--format",
+        dest="format",
+        choices=["toml", "python"],
+        default="toml",
+        help="Format for --init template: 'toml' (default) or 'python'. Only used with --init.",
     )
 
     parser.add_argument(
         "settings_file",
         nargs="?",
         help=(
-            "Path to the user settings file (Python script defining simulation parameters). "
+            "Path to the settings file (.toml recommended, or .py for legacy). "
             "See documentation for required and optional parameters."
         ),
     )
