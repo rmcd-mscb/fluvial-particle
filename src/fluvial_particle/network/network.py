@@ -170,3 +170,63 @@ class Network:
         vx = np.asarray(self._static["vertex_x"], dtype=np.float64)
         vy = np.asarray(self._static["vertex_y"], dtype=np.float64)
         return [(vx[s : s + c], vy[s : s + c]) for s, c in zip(start, count, strict=True)]
+
+
+class NetworkBins:
+    """Nearly uniform sub-reach bins for counts and concentration.
+
+    Each reach is split into ``ceil(length / bin_length)`` bins of equal width within the reach.
+
+    Args:
+        network: the Network to discretize.
+        bin_length: target bin length (m); ``np.inf`` gives one bin per reach.
+    """
+
+    def __init__(self, network: Network, bin_length: float) -> None:
+        """Initialize sub-reach bins.
+
+        Args:
+            network: the Network to discretize.
+            bin_length: target bin length (m); ``np.inf`` gives one bin per reach.
+        """
+        self.network = network
+        self.bin_length = float(bin_length)
+        length = network.length
+        if np.isinf(self.bin_length):
+            n = np.ones(network.n_reach, dtype=np.int64)
+        else:
+            if self.bin_length <= 0.0:
+                raise ValueError("bin_length must be positive")
+            n = np.maximum(1, np.ceil(length / self.bin_length)).astype(np.int64)
+        self.bins_per_reach: IntArray = n
+        self.reach_bin_start: IntArray = (np.cumsum(n) - n).astype(np.int64)
+        self.n_bins: int = int(n.sum())
+        self.bin_reach: IntArray = np.repeat(np.arange(network.n_reach, dtype=np.int64), n)
+        self._width_per_reach: FloatArray = length / n
+        self.bin_width: FloatArray = np.repeat(self._width_per_reach, n)
+        local = np.arange(self.n_bins, dtype=np.float64) - self.reach_bin_start[self.bin_reach]
+        self.s_start: FloatArray = local * self.bin_width
+        self.s_end: FloatArray = (local + 1.0) * self.bin_width
+
+    def bin_of(self, reach: npt.ArrayLike, s: npt.ArrayLike) -> IntArray:
+        """Global bin index for (reach, s); s == length maps to the reach's last bin.
+
+        Args:
+            reach: reach indices.
+            s: distance from the upstream end (m); s == length maps to the reach's last bin.
+
+        Returns:
+            Global bin indices.
+        """
+        r = np.asarray(reach, dtype=np.int64)
+        local = np.floor(np.asarray(s, dtype=np.float64) / self._width_per_reach[r]).astype(np.int64)
+        local = np.clip(local, 0, self.bins_per_reach[r] - 1)
+        return self.reach_bin_start[r] + local
+
+    def midpoints_xy(self) -> tuple[FloatArray, FloatArray]:
+        """Map coordinates of every bin midpoint (NaN without polylines).
+
+        Returns:
+            x and y coordinate arrays for bin midpoints.
+        """
+        return self.network.map_position(self.bin_reach, 0.5 * (self.s_start + self.s_end))

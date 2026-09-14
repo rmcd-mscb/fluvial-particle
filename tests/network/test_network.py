@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from fluvial_particle.network.network import Network
+from fluvial_particle.network.network import Network, NetworkBins
 from tests.network.support import ArrayHydraulicsProvider, chain_dataset, three_reach_dataset
 
 
@@ -65,3 +65,28 @@ def test_chain_upstream_of():
     net = Network(ArrayHydraulicsProvider.from_dataset(chain_dataset(n_reach=5)).static)
     assert list(net.headwaters()) == [1]
     assert sorted(net.upstream_of(3)) == [1, 2, 3]
+
+
+def test_bins_layout(net):
+    bins = NetworkBins(net, 400.0)
+    assert list(bins.bins_per_reach) == [3, 5, 8]
+    assert bins.n_bins == 16
+    assert list(bins.reach_bin_start) == [0, 3, 8]
+    np.testing.assert_allclose(bins.bin_width[:3], 1000.0 / 3)
+    np.testing.assert_allclose(bins.bin_width[3:8], 400.0)
+    np.testing.assert_allclose(bins.s_start[3:8], [0, 400, 800, 1200, 1600])
+    np.testing.assert_allclose(bins.s_end[3:8], [400, 800, 1200, 1600, 2000])
+    assert list(bins.bin_reach[8:10]) == [2, 2]
+
+
+def test_bins_bin_of_edges(net):
+    bins = NetworkBins(net, 400.0)
+    assert list(bins.bin_of(np.array([1, 1, 2, 0]), np.array([799.9, 800.0, 3000.0, 0.0]))) == [4, 5, 15, 0]
+
+
+def test_bins_one_per_reach(net):
+    bins = NetworkBins(net, np.inf)
+    assert bins.n_bins == 3
+    assert list(bins.bin_of(np.array([0, 1, 2]), np.array([999.0, 1.0, 2999.0]))) == [0, 1, 2]
+    x, _y = bins.midpoints_xy()
+    np.testing.assert_allclose(x[2], 1500.0)
