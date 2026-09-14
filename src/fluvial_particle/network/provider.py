@@ -416,7 +416,7 @@ class FileHydraulicsProvider:
         Raises:
             ValueError: ``t`` outside the allowed range.
         """
-        tt = t.astype("datetime64[ns]")
+        tt = np.datetime64(np.asarray(t, dtype="datetime64[ns]").item(), "ns")
         lo, hi = self._time_window if self._time_window is not None else (self.times[0], self.times[-1])
         if tt < lo or tt > hi:
             raise ValueError(f"time {tt} is outside the provider range {lo}..{hi}")

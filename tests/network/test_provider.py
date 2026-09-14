@@ -1,5 +1,7 @@
 """Tests for FileHydraulicsProvider: validation, static arrays, subsetting."""
 
+import datetime as dt
+
 import numpy as np
 import pytest
 
@@ -206,3 +208,12 @@ def test_single_timestamp_file(tmp_path):
     path = write_network_file(tmp_path / "one.nc", three_reach_dataset(times=t))
     with FileHydraulicsProvider(path) as prov:
         assert prov.hydraulics(t[0])["velocity"][0] == 1.0
+
+
+def test_hydraulics_accepts_strings_and_datetimes(tmp_path):
+    path = _stepped_file(tmp_path)
+    noon = np.datetime64("1979-01-02T12:00", "ns")
+    with FileHydraulicsProvider(path, interpolation="linear") as prov:
+        expected = prov.hydraulics(noon)["velocity"][0]
+        assert prov.hydraulics("1979-01-02T12:00")["velocity"][0] == expected
+        assert prov.hydraulics(dt.datetime(1979, 1, 2, 12))["velocity"][0] == expected
