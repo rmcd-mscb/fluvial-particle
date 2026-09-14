@@ -1,5 +1,13 @@
 # History
 
+## Unreleased
+
+### Bug Fixes
+- Fixed a crash (`ValueError` in `Particles._is_part_wet`) when the last active particles leave the grid in the same time step
+
+### Tests
+- Analytical acceptance tests for the 2D/3D solver on a synthetic uniform straight channel (`tests/test_analytical.py`, `write_straight_channel()` in `tests/support.py`): exact advection and exit step, Gaussian plume moments and normality, and well-mixed lateral (dry margins) and vertical (bed/surface) distributions that stay uniform
+
 ## 0.1.0 (2026-09-14)
 
 ### New Features

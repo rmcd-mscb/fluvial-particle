@@ -761,7 +761,10 @@ class Particles:
         else:
             wet = np.full((self.nparts,), dtype=bool, fill_value=True)
             idx = self.indices[self.in_bounds_mask]
-            wet[idx] = ibc
+            if idx.size > 0:
+                # When every particle has just been deactivated the probe output is stale (the
+                # pipeline is only rebuilt for a non-empty active set), so leave wet all True.
+                wet[idx] = ibc
 
         return wet
 
