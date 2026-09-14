@@ -208,3 +208,22 @@ def test_estimate_particles_hand_values(env):
     assert df.loc[1, "particle_mass"] == pytest.approx(0.01)
     assert df.loc[1, "particles"] == 86400
     assert list(df.columns) == ["source", "form", "reach_id", "total_mass", "particle_mass", "particles"]
+
+
+def test_schedule_arrays_must_share_a_size():
+    with pytest.raises(ValueError, match=r"ParticleSchedule\.release_time has 2 entries, expected 3"):
+        ParticleSchedule(
+            np.zeros(3, dtype=np.int32),
+            np.zeros(3),
+            np.zeros(2),
+            np.ones(3),
+            np.zeros(3, dtype=np.int32),
+        )
+    with pytest.raises(ValueError, match=r"ParticleSchedule\.source_index has 1 entries, expected 3"):
+        ParticleSchedule(
+            np.zeros(3, dtype=np.int32),
+            np.zeros(3),
+            np.zeros(3),
+            np.ones(3),
+            np.zeros(1, dtype=np.int32),
+        )

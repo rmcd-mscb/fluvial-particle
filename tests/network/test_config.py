@@ -141,3 +141,33 @@ def test_toml_round_trip(tmp_path):
     (tmp_path / "empty.toml").write_text("x = 1\n")
     with pytest.raises(ValueError, match=r"\[network\]"):
         NetworkConfig.from_toml(tmp_path / "empty.toml")
+
+
+def test_validated_sources_and_reach_subset_are_read_only():
+    cfg = NetworkConfig.from_dict({**MINIMAL, "reach_subset": {"outlet": 103}})
+    with pytest.raises(TypeError):
+        cfg.sources[0]["mass"] = 1
+    with pytest.raises(TypeError):
+        cfg.reach_subset["outlet"] = 1
+    d = cfg.to_dict()
+    assert isinstance(d["sources"][0], dict) and isinstance(d["reach_subset"], dict)
+    d["sources"][0]["mass"] = 9.0  # the emitted dicts are plain and editable
+    json.dumps(d)
+    assert cfg.sources[0]["mass"] == 5.0
+
+
+def test_guard_rails_on_scalars():
+    with pytest.raises(ValueError, match="dt must be positive"):
+        NetworkConfig.from_dict({**MINIMAL, "dt": 0.0})
+    with pytest.raises(ValueError, match="dt must be positive"):
+        NetworkConfig.from_dict({**MINIMAL, "dt": -900.0})
+    with pytest.raises(ValueError, match="particle_mass must be positive"):
+        NetworkConfig.from_dict({**MINIMAL, "particle_mass": 0.0})
+    with pytest.raises(ValueError, match="max_hops must be at least 1"):
+        NetworkConfig.from_dict({**MINIMAL, "max_hops": 0})
+    with pytest.raises(ValueError, match="particles must be a positive integer"):
+        NetworkConfig.from_dict({**MINIMAL, "sources": [{**MINIMAL["sources"][0], "particles": 0}]})
+    with pytest.raises(ValueError, match="dispersion scale must be positive"):
+        DispersionConfig(scale=0.0)
+    with pytest.raises(ValueError, match="dispersion cap must be positive"):
+        DispersionConfig(cap=-1.0)

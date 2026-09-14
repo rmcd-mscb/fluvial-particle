@@ -5,7 +5,7 @@ import pytest
 
 from fluvial_particle.network.config import DispersionConfig
 from fluvial_particle.network.network import Network
-from fluvial_particle.network.solver import ACTIVE, EXITED, UNRELEASED, NetworkSolver
+from fluvial_particle.network.solver import ACTIVE, EXITED, UNRELEASED, NetworkSolver, Status
 from fluvial_particle.network.sources import ParticleSchedule
 from tests.network.support import ArrayHydraulicsProvider, chain_dataset, three_reach_dataset
 
@@ -175,8 +175,8 @@ def test_upstream_hop_returns_to_previous_reach():
         dispersion=K50,
         rng=FixedNormals([-1.0]),
     )
-    sol.status[:] = ACTIVE  # pre-place the particle with history
-    sol.reach[0], sol.s[0], sol.prev_reach[0] = 2, 50.0, 0
+    sol._status[:] = ACTIVE  # pre-place the particle with history
+    sol._reach[0], sol._s[0], sol._prev_reach[0] = 2, 50.0, 0
     sol.release_time[0] = -1.0  # already released
     sol.step()
     assert sol.reach[0] == 0 and sol.s[0] == pytest.approx(950.0) and sol.prev_reach[0] == -1
@@ -199,8 +199,8 @@ def test_reflect_without_history_and_after_second_overshoot():
         dispersion=K50,
         rng=FixedNormals([-11.0]),
     )
-    sol.status[:] = ACTIVE
-    sol.reach[0], sol.s[0], sol.prev_reach[0] = 2, 50.0, 0
+    sol._status[:] = ACTIVE
+    sol._reach[0], sol._s[0], sol._prev_reach[0] = 2, 50.0, 0
     sol.release_time[0] = -1.0
     sol.step()  # -1050: back into reach 0 at -50, then reflect to 50
     assert sol.reach[0] == 0 and sol.s[0] == pytest.approx(50.0) and sol.prev_reach[0] == -1
@@ -252,23 +252,56 @@ def test_upstream_hop_uses_uniform_weights_when_parent_flows_are_zero():
     assert rng.choices == [((0, 1), None)]  # all parent flows 0 -> uniform
 
 
-def test_max_hops_raises_on_cycle():
-    prov = ArrayHydraulicsProvider.from_dataset(three_reach_dataset(velocity=[100.0, 100.0, 100.0]))
-    static = dict(prov.static)
-    static["to_index"] = np.array([1, 0, -1], dtype=np.int32)  # 0 <-> 1 cycle, never validated here
-    net = Network(static)
-    sol = NetworkSolver(
+def _cyclic_solver(ds, schedule, *, dt, dispersion, max_hops, rng=None):
+    """A solver whose topology is made cyclic after construction (Network itself rejects cycles)."""
+    prov = ArrayHydraulicsProvider.from_dataset(ds)
+    net = Network(prov.static)
+    net.to_index = np.array([1, 0, -1], dtype=np.int32)  # 0 <-> 1, injected past Network's validation
+    return NetworkSolver(
         net,
         prov,
-        ParticleSchedule.simple(0, 0.0, 0.0),
+        schedule,
         start_time=T0,
+        dt=dt,
+        dispersion=dispersion,
+        rng=rng or np.random.RandomState(0),
+        max_hops=max_hops,
+    )
+
+
+def test_max_hops_raises_on_cycle():
+    sol = _cyclic_solver(
+        three_reach_dataset(velocity=[100.0, 100.0, 100.0]),
+        ParticleSchedule.simple(0, 0.0, 0.0),
         dt=1000.0,
         dispersion=NONE,
-        rng=np.random.RandomState(0),
         max_hops=3,
     )
     with pytest.raises(RuntimeError, match="max_hops"):
         sol.step()
+
+
+def test_dispersive_max_hops_raises_on_cycle():
+    # 10 m reaches with K = 50 and dt = 100: a kick of sqrt(2 * 50 * 100) = 100 m crosses ten reach
+    # lengths, so the carry loop goes round the 0 <-> 1 cycle until max_hops stops it.
+    ds = three_reach_dataset(length=[10.0, 10.0, 10.0], velocity=[0.0, 0.0, 0.0], flow_out=[10.0, 5.0, 80.0])
+    sol = _cyclic_solver(
+        ds,
+        ParticleSchedule.simple(0, 5.0, 0.0),
+        dt=100.0,
+        dispersion=K50,
+        max_hops=3,
+        rng=FixedNormals([1.0]),
+    )
+    with pytest.raises(RuntimeError, match="dispersion step"):
+        sol.step()
+
+
+def test_cyclic_topology_is_rejected_by_network():
+    static = dict(ArrayHydraulicsProvider.from_dataset(three_reach_dataset()).static)
+    static["to_index"] = np.array([1, 0, -1], dtype=np.int32)
+    with pytest.raises(ValueError, match=r"cycle through reach indices \[0, 1\]"):
+        Network(static)
 
 
 def test_seeded_reproducibility_and_conservation_with_dispersion():
@@ -287,3 +320,22 @@ def test_seeded_reproducibility_and_conservation_with_dispersion():
     assert np.all(
         (a.s[a.status == ACTIVE] >= 0.0) & (a.s[a.status == ACTIVE] <= a.network.length[a.reach[a.status == ACTIVE]])
     )
+
+
+def test_state_arrays_are_read_only_views():
+    sol = make_solver(three_reach_dataset(), ParticleSchedule.simple(0, 100.0, 0.0), dt=200.0)
+    for name in ("reach", "s", "prev_reach", "status", "exit_time", "exit_reach"):
+        arr = getattr(sol, name)
+        assert not arr.flags.writeable
+        with pytest.raises(ValueError, match="read-only"):
+            arr[0] = 0
+    sol.step()  # the views track the solver's own arrays
+    assert sol.status[0] == ACTIVE and sol.reach[0] == 0
+
+
+def test_status_enum_values_and_aliases():
+    assert (Status.UNRELEASED, Status.ACTIVE, Status.EXITED) == (0, 1, 2)
+    assert (UNRELEASED, ACTIVE, EXITED) == (Status.UNRELEASED, Status.ACTIVE, Status.EXITED)
+    sol = make_solver(three_reach_dataset(), ParticleSchedule.simple(0, 100.0, 0.0), dt=200.0)
+    assert sol.status.dtype == np.int8
+    assert Status(int(sol.status[0])) is Status.UNRELEASED

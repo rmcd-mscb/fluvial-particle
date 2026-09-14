@@ -90,3 +90,30 @@ def test_bins_one_per_reach(net):
     assert list(bins.bin_of(np.array([0, 1, 2]), np.array([999.0, 1.0, 2999.0]))) == [0, 1, 2]
     x, _y = bins.midpoints_xy()
     np.testing.assert_allclose(x[2], 1500.0)
+
+
+def test_topology_validation_at_construction():
+    static = dict(ArrayHydraulicsProvider.from_dataset(three_reach_dataset()).static)
+    bad_range = {**static, "to_index": np.array([2, 7, -1], dtype=np.int32)}
+    with pytest.raises(ValueError, match=r"to_index out of range \[-1, 3\) at reach indices \[1\]"):
+        Network(bad_range)
+    cyclic = {**static, "to_index": np.array([2, 2, 0], dtype=np.int32)}
+    with pytest.raises(ValueError, match="cycle"):
+        Network(cyclic)
+    bad_length = {**static, "length": np.array([1000.0, 0.0, np.nan])}
+    with pytest.raises(ValueError, match=r"length must be positive and finite.*\[1, 2\]"):
+        Network(bad_length)
+
+
+def test_static_mapping_is_defensively_copied():
+    static = dict(ArrayHydraulicsProvider.from_dataset(three_reach_dataset()).static)
+    net = Network(static)
+    static["reach_vertex_count"] = np.array([99, 99, 99], dtype=np.int32)  # mutating after the fact
+    np.testing.assert_array_equal(net._static["reach_vertex_count"], [2, 3, 3])
+
+
+def test_bins_reject_a_non_positive_bin_length(net):
+    with pytest.raises(ValueError, match="bin_length must be positive"):
+        NetworkBins(net, -1.0)
+    with pytest.raises(ValueError, match="bin_length must be positive"):
+        NetworkBins(net, 0.0)

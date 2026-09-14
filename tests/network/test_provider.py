@@ -253,3 +253,19 @@ def test_hydraulics_accepts_strings_and_datetimes(tmp_path):
         expected = prov.hydraulics(noon)["velocity"][0]
         assert prov.hydraulics("1979-01-02T12:00")["velocity"][0] == expected
         assert prov.hydraulics(dt.datetime(1979, 1, 2, 12))["velocity"][0] == expected
+
+
+def test_data_members_are_read_only(three_file):
+    with FileHydraulicsProvider(three_file) as prov:
+        with pytest.raises(ValueError, match="read-only"):
+            prov.times[0] = np.datetime64("1980-01-01", "ns")
+        for name, value in (("interpolation", "hold"), ("dtype", np.dtype("float32")), ("n_reach", 7)):
+            with pytest.raises(AttributeError):
+                setattr(prov, name, value)
+
+
+def test_non_integer_to_index_raises(tmp_path):
+    ds = three_reach_dataset()
+    ds["to_index"] = ds["to_index"].astype(np.float64)
+    with pytest.raises(ValueError, match="to_index must be an integer array"):
+        FileHydraulicsProvider(write_network_file(tmp_path / "float_to.nc", ds))

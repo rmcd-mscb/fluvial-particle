@@ -12,6 +12,19 @@ FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
 
 
+def _walk_to_outlets(to_index: npt.NDArray[np.int64]) -> npt.NDArray[np.bool_]:
+    """True for reaches whose downstream walk reaches an outlet; False marks a cycle."""
+    n = to_index.size
+    cur = to_index.copy()
+    done = cur < 0
+    for _ in range(n):
+        if done.all():
+            break
+        cur = np.where(done, -1, to_index[np.clip(cur, 0, n - 1)])
+        done |= cur < 0
+    return done
+
+
 class Network:
     """Reach topology and geometry from a provider's static arrays.
 
@@ -19,6 +32,9 @@ class Network:
         static: mapping with at least reach_id, to_index, is_outlet, length; optionally the polyline block
             (vertex_x, vertex_y, vertex_dist, reach_vertex_start, reach_vertex_count).
         crs_wkt: CRS of the polylines, informational.
+
+    Construction validates the topology: `to_index` must be in range and acyclic and every `length`
+    must be positive and finite, or `ValueError` names the offending reach indices.
     """
 
     def __init__(self, static: Mapping[str, npt.NDArray[np.generic]], crs_wkt: str = "") -> None:
@@ -29,10 +45,14 @@ class Network:
                 polyline block (vertex_x, vertex_y, vertex_dist, reach_vertex_start, reach_vertex_count).
             crs_wkt: CRS of the polylines, informational.
         """
-        self._static = static
+        # A plain dict is copied so that later mutation by the caller cannot invalidate the topology
+        # checked here; any other Mapping (the provider's lazy StaticArrays, say) is read-only by
+        # contract and is kept as it is, so its polyline block stays unloaded until it is asked for.
+        self._static: Mapping[str, npt.NDArray[np.generic]] = dict(static) if isinstance(static, dict) else static
         self.reach_id: IntArray = np.asarray(static["reach_id"], dtype=np.int64)
         self.to_index: npt.NDArray[np.int32] = np.asarray(static["to_index"], dtype=np.int32)
         self.length: FloatArray = np.asarray(static["length"], dtype=np.float64)
+        self._validate_topology()
         self.is_outlet: npt.NDArray[np.bool_] = self.to_index < 0
         self.n_reach: int = int(self.reach_id.size)
         self.crs_wkt = crs_wkt
@@ -40,6 +60,27 @@ class Network:
         self._parents_ptr: IntArray | None = None
         self._parents_idx: IntArray | None = None
         self._poly_index: tuple[FloatArray, IntArray, FloatArray, FloatArray] | None = None
+
+    # ---- validation ---------------------------------------------------------
+    def _validate_topology(self) -> None:
+        """Check to_index is in range and acyclic and that every length is positive and finite.
+
+        Raises:
+            ValueError: to_index is out of range, to_index contains a cycle, or length is
+                non-positive or non-finite (the message names the first offending reach indices).
+        """
+        bad_length = np.nonzero(~(self.length > 0.0) | ~np.isfinite(self.length))[0]
+        if bad_length.size:
+            raise ValueError(f"length must be positive and finite; bad at reach indices {bad_length[:10].tolist()}")
+        to_index = self.to_index.astype(np.int64)
+        n = to_index.size
+        bad = np.nonzero((to_index < -1) | (to_index >= n))[0]
+        if bad.size:
+            raise ValueError(f"to_index out of range [-1, {n}) at reach indices {bad[:10].tolist()}")
+        done = _walk_to_outlets(to_index)
+        if not done.all():
+            chain = np.nonzero(~done)[0]
+            raise ValueError(f"to_index contains a cycle through reach indices {chain[:10].tolist()}")
 
     # ---- ids -------------------------------------------------------------
     def index_of(self, reach_id: int) -> int:

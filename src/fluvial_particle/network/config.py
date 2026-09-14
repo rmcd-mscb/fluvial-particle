@@ -6,6 +6,7 @@ import dataclasses
 import datetime as dtm
 import pathlib
 import sys
+import types
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -120,7 +121,7 @@ def _jsonify(value: Any) -> Any:
     return value
 
 
-def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None) -> dict[str, Any]:
+def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None) -> Mapping[str, Any]:
     """Validate one source row.
 
     Args:
@@ -129,9 +130,10 @@ def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None
         particle_mass: the config's global particle mass, if any.
 
     Returns:
-        A plain dict copy of the validated row with every value normalized by `_jsonify`
-        (datetimes to ISO strings, numpy scalars to Python scalars, in ``curve`` pairs too), so the
-        row is JSON-safe by construction.
+        A read-only copy of the validated row (a `types.MappingProxyType`) with every value
+        normalized by `_jsonify` (datetimes to ISO strings, numpy scalars to Python scalars, in
+        ``curve`` pairs too), so the row is JSON-safe by construction and cannot be edited past
+        these checks.
 
     Raises:
         ValueError: the row is missing a reach_id, has an invalid form, sets
@@ -159,7 +161,8 @@ def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None
     out = {k: _jsonify(v) for k, v in row.items()}
     if "curve" in out:
         out["curve"] = [(_jsonify(t), _jsonify(v)) for t, v in row["curve"]]
-    return out
+    # Read-only: a validated row must not be edited past the checks above (NetworkConfig is frozen).
+    return types.MappingProxyType(out)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -167,9 +170,9 @@ class NetworkConfig:
     """Settings for one network particle run (see the [network] TOML table)."""
 
     hydraulics_file: str
-    sources: tuple[dict[str, Any], ...]
+    sources: tuple[Mapping[str, Any], ...]
     interpolation: str = "linear"
-    reach_subset: tuple[int, ...] | dict[str, int] | None = None
+    reach_subset: tuple[int, ...] | Mapping[str, int] | None = None
     dtype: str = "float64"
     start_time: np.datetime64 | None = None
     end_time: np.datetime64 | None = None
@@ -229,7 +232,9 @@ class NetworkConfig:
             if set(self.reach_subset) != {"outlet"}:
                 raise ValueError("reach_subset mapping must be {'outlet': reach_id}")
             # Frozen dataclass: direct attribute assignment is not possible here.
-            object.__setattr__(self, "reach_subset", {"outlet": int(self.reach_subset["outlet"])})  # noqa: PLC2801
+            object.__setattr__(  # noqa: PLC2801
+                self, "reach_subset", types.MappingProxyType({"outlet": int(self.reach_subset["outlet"])})
+            )
         elif self.reach_subset is not None:
             object.__setattr__(self, "reach_subset", tuple(int(r) for r in self.reach_subset))  # noqa: PLC2801
 
@@ -336,7 +341,7 @@ class NetworkConfig:
         Returns:
             A JSON-safe dict of the config's fields.
         """
-        d = dataclasses.asdict(self)
+        d: dict[str, Any] = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
         d["sources"] = [dict(r) for r in self.sources]
         d["dispersion"] = self.dispersion.to_dict()
         for name in ("start_time", "end_time"):
@@ -344,6 +349,8 @@ class NetworkConfig:
                 d[name] = str(np.datetime64(d[name], "s"))
         if isinstance(self.reach_subset, tuple):
             d["reach_subset"] = list(self.reach_subset)
+        elif self.reach_subset is not None:
+            d["reach_subset"] = dict(self.reach_subset)
         return d
 
 

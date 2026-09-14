@@ -30,6 +30,19 @@ class ParticleSchedule:
     mass: FloatArray
     source_index: npt.NDArray[np.int32]
 
+    def __post_init__(self) -> None:
+        """Check the five arrays describe the same particles.
+
+        Raises:
+            ValueError: an array's size differs from ``release_reach.size`` (the message names it),
+                which would otherwise surface as a solver crash or a silently truncated run.
+        """
+        n = int(np.asarray(self.release_reach).size)
+        for f in dataclasses.fields(self):
+            size = int(np.asarray(getattr(self, f.name)).size)
+            if size != n:
+                raise ValueError(f"ParticleSchedule.{f.name} has {size} entries, expected {n} (release_reach.size)")
+
     @property
     def n(self) -> int:
         """Number of particles."""

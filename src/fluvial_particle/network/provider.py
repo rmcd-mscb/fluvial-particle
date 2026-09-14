@@ -119,19 +119,6 @@ class StaticArrays(Mapping[str, npt.NDArray[Any]]):
         return key in self._data or key in self._lazy_keys
 
 
-def _walk_to_outlets(to_index: npt.NDArray[np.int64]) -> npt.NDArray[np.bool_]:
-    """True for reaches whose downstream walk reaches an outlet; False marks a cycle."""
-    n = to_index.size
-    cur = to_index.copy()
-    done = cur < 0
-    for _ in range(n):
-        if done.all():
-            break
-        cur = np.where(done, -1, to_index[np.clip(cur, 0, n - 1)])
-        done |= cur < 0
-    return done
-
-
 def subset_static(static: dict[str, npt.NDArray[Any]], sel: npt.NDArray[np.int64]) -> dict[str, npt.NDArray[Any]]:
     """Restrict per-reach static arrays (not the polyline block) to indices ``sel`` and remap to_index."""
     out = {k: v[sel] for k, v in static.items() if k not in POLYLINE_VARS}
@@ -187,12 +174,13 @@ class FileHydraulicsProvider:
         if interpolation not in INTERPOLATIONS:
             raise ValueError(f"interpolation must be one of {INTERPOLATIONS}, got {interpolation!r}")
         self.path = pathlib.Path(path)
-        self.interpolation = interpolation
-        self.dtype = np.dtype(dtype)
+        self._interpolation = interpolation
+        self._dtype = np.dtype(dtype)
         self._ds = xr.open_dataset(self.path, engine="h5netcdf")
         self._validate_schema()
         self._validate_field_values()
         self.times: npt.NDArray[np.datetime64] = self._ds["time"].values.astype("datetime64[ns]")
+        self.times.setflags(write=False)
         self._n_time = int(self.times.size)
         if self._n_time > 1 and not np.all(np.diff(self.times) > np.timedelta64(0, "ns")):
             raise ValueError("time must be strictly increasing")
@@ -207,12 +195,28 @@ class FileHydraulicsProvider:
         data = full_static if self.subset_index is None else subset_static(full_static, self.subset_index)
         lazy = POLYLINE_VARS if all(v in self._ds for v in POLYLINE_VARS) else ()
         self.static: StaticArrays = StaticArrays(data, lazy, self._load_polylines)
-        self.n_reach = int(data["reach_id"].size)
+        self._n_reach = int(data["reach_id"].size)
         self._window_k: int = -2
         self._slices: dict[int, dict[str, FloatArray]] = {}
         self._time_window: tuple[np.datetime64, np.datetime64] | None = None
         self.time_window = time_window
         self._check_chunking()
+
+    # ---- read-only data members --------------------------------------------
+    @property
+    def interpolation(self) -> str:
+        """Time interpolation mode, "linear" or "hold"; fixed at open."""
+        return self._interpolation
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        """Float dtype of the time-varying fields; fixed at open."""
+        return self._dtype
+
+    @property
+    def n_reach(self) -> int:
+        """Number of reaches after any subsetting; fixed at open."""
+        return self._n_reach
 
     # ---- context manager -------------------------------------------------
     def __enter__(self) -> FileHydraulicsProvider:
@@ -294,25 +298,14 @@ class FileHydraulicsProvider:
         return out
 
     def _validate_topology(self, static: dict[str, npt.NDArray[Any]]) -> None:
-        """Check to_index is in range, free of cycles, consistent with is_outlet, and length is positive.
+        """Check the file's topology, delegating range, cycle, and length checks to Network.
 
         Raises:
             ValueError: to_index is out of range, contains a cycle, disagrees with
                 is_outlet, or length is non-positive or non-finite.
         """
-        length = np.asarray(static["length"], dtype=np.float64)
-        bad_length = np.nonzero(~(length > 0.0) | ~np.isfinite(length))[0]
-        if bad_length.size:
-            raise ValueError(f"length must be positive and finite; bad at reach indices {bad_length[:10].tolist()}")
+        Network(static)  # range, cycles, and positive finite lengths are the Network's invariants
         to_index = np.asarray(static["to_index"], dtype=np.int64)
-        n = to_index.size
-        bad = np.nonzero((to_index < -1) | (to_index >= n))[0]
-        if bad.size:
-            raise ValueError(f"to_index out of range [-1, {n}) at reach indices {bad[:10].tolist()}")
-        done = _walk_to_outlets(to_index)
-        if not done.all():
-            chain = np.nonzero(~done)[0]
-            raise ValueError(f"to_index contains a cycle through reach indices {chain[:10].tolist()}")
         is_outlet = np.asarray(static["is_outlet"]) != 0
         if not np.array_equal(is_outlet, to_index < 0):
             raise ValueError("is_outlet disagrees with to_index == -1")
