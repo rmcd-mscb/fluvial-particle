@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import vtk
@@ -24,7 +25,7 @@ class VTPWriter:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def write(self, particles, time: float, tidx: int) -> Path | None:
+    def write(self, particles: Any, time: float, tidx: int) -> Path | None:
         """Write particle state to a VTP file.
 
         Args:
@@ -155,7 +156,7 @@ class VTPWriter:
         writer.Write()
         return vtp_file
 
-    def _add_scalar(self, polydata: vtk.vtkPolyData, name: str, data: np.ndarray, dtype=None):
+    def _add_scalar(self, polydata: vtk.vtkPolyData, name: str, data: np.ndarray, dtype: type | None = None) -> None:
         """Add a scalar array to polydata point data.
 
         Args:
@@ -170,7 +171,7 @@ class VTPWriter:
         arr.SetName(name)
         polydata.GetPointData().AddArray(arr)
 
-    def _add_vector(self, polydata: vtk.vtkPolyData, name: str, data: np.ndarray):
+    def _add_vector(self, polydata: vtk.vtkPolyData, name: str, data: np.ndarray) -> None:
         """Add a vector array to polydata point data.
 
         Args:
