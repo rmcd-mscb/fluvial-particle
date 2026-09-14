@@ -398,10 +398,14 @@ which scales as sqrt(dt), and documented in the user docs:
   hundreds this is below anything the demo can resolve; the generalized
   random walk of LaBolle et al. is the follow-on if it ever matters.
 - Exit time from a dispersive hop is the end of the step, and the outlet
-  is checked only at step ends, so first-passage times are late by about
-  0.5826·sqrt(2 K dt)/v + dt/2 (the Broadie–Glasserman–Kou continuity
-  correction plus stamping); this term scales as sqrt(dt), not dt, and
-  the analytical arrival-time test corrects for it.
+  is checked only at step ends, so first-passage times are late by at most
+  about 0.5826·sqrt(2 K dt)/v + dt/2 (the Broadie–Glasserman–Kou continuity
+  correction plus stamping); the bound is tight when the kick dominates the
+  step (sqrt(2 K dt) >> v dt) and the bias is much smaller when advection
+  dominates, because most exits then occur in the exactly monitored
+  advective substep (about 30 s at dt = 900 s in the acceptance test). This
+  term scales as sqrt(dt), not dt, and the analytical arrival-time tests
+  cover both regimes.
 
 ### Dispersion coefficient
 

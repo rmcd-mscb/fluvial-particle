@@ -82,8 +82,7 @@ def test_gaussian_plume_moments_and_normality(tmp_path):
         assert stats.normaltest(dist).pvalue > 0.01
 
 
-@pytest.mark.parametrize("dt", [10.0, 900.0])
-def test_inverse_gaussian_arrival_times(tmp_path, dt):
+def test_inverse_gaussian_arrival_times(tmp_path):
     """Arrival times at the outlet match a continuity-corrected inverse-Gaussian.
 
     The solver's clock only checks whether a particle has crossed the outlet at the end of each
@@ -98,19 +97,22 @@ def test_inverse_gaussian_arrival_times(tmp_path, dt):
     recenters the sample for the second, then checks the corrected arrival times against the
     inverse Gaussian implied by the true (uncorrected) travel length and dispersion.
 
-    end_seconds=18000 is a common multiple of both parametrized dt values (10 and 900) so
-    output_interval == end_seconds is valid for each, and is comfortably beyond the expected
-    arrival (mean 9500 s + 4 sigma_step at dt=900, about 13400 s) so every particle has exited.
+    This two-term correction is exact only when the per-step dispersive kick dominates the
+    step's displacement (small dt relative to the travel time), which is the case at dt=10 here.
+    At a larger dt where advection dominates the step (dt=900, the project's default), see
+    `test_first_passage_bias_bounded_at_default_dt` instead: the two-term expression there is
+    only an upper bound on the bias, not an exact correction (most exits occur in the exactly
+    monitored advective substep, well before dispersion could carry them past the outlet).
     """
     ds = chain_dataset(n_reach=N_REACH, length=L_REACH, velocity=V, k_target=K)
     length = N_REACH * L_REACH - S0  # 9500 m to the outlet
-    end_seconds = 18000
+    dt = 10.0
     with _run(
         tmp_path,
         ds,
         dt=dt,
-        end_seconds=end_seconds,
-        output_interval=float(end_seconds),
+        end_seconds=20000,
+        output_interval=20000.0,
         dispersion={"model": "constant", "value": K},
         release_s=S0,
     ) as res:
@@ -123,3 +125,46 @@ def test_inverse_gaussian_arrival_times(tmp_path, dt):
         dist = stats.invgauss(mean / shape, scale=shape)
         assert abs(t.mean() - mean) < 3.0 * np.sqrt(mean**3 / shape / N)
         assert stats.kstest(t, dist.cdf).pvalue > 0.01
+
+
+def test_first_passage_bias_bounded_at_default_dt(tmp_path):
+    """At dt=900 s (the project's default step), the first-passage bias is small and bounded above.
+
+    The two-term Broadie-Glasserman-Kou correction used in `test_inverse_gaussian_arrival_times`
+    (`BETA * sqrt(2 K dt) / v` for the discrete-monitoring shift, plus `dt / 2` for exit-time
+    rounding) is exact only when the per-step dispersive kick dominates the step's displacement.
+    At dt=900 with v=1 m/s, each step advects 900 m -- three times the ~300 m kick standard
+    deviation (`sqrt(2 K dt)` = `sqrt(2*50*900)` ~ 300 m) -- so most particles cross the outlet
+    during the exactly-monitored advective substep (`NetworkSolver._advect` stamps
+    `exit_time = t + dt - time_left`, exact to the true crossing instant) well before the
+    dispersive kick (`_disperse`, `exit_time = t + dt`, no partial-step credit) would apply. The
+    two-term expression is therefore only an upper bound on the bias here, not an exact
+    correction: this test checks the observed bias falls between 0 (net of sampling noise) and
+    that bound, and that the arrival distribution's spread still matches the (uncorrected)
+    inverse-Gaussian standard deviation to within 10%, confirming the process is still the same
+    inverse-Gaussian first-passage law, just with a much smaller discrete-monitoring bias than
+    the worst-case bound predicts.
+    """
+    ds = chain_dataset(n_reach=N_REACH, length=L_REACH, velocity=V, k_target=K)
+    length = N_REACH * L_REACH - S0  # 9500 m to the outlet
+    dt = 900.0
+    with _run(
+        tmp_path,
+        ds,
+        dt=dt,
+        end_seconds=18000,
+        output_interval=900.0,
+        dispersion={"model": "constant", "value": K},
+        release_s=S0,
+    ) as res:
+        et = res.arrival_times()["exit_time"].to_numpy()
+        assert et.size == N, "every particle should have exited"
+        mean = length / V  # uncorrected (unshifted) inverse-Gaussian mean and shape
+        shape = length**2 / (2.0 * K)
+        se = np.sqrt(mean**3 / shape / N)
+        bias = et.mean() - mean
+        upper_bound = BETA * np.sqrt(2.0 * K * dt) / V + dt / 2.0 + 3.0 * se
+        assert -3.0 * se <= bias <= upper_bound
+        sample_std = et.std()
+        ig_std = np.sqrt(mean**3 / shape)
+        assert abs(sample_std - ig_std) / ig_std < 0.10

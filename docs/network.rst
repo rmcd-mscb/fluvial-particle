@@ -85,4 +85,8 @@ Approximations
 
 ``K`` is sampled from the reach where the particle ends its advective move; a plain random walk across
 a jump in ``K`` slightly over-populates the low-``K`` side; dispersive exits are stamped at the end of
-the step. The exit-time bias from this scales as ``sqrt(dt)``.
+the step. First-passage times are therefore late by at most about ``0.5826 * sqrt(2 K dt) / v + dt / 2``
+(the Broadie-Glasserman-Kou continuity correction plus end-of-step stamping); this bound is tight when
+the dispersive kick dominates the step's displacement (``sqrt(2 K dt) >> v * dt``), and the bias is much
+smaller when advection dominates, because most exits then occur in the exactly monitored advective
+substep. The exit-time bias scales as ``sqrt(dt)``, not ``dt``.
