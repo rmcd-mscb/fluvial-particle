@@ -9,8 +9,10 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 
-from .config import parse_datetime
+from .config import NetworkConfig, parse_datetime
+from .dispersion import dispersion_coefficient
 from .network import Network
 from .provider import HydraulicsProvider
 
@@ -276,3 +278,77 @@ def _concentration_rate(
     t_all = np.unique(np.concatenate([t_c, inner]))
     c_all = np.interp(t_all, t_c, c, left=0.0, right=0.0)
     return t_all, c_all * _flow_at(provider, start_time, idx, frac, t_all)
+
+
+def estimate_particles(
+    config: NetworkConfig,
+    provider: HydraulicsProvider,
+    *,
+    target_per_bin: float = 100.0,
+    bin_length: float = 100.0,
+    reference_travel_time: float = 86400.0,
+) -> pd.DataFrame:
+    """Particle mass and count per source for about ``target_per_bin`` particles in a ``bin_length`` bin.
+
+    Continuous sources: m = rate * bin_length / (v * target) with v the release reach's mean velocity over the
+    source window. Slugs: the count that puts ``target`` particles in the peak bin after ``reference_travel_time``,
+    N = target * sigma * sqrt(2 pi) / bin_length with sigma = sqrt(2 K t). The config is not changed.
+
+    Args:
+        config: the network run's configuration, for its sources and dispersion settings.
+        provider: hydraulics, for velocity and dispersion inputs and the time axis.
+        target_per_bin: desired particle count in a peak bin.
+        bin_length: bin length (m) used for the estimate.
+        reference_travel_time: travel time (s) at which the slug's spread is evaluated.
+
+    Returns:
+        DataFrame with columns source, form, reach_id, total_mass, particle_mass, particles.
+    """
+    network = Network(provider.static, crs_wkt=provider.crs_wkt)
+    start, end = config.resolve_times(provider.times)
+    total = float((end - start) / np.timedelta64(1, "s"))
+    disp = config.dispersion
+    rows: list[dict[str, Any]] = []
+    for i, row in enumerate(config.sources):
+        idx, s = _resolve_position(i, row, network)
+        form = row["form"]
+        if form == "slug":
+            t0 = t1 = seconds_from_start(row["time"], start)
+            mass_total = float(row["mass"])
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                if form == "concentration":
+                    t, v = _concentration_rate(i, row, provider, start, idx, s / float(network.length[idx]), total)
+                else:
+                    t, v = _curve(i, row, "rate", start, total)
+            t0, t1 = float(t[0]), float(t[-1])
+            mass_total = float(_cumulative(t, v)[-1])
+        sample = np.unique(np.clip(np.linspace(t0, t1, 8), 0.0, total))
+        vel: list[float] = []
+        kk: list[float] = []
+        for tj in sample:
+            h = provider.hydraulics(start + np.timedelta64(round(tj * 1e9), "ns"))
+            vel.append(float(h["velocity"][idx]))
+            kk.append(
+                float(dispersion_coefficient(h, disp.model, scale=disp.scale, cap=disp.cap, value=disp.value)[idx])
+            )
+        v_mean = max(float(np.mean(vel)), 1e-12)
+        k_mean = float(np.mean(kk))
+        if form == "slug":
+            sigma = np.sqrt(2.0 * k_mean * reference_travel_time)
+            n = max(1, int(np.ceil(target_per_bin * max(sigma * np.sqrt(2.0 * np.pi) / bin_length, 1.0))))
+            m = mass_total / n
+        else:
+            rate_mean = mass_total / max(t1 - t0, 1e-12)
+            m = rate_mean * bin_length / (v_mean * target_per_bin)
+            n = max(1, int(np.ceil(mass_total / m)))
+        rows.append({
+            "source": i,
+            "form": form,
+            "reach_id": int(row["reach_id"]),
+            "total_mass": mass_total,
+            "particle_mass": m,
+            "particles": n,
+        })
+    return pd.DataFrame(rows, columns=["source", "form", "reach_id", "total_mass", "particle_mass", "particles"])

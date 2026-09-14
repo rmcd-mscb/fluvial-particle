@@ -3,8 +3,9 @@
 import numpy as np
 import pytest
 
+from fluvial_particle.network.config import NetworkConfig
 from fluvial_particle.network.network import Network
-from fluvial_particle.network.sources import ParticleSchedule, expand_sources, seconds_from_start
+from fluvial_particle.network.sources import ParticleSchedule, estimate_particles, expand_sources, seconds_from_start
 from tests.network.support import ArrayHydraulicsProvider, three_reach_dataset
 
 
@@ -133,3 +134,24 @@ def test_schedule_simple_and_concat():
     b = ParticleSchedule.simple(reach=1, s=0.0, time=5.0, mass=2.0, source_index=1)
     c = ParticleSchedule.concat([a, b])
     assert c.n == 2 and list(c.mass) == [1.0, 2.0]
+
+
+def test_estimate_particles_hand_values(env):
+    _, prov = env
+    cfg = NetworkConfig.from_dict({
+        "hydraulics_file": "unused.nc",
+        "dispersion": {"model": "constant", "value": 10.0},
+        "sources": [
+            {"reach_id": 101, "form": "slug", "time": 0.0, "mass": 100.0, "particles": 1},
+            {"reach_id": 101, "form": "loading", "rate": 0.01, "start": 0.0, "end": DAY, "particles": 1},
+        ],
+    })
+    df = estimate_particles(cfg, prov, target_per_bin=100.0, bin_length=100.0, reference_travel_time=DAY)
+    sigma = np.sqrt(2 * 10.0 * DAY)
+    n_slug = int(np.ceil(100.0 * sigma * np.sqrt(2 * np.pi) / 100.0))
+    assert df.loc[0, "particles"] == n_slug
+    assert df.loc[0, "particle_mass"] == pytest.approx(100.0 / n_slug)
+    # continuous: m = rate * bin / (v * target) = 0.01 * 100 / (1.0 * 100) = 0.01; N = M / m = 864 / 0.01
+    assert df.loc[1, "particle_mass"] == pytest.approx(0.01)
+    assert df.loc[1, "particles"] == 86400
+    assert list(df.columns) == ["source", "form", "reach_id", "total_mass", "particle_mass", "particles"]
