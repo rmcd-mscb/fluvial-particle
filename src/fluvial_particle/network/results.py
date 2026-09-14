@@ -11,6 +11,7 @@ import numpy.typing as npt
 import pandas as pd
 import xarray as xr
 
+from .dispersion import dispersion_coefficient
 from .network import Network, NetworkBins
 from .provider import FileHydraulicsProvider
 from .writer import OUTPUT_FILENAME
@@ -207,6 +208,120 @@ class NetworkResults:
             df.insert(0, "time", self.times[i])
             frames.append(df)
         return pd.concat(frames, ignore_index=True)
+
+    # ---- bins and concentration ---------------------------------------------
+    def bins(self, bin_length: float = 100.0) -> NetworkBins:
+        """Sub-reach bins of about ``bin_length`` meters (cached per length; np.inf gives one bin per reach)."""
+        key = float(bin_length)
+        if key not in self._bins:
+            self._bins[key] = NetworkBins(self.network, key)
+        return self._bins[key]
+
+    def _bandwidth(self, i: int, _bins: NetworkBins, smoothing: float | str | None) -> npt.NDArray[np.float64] | None:
+        if smoothing is None:
+            return None
+        if isinstance(smoothing, str):
+            if smoothing != "auto":
+                raise ValueError("smoothing must be None, a bandwidth in meters, or 'auto'")
+            d = json.loads(self._ds.attrs["dispersion"])
+            h = self.provider.hydraulics(self.times[i])
+            k = dispersion_coefficient(h, d["model"], scale=d["scale"], cap=d["cap"], value=d["value"])
+            return np.sqrt(2.0 * k * float(self._ds.attrs["dt"]))
+        return np.full(self.n_reach, float(smoothing))
+
+    def _mass_per_bin(
+        self, i: int, bins: NetworkBins, weights: npt.NDArray[np.float64], smoothing: float | str | None
+    ) -> npt.NDArray[np.float64]:
+        ri = self._ds["reach_index"].values[i].astype(np.int64)
+        si = self._ds["s"].values[i].astype(np.float64)
+        act = self._ds["status"].values[i] == 1
+        r, s, w = ri[act], si[act], weights[act]
+        bw = self._bandwidth(i, bins, smoothing)
+        if bw is None:
+            return np.bincount(bins.bin_of(r, s), weights=w, minlength=bins.n_bins).astype(np.float64)
+        out = np.zeros(bins.n_bins)
+        centers = 0.5 * (bins.s_start + bins.s_end)
+        for reach in np.unique(r):
+            sel = r == reach
+            b0 = int(bins.reach_bin_start[reach])
+            nb = int(bins.bins_per_reach[reach])
+            h = max(float(bw[reach]), 1e-6)
+            d = centers[b0 : b0 + nb][None, :] - s[sel][:, None]
+            kern = np.exp(-0.5 * (d / h) ** 2)
+            empty = np.nonzero(kern.sum(axis=1) == 0.0)[0]  # bandwidth far below the bin width: nearest bin
+            kern[empty, np.argmin(np.abs(d[empty]), axis=1)] = 1.0
+            kern /= kern.sum(axis=1, keepdims=True)
+            out[b0 : b0 + nb] += (kern * w[sel][:, None]).sum(axis=0)
+        return out
+
+    def _bin_coords(self, bins: NetworkBins) -> dict[str, Any]:
+        return {
+            "bin": np.arange(bins.n_bins),
+            "bin_reach": ("bin", bins.bin_reach),
+            "reach_id": ("bin", self.reach_id[bins.bin_reach]),
+            "s_start": ("bin", bins.s_start),
+            "s_end": ("bin", bins.s_end),
+        }
+
+    def counts(self, time: Any, bin_length: float = 100.0) -> xr.DataArray:
+        """Active particles per bin at one time (dims bin) or several (dims time, bin)."""
+        bins = self.bins(bin_length)
+        idx = self.time_indices(time)
+        ones = np.ones(self.n_particles)
+        data = np.stack([self._mass_per_bin(int(i), bins, ones, None) for i in idx]).astype(np.int64)
+        return self._wrap(data, idx, bins, time, "count", "-")
+
+    def concentration(self, time: Any, bin_length: float = 100.0, smoothing: float | str | None = None) -> xr.DataArray:
+        """Mass per bin volume (width * depth * bin width) in mass_units m-3; NaN where flow_out is 0.
+
+        Args:
+            time: an output index, datetime, list of either, slice, or None for all times.
+            bin_length: bin size in meters (np.inf for one bin per reach).
+            smoothing: None for plain binning, a Gaussian bandwidth in meters, or "auto" for sqrt(2 K dt).
+        """
+        bins = self.bins(bin_length)
+        idx = self.time_indices(time)
+        mass = self._ds["mass"].values.astype(np.float64)
+        rows = []
+        for i in idx:
+            m = self._mass_per_bin(int(i), bins, mass, smoothing)
+            h = self.provider.hydraulics(self.times[i])
+            vol = np.asarray(h["width"])[bins.bin_reach] * np.asarray(h["depth"])[bins.bin_reach] * bins.bin_width
+            with np.errstate(divide="ignore", invalid="ignore"):
+                c = np.where(vol > 0.0, m / vol, np.nan)
+            c[np.asarray(h["flow_out"])[bins.bin_reach] <= 0.0] = np.nan
+            rows.append(c)
+        units = f"{self._ds.attrs.get('mass_units', 'kg')} m-3"
+        return self._wrap(np.stack(rows), idx, bins, time, "concentration", units)
+
+    def reach_concentration(self, time: Any, smoothing: float | str | None = None) -> xr.DataArray:
+        """concentration() with one bin per reach."""
+        return self.concentration(time, bin_length=np.inf, smoothing=smoothing)
+
+    def _wrap(
+        self, data: npt.NDArray[Any], idx: npt.NDArray[np.int64], bins: NetworkBins, time: Any, name: str, units: str
+    ) -> xr.DataArray:
+        coords = self._bin_coords(bins)
+        single = not (time is None or isinstance(time, slice | list | tuple | np.ndarray))
+        if single:
+            return xr.DataArray(
+                data[0],
+                dims=("bin",),
+                coords=coords,
+                name=name,
+                attrs={"units": units, "time": str(self.times[idx[0]])},
+            )
+        coords["time"] = self.times[idx]
+        return xr.DataArray(data, dims=("time", "bin"), coords=coords, name=name, attrs={"units": units})
+
+    def persist(
+        self, path: str | pathlib.Path, bin_length: float = 100.0, smoothing: float | str | None = None
+    ) -> pathlib.Path:
+        """Write the full (time, bin) concentration cube to a NetCDF file and return its path."""
+        da = self.concentration(None, bin_length=bin_length, smoothing=smoothing)
+        da.attrs["bin_length"] = float(bin_length)
+        da.to_dataset().to_netcdf(path, engine="h5netcdf")
+        return pathlib.Path(path)
 
     def summary(self) -> str:
         """One-paragraph description of the run."""

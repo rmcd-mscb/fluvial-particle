@@ -80,3 +80,53 @@ def test_to_dataframe(run):
     long = run.to_dataframe(1)
     assert len(long) == 4 and "time" in long.columns
     assert len(run.to_dataframe()) == 4 * 13
+
+
+def test_counts_and_concentration(run):
+    c = run.counts(1, bin_length=100.0)  # t = 600 s: three particles at s = 600 in reach 0 (width 10, depth 1)
+    assert c.dims == ("bin",) and c.sum().item() == 3
+    assert c.values[6] == 3
+    conc = run.concentration(1, bin_length=100.0)
+    assert conc.attrs["units"] == "g m-3"
+    assert conc.values[6] == pytest.approx(3.0 / (10.0 * 1.0 * 100.0))
+    assert conc.coords["reach_id"].values[6] == 101 and conc.coords["s_start"].values[6] == 600.0
+    assert np.nansum(conc.values[:10]) == pytest.approx(conc.values[6])
+    rc = run.reach_concentration(1)
+    assert rc.sizes["bin"] == 3 and rc.values[0] == pytest.approx(3.0 / (10.0 * 1.0 * 1000.0))
+
+
+def test_concentration_multi_time_and_smoothing(run):
+    cube = run.concentration([0, 1, 2], bin_length=100.0)
+    assert cube.dims == ("time", "bin") and cube.sizes["time"] == 3
+    sm = run.concentration(1, bin_length=100.0, smoothing=150.0)
+    bins = run.bins(100.0)
+    vol = bins.bin_width * 10.0 * 1.0
+    reach0 = bins.bin_reach == 0
+    assert np.nansum(sm.values[reach0] * vol[reach0]) == pytest.approx(3.0)  # mass conserved in the reach
+    assert (sm.values[reach0] > 0).sum() > 1  # spread over neighbors
+    auto = run.concentration(1, bin_length=100.0, smoothing="auto")  # K = 0 -> tiny bandwidth -> same as binned
+    assert np.nansum(auto.values[reach0] * vol[reach0]) == pytest.approx(3.0)
+
+
+def test_dry_reach_is_nan(tmp_path):
+    ds = three_reach_dataset(velocity=[1.0, 0.0, 2.0], flow_out=[10.0, 0.0, 80.0])
+    path = write_network_file(tmp_path / "dry.nc", ds)
+    cfg = {
+        "hydraulics_file": str(path),
+        "dt": 600.0,
+        "output_interval": 600.0,
+        "end_time": "1979-01-01T00:20",
+        "dispersion": {"model": "none"},
+        "sources": [{"reach_id": 102, "form": "slug", "time": 0.0, "mass": 1.0, "particles": 1}],
+    }
+    with run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=True) as res:
+        conc = res.reach_concentration(1)
+        assert np.isnan(conc.values[1]) and res.counts(1, np.inf).values[1] == 1
+
+
+def test_persist(run, tmp_path):
+    out = run.persist(tmp_path / "conc.nc", bin_length=500.0)
+    import xarray as xr
+
+    with xr.open_dataset(out, engine="h5netcdf") as ds:
+        assert ds["concentration"].dims == ("time", "bin") and ds.sizes["time"] == 13
