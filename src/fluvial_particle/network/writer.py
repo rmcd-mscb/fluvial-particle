@@ -46,6 +46,7 @@ class NetworkWriter:
     ) -> None:
         """Create the output file and all variables (collective under mpio)."""
         self.path = pathlib.Path(path)
+        self._rank = int(comm.Get_rank()) if comm is not None else 0
         kwargs: dict[str, Any] = {"driver": "mpio", "comm": comm} if comm is not None else {}
         self._f = h5netcdf.File(str(self.path), "w", **kwargs)
         n = int(n_particles)
@@ -144,10 +145,14 @@ class NetworkWriter:
         """
         f = self._f
         if itime >= self._n_time:
+            # Collective on all ranks under mpio: every rank must call resize_dimension in lockstep.
             f.resize_dimension("time", itime + 1)
             self._n_time = itime + 1
-        f.variables["time"][itime] = float(time_seconds)
-        f.variables["time_seconds"][itime] = float(time_seconds)
+        if self._rank == 0:
+            # Under mpio every rank sees the same (itime, time_seconds); write it once from rank 0 so
+            # ranks don't race on the same element.
+            f.variables["time"][itime] = float(time_seconds)
+            f.variables["time_seconds"][itime] = float(time_seconds)
         f.variables["reach_index"][itime, lo:hi] = np.asarray(reach, dtype=np.int32)
         f.variables["s"][itime, lo:hi] = s
         f.variables["status"][itime, lo:hi] = np.asarray(status, dtype=np.int8)

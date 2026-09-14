@@ -43,6 +43,13 @@ def test_basics(run):
     assert "particles" in run.summary() and "NetworkResults" in repr(run)
 
 
+def test_time_index_out_of_range_raises(run):
+    with pytest.raises(IndexError):
+        run.positions(100)
+    with pytest.raises(IndexError):
+        run.positions(-100)
+
+
 def test_positions_and_map(run):
     df = run.positions(1)  # t = 600 s
     assert list(df.columns) == ["particle", "reach_index", "reach_id", "s", "status", "mass"]

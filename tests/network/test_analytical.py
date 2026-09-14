@@ -82,7 +82,8 @@ def test_gaussian_plume_moments_and_normality(tmp_path):
         assert stats.normaltest(dist).pvalue > 0.01
 
 
-def test_inverse_gaussian_arrival_times(tmp_path):
+@pytest.mark.parametrize("dt", [10.0, 900.0])
+def test_inverse_gaussian_arrival_times(tmp_path, dt):
     """Arrival times at the outlet match a continuity-corrected inverse-Gaussian.
 
     The solver's clock only checks whether a particle has crossed the outlet at the end of each
@@ -96,16 +97,20 @@ def test_inverse_gaussian_arrival_times(tmp_path):
     This test corrects the reference distribution's effective length for the first effect and
     recenters the sample for the second, then checks the corrected arrival times against the
     inverse Gaussian implied by the true (uncorrected) travel length and dispersion.
+
+    end_seconds=18000 is a common multiple of both parametrized dt values (10 and 900) so
+    output_interval == end_seconds is valid for each, and is comfortably beyond the expected
+    arrival (mean 9500 s + 4 sigma_step at dt=900, about 13400 s) so every particle has exited.
     """
     ds = chain_dataset(n_reach=N_REACH, length=L_REACH, velocity=V, k_target=K)
     length = N_REACH * L_REACH - S0  # 9500 m to the outlet
-    dt = 10.0
+    end_seconds = 18000
     with _run(
         tmp_path,
         ds,
         dt=dt,
-        end_seconds=20000,
-        output_interval=20000.0,
+        end_seconds=end_seconds,
+        output_interval=float(end_seconds),
         dispersion={"model": "constant", "value": K},
         release_s=S0,
     ) as res:

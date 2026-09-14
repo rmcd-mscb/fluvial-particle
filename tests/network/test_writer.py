@@ -59,6 +59,19 @@ def test_round_trip(tmp_path):
         assert ds["reach_index"].encoding.get("chunksizes") == (1, 3)
 
 
+def test_serial_writer_has_rank_zero_and_writes_time(tmp_path):
+    path = tmp_path / OUTPUT_FILENAME
+    sch = ParticleSchedule.simple(reach=0, s=0.0, time=0.0)
+    with NetworkWriter(path, n_particles=1, reach_id=np.array([101]), start_time=T0, attrs={}, comm=None) as w:
+        assert w._rank == 0
+        w.write_schedule(sch, 0, 1)
+        w.write_step(0, 0.0, np.array([0], dtype=np.int32), np.array([0.0]), np.array([1], dtype=np.int8), 0, 1)
+        w.write_step(1, 60.0, np.array([0], dtype=np.int32), np.array([1.0]), np.array([1], dtype=np.int8), 0, 1)
+    with xr.open_dataset(path, engine="h5netcdf") as ds:
+        assert list(ds["time_seconds"].values) == [0.0, 60.0]
+        assert ds["time"].values[1] == T0 + np.timedelta64(60, "s")
+
+
 def test_partial_slices_and_dtype(tmp_path):
     path = tmp_path / OUTPUT_FILENAME
     sch = ParticleSchedule(

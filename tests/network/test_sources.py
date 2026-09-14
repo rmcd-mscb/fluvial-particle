@@ -129,6 +129,11 @@ def test_errors_and_truncation(env):
     np.testing.assert_allclose(sch.mass.sum(), DAY)  # only the day inside the window
 
 
+def test_missing_particles_and_particle_mass_raises(env):
+    with pytest.raises(ValueError, match=r"sources\[0\] needs particles, or a global particle_mass"):
+        expand(env, [{"reach_id": 101, "form": "slug", "time": 0.0, "mass": 1.0}], particle_mass=None)
+
+
 def test_schedule_simple_and_concat():
     a = ParticleSchedule.simple(reach=0, s=10.0, time=0.0)
     b = ParticleSchedule.simple(reach=1, s=0.0, time=5.0, mass=2.0, source_index=1)

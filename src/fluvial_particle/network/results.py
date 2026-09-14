@@ -115,9 +115,17 @@ class NetworkResults:
 
     # ---- time selection ----------------------------------------------------
     def time_index(self, time: int | np.datetime64 | str) -> int:
-        """Output index for an integer (negative allowed) or the nearest datetime."""
+        """Output index for an integer (negative allowed) or the nearest datetime.
+
+        Raises:
+            IndexError: an integer ``time`` is out of range for the output time axis.
+        """
         if isinstance(time, int | np.integer):
-            return int(time) % self.times.size
+            n = self.times.size
+            i = int(time)
+            if not -n <= i < n:
+                raise IndexError(f"time index {i} is out of range for {n} output times")
+            return i % n
         t = time.astype("datetime64[ns]") if isinstance(time, np.datetime64) else np.datetime64(str(time), "ns")
         return int(np.argmin(np.abs(self.times - t)))
 

@@ -41,13 +41,38 @@ FloatArray = npt.NDArray[np.floating[Any]]
 
 @runtime_checkable
 class HydraulicsProvider(Protocol):
-    """Per-step hydraulics for the network solver; dict keys are the export's variable names."""
+    """Per-step hydraulics for the network solver; dict keys are the export's variable names.
 
-    times: npt.NDArray[np.datetime64]
-    static: Mapping[str, npt.NDArray[Any]]
-    dtype: np.dtype[Any]
-    crs_wkt: str
-    n_reach: int
+    The five data members are read-only properties (not plain attributes) so that a concrete
+    provider whose own attribute type is a subtype of the annotation here (e.g. `StaticArrays` for
+    `static`) still satisfies this Protocol structurally: mypy requires an exact (invariant) type
+    match for a mutable Protocol attribute, but only covariance for a read-only one.
+    """
+
+    @property
+    def times(self) -> npt.NDArray[np.datetime64]:
+        """Hydraulics timestamps, ascending."""
+        ...
+
+    @property
+    def static(self) -> Mapping[str, npt.NDArray[Any]]:
+        """Per-reach static arrays (reach_id, to_index, is_outlet, length, ...)."""
+        ...
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        """Float dtype of the time-varying fields."""
+        ...
+
+    @property
+    def crs_wkt(self) -> str:
+        """Coordinate reference system, as WKT (empty string if unknown)."""
+        ...
+
+    @property
+    def n_reach(self) -> int:
+        """Number of reaches (after any subsetting)."""
+        ...
 
     def hydraulics(self, t: np.datetime64) -> dict[str, FloatArray]:
         """Per-reach velocity, depth, width, ustar, flow_in, flow_out (and water_temperature) at time t."""
@@ -246,11 +271,16 @@ class FileHydraulicsProvider:
         return out
 
     def _validate_topology(self, static: dict[str, npt.NDArray[Any]]) -> None:
-        """Check to_index is in range, free of cycles, and consistent with is_outlet.
+        """Check to_index is in range, free of cycles, consistent with is_outlet, and length is positive.
 
         Raises:
-            ValueError: to_index is out of range, contains a cycle, or disagrees with is_outlet.
+            ValueError: to_index is out of range, contains a cycle, disagrees with
+                is_outlet, or length is non-positive or non-finite.
         """
+        length = np.asarray(static["length"], dtype=np.float64)
+        bad_length = np.nonzero(~(length > 0.0) | ~np.isfinite(length))[0]
+        if bad_length.size:
+            raise ValueError(f"length must be positive and finite; bad at reach indices {bad_length[:10].tolist()}")
         to_index = np.asarray(static["to_index"], dtype=np.int64)
         n = to_index.size
         bad = np.nonzero((to_index < -1) | (to_index >= n))[0]

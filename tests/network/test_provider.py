@@ -5,13 +5,26 @@ import datetime as dt
 import numpy as np
 import pytest
 
-from fluvial_particle.network.provider import FileHydraulicsProvider
-from tests.network.support import chain_dataset, three_reach_dataset, write_network_file
+from fluvial_particle.network.provider import FileHydraulicsProvider, HydraulicsProvider
+from tests.network.support import ArrayHydraulicsProvider, chain_dataset, three_reach_dataset, write_network_file
 
 
 @pytest.fixture
 def three_file(tmp_path):
     return write_network_file(tmp_path / "three.nc", three_reach_dataset(temperature=4.0))
+
+
+def test_providers_satisfy_hydraulics_provider_protocol(three_file):
+    # HydraulicsProvider's data members are read-only properties in the Protocol so that a concrete
+    # provider's plain (mutable) instance attributes still satisfy it structurally, without a cast.
+    with FileHydraulicsProvider(three_file) as prov:
+        assert isinstance(prov, HydraulicsProvider)
+    array_prov = ArrayHydraulicsProvider(
+        [np.datetime64("1979-01-01", "ns")],
+        {"reach_id": np.array([101])},
+        {name: np.array([1.0]) for name in ("flow_in", "flow_out", "velocity", "depth", "width", "ustar")},
+    )
+    assert isinstance(array_prov, HydraulicsProvider)
 
 
 def test_open_static_and_times(three_file):
@@ -63,6 +76,13 @@ def test_bad_to_index_and_cycle(tmp_path):
     ds = three_reach_dataset(to_index=[2, 2, 0])  # 0 -> 2 -> 0 cycle
     with pytest.raises(ValueError, match="cycle"):
         FileHydraulicsProvider(write_network_file(tmp_path / "cycle.nc", ds))
+
+
+def test_non_positive_length_raises(tmp_path):
+    ds = three_reach_dataset(length=[1000.0, 0.0, 3000.0])
+    with pytest.raises(ValueError, match="length") as exc:
+        FileHydraulicsProvider(write_network_file(tmp_path / "len0.nc", ds))
+    assert "1" in str(exc.value)
 
 
 def test_is_outlet_inconsistent(tmp_path):

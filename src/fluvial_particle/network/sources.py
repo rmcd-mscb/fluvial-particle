@@ -195,7 +195,8 @@ def _count_and_masses(
     if "particles" in row:
         count = int(row["particles"])
         return count, np.full(count, mass_total / count)
-    assert particle_mass is not None
+    if particle_mass is None:
+        raise ValueError(f"sources[{i}] needs particles, or a global particle_mass")
     if poisson:
         count = max(1, int(rng.poisson(mass_total / particle_mass)))
         return count, np.full(count, mass_total / count)
