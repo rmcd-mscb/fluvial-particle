@@ -214,9 +214,9 @@ def test_load_checkpoint():
     assert_equal(type(y), np.ndarray)
     assert_equal(x.size, 20)
     assert_equal(z.ndim, 1)
-    assert_equal(x[15], 43.956639705165685)
-    assert_equal(y[3], -0.7139319644180326)
-    assert_equal(z[2], 9.563715357675903)
+    assert_equal(x[15], 44.29888272918906)
+    assert_equal(y[3], -0.7139586024993462)
+    assert_equal(z[2], 9.592033612112758)
 
 
 def test_load_variable_source():
@@ -255,7 +255,7 @@ def test_support():
 
     assert_equal(test_keys, ["coordinates", "properties"])
     assert_equal(test_nts, 4)
-    assert_equal(test_points[-1, :], [34.11210153322322, 0.3878199353097108, 9.73657708285166])
+    assert_equal(test_points[-1, :], [36.70693943877209, 0.3879695075994968, 9.767245059795933])
 
 
 def test_field_mapping_required():

@@ -112,7 +112,9 @@ TOML Section Reference
 
 **min_depth** (optional): Minimum water depth threshold in meters. Default: 0.02
 
-**vertical_bound** (optional): Vertical boundary buffer as fraction of depth. Default: 0.01
+**vertical_bound** (optional): Vertical boundary buffer as fraction of depth. Particles are
+mirror-reflected off the bed and water surface, inset by this fraction; ``FallingParticles``
+instead clamp to the bed so settled particles stay there. Default: 0.01
 
 
 [particles.falling]

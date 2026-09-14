@@ -917,10 +917,18 @@ class Particles:
         Args:
             pz (float NumPy array): new elevation array
         """
-        a = self.indices[pz > self.wse - self.vertbound * self.depth]
-        b = self.indices[pz < self.bedelev + self.vertbound * self.depth]
-        pz[a] = self.wse[a] - self.vertbound * self.depth[a]
-        pz[b] = self.bedelev[b] + self.vertbound * self.depth[b]
+        # Mirror-reflect off the bed and water surface (no-flux walls for a passive tracer), inset
+        # by vertbound. Clamping instead of reflecting piles particles onto the bounds: a well-mixed
+        # column ends up with ~11% of its particles exactly on them (tests/test_analytical.py). The
+        # fold handles a step that crosses the column more than once. Subclasses that should rest
+        # on a boundary (FallingParticles) override this with a clamp.
+        lo = self.bedelev + self.vertbound * self.depth
+        hi = self.wse - self.vertbound * self.depth
+        span = hi - lo
+        a = self.indices[np.isfinite(pz) & (span > 0.0) & ((pz < lo) | (pz > hi))]
+        if a.size > 0:
+            u = np.mod(pz[a] - lo[a], 2.0 * span[a])
+            pz[a] = lo[a] + np.where(u > span[a], 2.0 * span[a] - u, u)
 
     def write_hdf5(self, obj, tidx, start, end, time, rank):
         """Write particle positions and interpolated quantities to file.

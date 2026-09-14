@@ -111,6 +111,21 @@ class FallingParticles(Particles):
         self.validate_z(pz)
         return pz
 
+    def validate_z(self, pz):
+        """Clamp new vertical positions to the water column.
+
+        Unlike the base class, which reflects, a settling particle that reaches the bed stays
+        there (deposition), so positions are clamped to
+        [bedelev + vertbound * depth, wse - vertbound * depth].
+
+        Args:
+            pz (float NumPy array): new elevation array
+        """
+        a = self.indices[pz > self.wse - self.vertbound * self.depth]
+        b = self.indices[pz < self.bedelev + self.vertbound * self.depth]
+        pz[a] = self.wse[a] - self.vertbound * self.depth[a]
+        pz[b] = self.bedelev[b] + self.vertbound * self.depth[b]
+
     def write_hdf5(self, obj, tidx, start, end, time, rank):
         """Write particle positions and interpolated quantities to file.
 

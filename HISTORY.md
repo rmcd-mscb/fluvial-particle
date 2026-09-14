@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Bug Fixes
+- `Particles.validate_z` now mirror-reflects particles off the bed and water surface (inset by `vertbound`) instead of clamping them onto the bounds. The clamp left about 11% of a well-mixed column sitting exactly on the bounds after 200 s and inflated the vertical variance by 19%. `FallingParticles` keeps the clamp so settled particles rest on the bed. Regression fixtures under `tests/data/output_straight*` regenerated
 - Fixed a crash (`ValueError` in `Particles._is_part_wet`) when the last active particles leave the grid in the same time step
 
 ### Tests

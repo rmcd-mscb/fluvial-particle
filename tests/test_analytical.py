@@ -134,18 +134,11 @@ def test_well_mixed_lateral_stays_uniform(tmp_path):
     assert p > 1e-3, f"lateral distribution not uniform (p={p:.2e}, edge bins {edge_sigma} sigma):\n{counts}"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "validate_z clamps to [vertbound, 1 - vertbound] instead of reflecting: after 200 s about 11% of a "
-        "well-mixed column sits exactly on the bounds and the depth-fraction variance is 19% too high."
-    ),
-)
 def test_well_mixed_vertical_stays_uniform(tmp_path):
     """Particles released uniformly over the depth remain uniform under the bed/surface rule.
 
-    ``validate_z`` clamps particles to ``[vertbound, 1 - vertbound]`` of the depth. Clamping is not
-    reflection: the mass that should bounce back into the column stays on the boundary.
+    ``validate_z`` reflects particles off ``[vertbound, 1 - vertbound]`` of the depth. The earlier
+    clamp left about 11% of a well-mixed column sitting exactly on the bounds after 200 s.
     """
     n, dt, n_steps, lev, vertbound = 20000, 1.0, 200, 0.25, 0.01
     _, kz = diffusion(lev)
