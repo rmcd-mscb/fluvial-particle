@@ -97,6 +97,21 @@ class TestVTPWriter:
             assert time_arr is not None
             assert time_arr.GetValue(0) == 5.0
 
+    def test_write_points_generic(self):
+        """Test that write_points writes arbitrary points with named scalar arrays."""
+        with TemporaryDirectory() as tmpdir:
+            writer = VTPWriter(pathlib.Path(tmpdir) / "vtp")
+            x = np.array([0.0, 1.0, np.nan])
+            scalars = {"reach_index": np.array([0, 1, -1], dtype=np.int64), "s": np.array([5.0, 6.0, np.nan])}
+            vtp_file = writer.write_points(x, x, np.zeros(3), scalars, time=1.0, tidx=3, prefix="network")
+            assert vtp_file.name == "network_0003.vtp"
+            reader = vtk.vtkXMLPolyDataReader()
+            reader.SetFileName(str(vtp_file))
+            reader.Update()
+            pd_ = reader.GetOutput()
+            assert pd_.GetNumberOfPoints() == 2
+            assert pd_.GetPointData().GetArray("reach_index") is not None
+
 
 class TestPVDWriter:
     """Tests for PVDWriter class."""

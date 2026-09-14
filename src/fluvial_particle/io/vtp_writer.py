@@ -1,5 +1,6 @@
 """VTP (VTK PolyData) writer for particle output."""
 
+from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
@@ -97,6 +98,61 @@ class VTPWriter:
         writer.SetDataModeToBinary()
         writer.Write()
 
+        return vtp_file
+
+    def write_points(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray,
+        scalars: Mapping[str, np.ndarray],
+        time: float,
+        tidx: int,
+        prefix: str = "particles",
+    ) -> Path | None:
+        """Write arbitrary points with named scalar attributes to a VTP file.
+
+        Args:
+            x: point x coordinates; NaN marks points to skip.
+            y: point y coordinates.
+            z: point z coordinates.
+            scalars: name -> per-point array (integer arrays are written as Int64, others as Float64).
+            time: time value stored in field data.
+            tidx: time step index used in the file name.
+            prefix: file name prefix, ``<prefix>_<tidx:04d>.vtp``.
+
+        Returns:
+            Path to the written file, or None if no valid points.
+        """
+        valid_mask = ~np.isnan(x)
+        n_valid = int(np.sum(valid_mask))
+        if n_valid == 0:
+            return None
+        points = vtk.vtkPoints()
+        coords = np.column_stack([x[valid_mask], y[valid_mask], z[valid_mask]]).astype(np.float64)
+        points.SetData(numpy_support.numpy_to_vtk(coords, deep=True))
+        polydata = vtk.vtkPolyData()
+        polydata.SetPoints(points)
+        verts = vtk.vtkCellArray()
+        for i in range(n_valid):
+            verts.InsertNextCell(1)
+            verts.InsertCellPoint(i)
+        polydata.SetVerts(verts)
+        for name, arr in scalars.items():
+            data = np.asarray(arr)[valid_mask]
+            dtype = np.int64 if data.dtype.kind in "iu" else None
+            self._add_scalar(polydata, name, data, dtype=dtype)
+        time_arr = vtk.vtkDoubleArray()
+        time_arr.SetName("TimeValue")
+        time_arr.SetNumberOfTuples(1)
+        time_arr.SetValue(0, time)
+        polydata.GetFieldData().AddArray(time_arr)
+        vtp_file = self.output_dir / f"{prefix}_{tidx:04d}.vtp"
+        writer = vtk.vtkXMLPolyDataWriter()
+        writer.SetFileName(str(vtp_file))
+        writer.SetInputData(polydata)
+        writer.SetDataModeToBinary()
+        writer.Write()
         return vtp_file
 
     def _add_scalar(self, polydata: vtk.vtkPolyData, name: str, data: np.ndarray, dtype=None):

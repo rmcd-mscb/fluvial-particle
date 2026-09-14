@@ -30,6 +30,7 @@ class PVDWriter:
         """
         data_file = Path(data_file)
         # Store relative path from PVD file location
+        rel_path: Path | str
         try:
             rel_path = data_file.relative_to(self.filepath.parent)
         except ValueError:

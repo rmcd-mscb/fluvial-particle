@@ -11,6 +11,7 @@ import numpy.typing as npt
 import pandas as pd
 import xarray as xr
 
+from ..io import PVDWriter, VTPWriter
 from .dispersion import dispersion_coefficient
 from .network import Network, NetworkBins
 from .provider import FileHydraulicsProvider
@@ -322,6 +323,43 @@ class NetworkResults:
         da.attrs["bin_length"] = float(bin_length)
         da.to_dataset().to_netcdf(path, engine="h5netcdf")
         return pathlib.Path(path)
+
+    def to_vtp(self, output_dir: str | pathlib.Path, times: Any = None) -> pathlib.Path:
+        """Write ``vtp/network_XXXX.vtp`` files and ``network.pvd`` for ParaView; returns the .pvd path.
+
+        Args:
+            output_dir: directory to write ``vtp/`` and ``network.pvd`` into (created if missing).
+            times: an output index, datetime, list of either, slice, or None for all times.
+
+        Returns:
+            Path to the written ``network.pvd`` file.
+        """
+        out = pathlib.Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        vtp = VTPWriter(out / "vtp")
+        pvd = PVDWriter(out / "network.pvd")
+        for i in self.time_indices(times):
+            df = self.map_positions(int(i))
+            scalars = {
+                "reach_index": df["reach_index"].to_numpy(),
+                "s": df["s"].to_numpy(),
+                "mass": df["mass"].to_numpy(),
+                "status": df["status"].to_numpy().astype(np.int64),
+                "source_index": self._ds["source_index"].values.astype(np.int64),
+            }
+            f = vtp.write_points(
+                df["x"].to_numpy(),
+                df["y"].to_numpy(),
+                np.zeros(self.n_particles),
+                scalars,
+                time=float(self.time_seconds[i]),
+                tidx=int(i),
+                prefix="network",
+            )
+            if f is not None:
+                pvd.add_timestep(float(self.time_seconds[i]), f)
+        pvd.write()
+        return out / "network.pvd"
 
     def summary(self) -> str:
         """One-paragraph description of the run."""

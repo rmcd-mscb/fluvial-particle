@@ -130,3 +130,9 @@ def test_persist(run, tmp_path):
 
     with xr.open_dataset(out, engine="h5netcdf") as ds:
         assert ds["concentration"].dims == ("time", "bin") and ds.sizes["time"] == 13
+
+
+def test_to_vtp(run, tmp_path):
+    pvd = run.to_vtp(tmp_path / "vtk", times=[1, 2])
+    assert pvd.name == "network.pvd" and pvd.exists()
+    assert sorted(p.name for p in (tmp_path / "vtk" / "vtp").glob("*.vtp")) == ["network_0001.vtp", "network_0002.vtp"]
