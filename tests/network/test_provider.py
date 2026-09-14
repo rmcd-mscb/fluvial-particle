@@ -122,3 +122,87 @@ def test_memory_estimate(three_file):
         assert est["window_bytes"] == 2 * 3 * 7 * 4  # 2 slices, 3 reaches, 6 fields + temperature, float32
         assert est["particle_bytes"] > 0
         assert est["static_bytes"] > 0
+
+
+def _stepped_file(tmp_path, n_time=4):
+    n = 3
+    vel = np.arange(1, n_time + 1, dtype=float)[:, None] * np.ones((1, n))  # day k has velocity k+1
+    flow = np.full((n_time, n), 10.0)
+    t = np.datetime64("1979-01-01", "ns") + np.arange(n_time) * np.timedelta64(1, "D")
+    return write_network_file(tmp_path / "step.nc", three_reach_dataset(velocity=vel, flow_out=flow, times=t))
+
+
+def test_hold_and_linear(tmp_path):
+    path = _stepped_file(tmp_path)
+    noon = np.datetime64("1979-01-02T12:00", "ns")
+    with FileHydraulicsProvider(path, interpolation="hold") as prov:
+        assert prov.hydraulics(noon)["velocity"][0] == 2.0
+        assert prov.hydraulics(np.datetime64("1979-01-04", "ns"))["velocity"][0] == 4.0
+    with FileHydraulicsProvider(path, interpolation="linear") as prov:
+        assert prov.hydraulics(noon)["velocity"][0] == pytest.approx(2.5)
+        assert prov.hydraulics(np.datetime64("1979-01-04", "ns"))["velocity"][0] == 4.0
+        h = prov.hydraulics(np.datetime64("1979-01-04", "ns"))
+        assert set(h) == {"flow_in", "flow_out", "velocity", "depth", "width", "ustar"}
+        assert h["velocity"].dtype == np.float64
+
+
+def test_linear_zero_flow_guard(tmp_path):
+    flow = np.array([[10.0, 0.0, 10.0], [10.0, 10.0, 0.0]])
+    vel = np.array([[1.0, 0.0, 1.0], [1.0, 1.0, 0.0]])
+    t = np.datetime64("1979-01-01", "ns") + np.arange(2) * np.timedelta64(1, "D")
+    path = write_network_file(tmp_path / "dry.nc", three_reach_dataset(velocity=vel, flow_out=flow, times=t))
+    with FileHydraulicsProvider(path) as prov:
+        h = prov.hydraulics(np.datetime64("1979-01-01T12:00", "ns"))
+        assert h["velocity"][0] == 1.0
+        assert h["velocity"][1] == 0.0 and h["ustar"][1] == 0.0
+        assert h["velocity"][2] == 0.0 and h["ustar"][2] == 0.0
+        assert h["flow_out"][1] == pytest.approx(5.0)  # flow itself still interpolates
+
+
+def test_window_advances_one_read_at_a_time(tmp_path, monkeypatch):
+    path = _stepped_file(tmp_path, n_time=5)
+    with FileHydraulicsProvider(path) as prov:
+        reads = []
+        orig = prov._read_slice
+        monkeypatch.setattr(prov, "_read_slice", lambda k: (reads.append(k), orig(k))[1])
+        day = np.timedelta64(1, "D")
+        t0 = np.datetime64("1979-01-01", "ns")
+        prov.hydraulics(t0 + np.timedelta64(6, "h"))
+        assert reads == [0, 1]
+        assert prov.window_indices == (0, 1)
+        prov.hydraulics(t0 + np.timedelta64(18, "h"))
+        assert reads == [0, 1]
+        prov.hydraulics(t0 + day + np.timedelta64(1, "h"))
+        assert reads == [0, 1, 2]
+        assert prov.window_indices == (1, 2)
+        prov.hydraulics(t0 + 3 * day + np.timedelta64(1, "h"))  # skip ahead: two reads
+        assert reads == [0, 1, 2, 3, 4]
+        prov.hydraulics(t0 + np.timedelta64(1, "h"))  # backwards: reset, two reads
+        assert reads == [0, 1, 2, 3, 4, 0, 1]
+
+
+def test_out_of_range_and_time_window(tmp_path):
+    path = _stepped_file(tmp_path)
+    with FileHydraulicsProvider(path) as prov:
+        with pytest.raises(ValueError, match="outside"):
+            prov.hydraulics(np.datetime64("1978-12-31", "ns"))
+        prov.time_window = (np.datetime64("1979-01-02", "ns"), np.datetime64("1979-01-03", "ns"))
+        with pytest.raises(ValueError, match="outside"):
+            prov.hydraulics(np.datetime64("1979-01-03T01:00", "ns"))
+        with pytest.raises(ValueError, match="time_window"):
+            prov.time_window = (np.datetime64("1979-01-03", "ns"), np.datetime64("1979-01-02", "ns"))
+
+
+def test_subset_and_dtype_apply_to_fields(tmp_path):
+    path = _stepped_file(tmp_path)
+    with FileHydraulicsProvider(path, reach_subset=[103], dtype="float32") as prov:
+        h = prov.hydraulics(np.datetime64("1979-01-01", "ns"))
+        assert h["velocity"].shape == (1,)
+        assert h["velocity"].dtype == np.float32
+
+
+def test_single_timestamp_file(tmp_path):
+    t = np.array(["1979-01-01"], dtype="datetime64[ns]")
+    path = write_network_file(tmp_path / "one.nc", three_reach_dataset(times=t))
+    with FileHydraulicsProvider(path) as prov:
+        assert prov.hydraulics(t[0])["velocity"][0] == 1.0

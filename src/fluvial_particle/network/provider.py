@@ -368,6 +368,69 @@ class FileHydraulicsProvider:
             "output_time_bytes": int((4 + self.dtype.itemsize + 1) * n_particles),
         }
 
+    # ---- streaming ---------------------------------------------------------
+    @property
+    def window_indices(self) -> tuple[int, int | None]:
+        """Indices of the two loaded time slices (second is None at the end of the axis)."""
+        k1 = self._window_k + 1 if self._window_k + 1 < self._n_time else None
+        return self._window_k, k1
+
+    def _bracket(self, t: np.datetime64) -> int:
+        """Return the index of the last time not after ``t``, clamped so linear mode always has a right slice."""
+        k = int(np.searchsorted(self.times, t, side="right")) - 1
+        if self.interpolation == "linear" and k == self._n_time - 1 and self._n_time > 1:
+            k -= 1
+        return k
+
+    def _read_slice(self, k: int) -> dict[str, FloatArray]:
+        """Read time slice ``k`` for all time-varying fields, applying the reach subset and dtype."""
+        out: dict[str, FloatArray] = {}
+        for name in self._field_names:
+            arr = self._ds[name][k].values
+            if self.subset_index is not None:
+                arr = arr[self.subset_index]
+            out[name] = np.ascontiguousarray(arr, dtype=self.dtype)
+        return out
+
+    def _ensure_window(self, k: int) -> None:
+        """Ensure the two-slice window covers ``k`` and ``k + 1``, reusing already-loaded slices."""
+        if k == self._window_k:
+            return
+        k1 = k + 1 if k + 1 < self._n_time else None
+        new: dict[int, dict[str, FloatArray]] = {}
+        new[k] = self._slices[k] if k in self._slices else self._read_slice(k)
+        if k1 is not None:
+            new[k1] = self._slices[k1] if k1 in self._slices else self._read_slice(k1)
+        self._slices = new
+        self._window_k = k
+
     def hydraulics(self, t: np.datetime64) -> dict[str, FloatArray]:
-        """Implemented in the streaming task."""
-        raise NotImplementedError
+        """Per-reach hydraulics at ``t`` (hold or linear); velocity and ustar are 0 across dry intervals.
+
+        Args:
+            t: requested time; must be within the file range and the time_window when set.
+
+        Returns:
+            dict of (n_reach,) arrays keyed by the export's variable names.
+
+        Raises:
+            ValueError: ``t`` outside the allowed range.
+        """
+        tt = t.astype("datetime64[ns]")
+        lo, hi = self._time_window if self._time_window is not None else (self.times[0], self.times[-1])
+        if tt < lo or tt > hi:
+            raise ValueError(f"time {tt} is outside the provider range {lo}..{hi}")
+        k = self._bracket(tt)
+        self._ensure_window(k)
+        a = self._slices[k]
+        k1 = k + 1 if k + 1 < self._n_time else None
+        if self.interpolation == "hold" or k1 is None:
+            return {name: arr.copy() for name, arr in a.items()}
+        b = self._slices[k1]
+        span = (self.times[k1] - self.times[k]) / np.timedelta64(1, "s")
+        f = float((tt - self.times[k]) / np.timedelta64(1, "s")) / float(span)
+        out = {name: (a[name] + f * (b[name] - a[name])).astype(self.dtype, copy=False) for name in a}
+        dry = (a["flow_out"] <= 0.0) | (b["flow_out"] <= 0.0)
+        out["velocity"][dry] = 0.0
+        out["ustar"][dry] = 0.0
+        return out
