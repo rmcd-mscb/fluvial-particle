@@ -1,5 +1,36 @@
 # History
 
+## 0.1.0 (2026-09-14)
+
+### New Features
+
+#### 1D River-Network Particle Tracking
+- New `fluvial_particle.network` subpackage: a passive particle tracker for river networks driven by the network hydraulics NetCDF export from [pywatershed](https://github.com/EC-USGS/pywatershed) (`pywatershed.utils.export_network_hydraulics`): reach topology, daily hydraulics, and optional map polylines
+- `FileHydraulicsProvider` validates the schema, units, and topology at open, streams two time slices at a time, interpolates in time (`linear` or `hold`), and subsets reaches by id or by the upstream closure of an outlet
+- Sources are mass loadings: slugs, constant or tabulated loading, and concentration curves converted with the reach flow; particles are equal-mass samples of the loading; `estimate_particles()` sizes the particle budget for a target bin occupancy
+- Solver: exact advection with time carry across reach boundaries, one Fischer-dispersion kick per step with displacement carry, upstream hops by recorded history then by flow-weighted parent, outlets record exit times
+- Output `network_particles.nc` through h5netcdf (serial or MPI-IO); `NetworkResults` post-processing: positions, map positions, sub-reach bins, concentration with optional Gaussian smoothing, arrival times and breakthrough histograms, DataFrame and VTP/PVD export
+- `[network]` TOML table (`NetworkConfig`), `run_network_simulation()`, and the `fluvial_particle_network` / `fluvial_particle_network_mpi` entry points
+- Analytical acceptance tests on a uniform chain: exact travel times, Gaussian plume moments, inverse-Gaussian arrivals with the documented first-passage bias bound
+- Demo notebooks: `notebooks/network-drb-demo.ipynb` (Delaware River Basin) and `notebooks/network-chain-dispersion-demo.ipynb` (uniform chain against the analytical solution)
+- User documentation in `docs/network.rst`; design spec and implementation plan under `docs/superpowers/`
+
+#### TOML Configuration
+- Settings files may be TOML (recommended) or Python; `get_settings_template()` returns the template for notebooks (#37, #39)
+- bump-my-version configuration migrated from `.bumpversion.cfg` to `pyproject.toml`
+
+### Bug Fixes
+- `inspect_grid()` shows the 2D velocity field even when `Track3D = 1`
+
+### Infrastructure
+- CI: pin `vtk<9.7` because VTK 9.7 changes `vtkProbeFilter` results for the 2D/3D solver (#41); pin the nox ruff version to the pre-commit hook's; replace `safety check` with pip-audit; declare `linkify-it-py` for the documentation build
+- Release workflow rewritten: on a version tag it builds with hatchling, publishes the GitHub release notes with the distributions attached, and uploads to PyPI only when a `PYPI_TOKEN` secret is configured; Labeler permissions fixed
+- Repository links point at GitHub (`github.com/rmcd-mscb/fluvial-particle`)
+
+### Dependencies
+- New runtime dependencies: `xarray`, `h5netcdf`
+- Dev extras: `scipy`, `matplotlib`, `pip-audit` (replaces `safety`)
+
 ## 0.0.6 (2026-01-15)
 
 ### New Features

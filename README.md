@@ -9,7 +9,7 @@
 [![Tests](https://github.com/rmcd-mscb/fluvial-particle/actions/workflows/tests.yml/badge.svg)](https://github.com/rmcd-mscb/fluvial-particle/actions/workflows/tests.yml)
 [![Codecov](https://codecov.io/gh/rmcd-mscb/fluvial-particle/branch/main/graph/badge.svg)](https://codecov.io/gh/rmcd-mscb/fluvial-particle)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-[![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 A Python package to efficiently model active- and passive-particle transport in flowing rivers.
 
@@ -17,7 +17,7 @@ A Python package to efficiently model active- and passive-particle transport in 
 
 ## Description
 
-This package advects conservative flow tracers (a.k.a. passive particles) with the fluid velocity and displaces them with stochastic diffusion due to fluid turbulence over discrete time steps. It tracks particles under a Lagrangian frame of reference as they move through a curvilinear 2- or 3-D hydrodynamic mesh. Users may customize particle subclasses to implement additional active particle motions, e.g. channel-bed adjacent sinusoidal vertical motion to simulate the preferred swimming patterns of white sturgeon larvae (McDonald and Nelson, 2021).
+This package advects conservative flow tracers (a.k.a. passive particles) with the fluid velocity and displaces them with stochastic diffusion due to fluid turbulence over discrete time steps. It tracks particles under a Lagrangian frame of reference as they move through a curvilinear 2- or 3-D hydrodynamic mesh. Users may customize particle subclasses to implement additional active particle motions, e.g. channel-bed adjacent sinusoidal vertical motion to simulate the preferred swimming patterns of white sturgeon larvae (McDonald and Nelson, 2021). Since version 0.1.0 the package also tracks particles along 1D river networks routed by [pywatershed](https://github.com/EC-USGS/pywatershed), described in the section below.
 
 ## Efficiently programmed and parallel enabled
 
@@ -29,8 +29,10 @@ Prohibitively large or long simulation problems can be made tractable with the h
 
 ## Features
 
-- Lagrangian particle-tracking in fluvial environments
-- parallel computing with MPI using mpi4py
+- Lagrangian particle tracking on 2D and 3D hydrodynamic meshes (VTK `.vts` and `.vtk`, NumPy `.npz`), with active-particle subclasses for behaviors such as larval swimming and settling
+- 1D river-network particle tracking driven by [pywatershed](https://github.com/EC-USGS/pywatershed) network hydraulics exports (new in 0.1.0, see below)
+- Parallel execution with MPI through mpi4py
+- TOML settings files, a notebook API (`run_simulation` / `SimulationResults` and `run_network_simulation` / `NetworkResults`), and HDF5/XDMF, VTP/PVD, and NetCDF output
 
 ## Installation
 
@@ -65,50 +67,55 @@ pytest tests
 
 Directions on invoking _fluvial-particle_ from the command line can be found in the [docs](https://fluvial-particle.readthedocs.io/en/latest/usage.html).
 
+## 1D river-network particle tracking
+
+Version 0.1.0 adds a second solver, `fluvial_particle.network`, for passive transport along a river network rather than across a 2D/3D mesh. It reads the network hydraulics NetCDF export written by [pywatershed](https://github.com/EC-USGS/pywatershed) (`pywatershed.utils.export_network_hydraulics`): reach topology, daily flow, velocity, depth, width and shear velocity, and optional map polylines. Particles advect exactly along reaches, cross junctions carrying the unused part of the time step, disperse with a Fischer coefficient built from the exported hydraulics, and exit at outlets with their arrival times recorded. Sources are mass loadings (slugs, constant or tabulated loading, or concentration curves), and the results give arrival-time distributions, map positions, and concentration on sub-reach bins.
+
+A minimal settings file:
+
+```toml
+[network]
+hydraulics_file = "drb_network_hydraulics.nc"
+start_time = "1979-03-01"
+end_time = "1979-04-01"
+dt = 900.0
+output_interval = 3600.0
+particle_mass = 1.0
+
+[[network.sources]]
+reach_id = 4205
+form = "slug"
+time = 0.0
+mass = 1000.0
+```
+
+Run it from the command line or from Python:
+
+```shell
+fluvial_particle_network settings.toml -o output
+mpiexec -n 4 fluvial_particle_network_mpi settings.toml -o output
+```
+
+```python
+from fluvial_particle import run_network_simulation
+
+res = run_network_simulation("settings.toml", "output", seed=42)
+print(res.summary())
+arrivals = res.arrival_histogram(outlet=4205, bin_seconds=3600)
+concentration = res.concentration(time=-1, bin_length=500.0)
+```
+
+See the [network documentation](https://fluvial-particle.readthedocs.io/en/latest/network.html) and the demo notebooks: `notebooks/network-drb-demo.ipynb` (Delaware River Basin: headwater slugs, a continuous loading, breakthrough at Trenton, a map animation) and `notebooks/network-chain-dispersion-demo.ipynb` (a uniform chain compared with the analytical advection-dispersion solution).
+
 ## Utilities
 
-- Packaging and dependency management with
-  [conda](https://www.anaconda.com)
-- Test automation with [Nox](https://nox.thea.codes/)
-- Linting with [preccommit](https://pre-commit.com/) and
-  [Flake8](http://flake8.pycqa.org)
-- Continuous integration with [GitHub
-  Actions](https://github.com/features/actions) or
-  [Travis-CI](https://travis-ci.com)
-- Documentation with [Sphinx](http://www.sphinx-doc.org/) and [Read
-  the Docs](https://readthedocs.org/)
-- Automated uploads to [PyPI](https://pypi.org/) and
-  [TestPyPI](https://test.pypi.org/)
-- Automated release notes with [Release
-  Drafter](https://github.com/release-drafter/release-drafter)
-- Automated dependency updates with
-  [Dependabot](https://dependabot.com/)
-- Code formatting with [Black](https://github.com/psf/black) and
-  [Prettier](https://prettier.io/)
-- Testing with [pytest](https://docs.pytest.org/en/latest/)
-- Code coverage with [Coverageppy](https://coverage.readthedocs.io/)
-- Coverage reporting with [Codecov](https://codecov.io/)
-- Command-line interface with
-  [Click](https://click.palletsprojects.com/)
-- Static type-checking with [mypy](http://mypy-lang.org/)
-- Runtime type-checking with
-  [Typeguard](https://github.com/agronholm/typeguard)
-- Security audit with [Bandit](https://github.com/PyCQA/bandit) and
-  [Safety](https://github.com/pyupio/safety)
-- Check documentation examples with
-  [xdoctest](https://github.com/Erotemic/xdoctest)
-- Generate API documentation with
-  [autodoc](https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html)
-  and
-  [napoleon](https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html)
-- Generate command-line reference with
-  [sphinxcclick](https://sphinx-click.readthedocs.io/)
-- Manage project labels with [GitHub
-  Labeler](https://github.com/marketplace/actions/github-labeler)
-- Manage project versions with
-  [Bump2version](https://github.com/c4urself/bump2version)
-- Automatic loading/unloading of [conda](https://www.anaconda.com)
-  environment with [direnv](https://direnv.net/)
+- Environments with [conda](https://www.anaconda.com) plus [uv](https://github.com/astral-sh/uv) for fast installs; packaging with [hatchling](https://hatch.pypa.io/)
+- Test automation with [Nox](https://nox.thea.codes/); testing with [pytest](https://docs.pytest.org/) and [Coverage.py](https://coverage.readthedocs.io/), reported to [Codecov](https://codecov.io/)
+- Linting, formatting, and [pre-commit](https://pre-commit.com/) hooks with [Ruff](https://docs.astral.sh/ruff/); static type checking with [mypy](http://mypy-lang.org/)
+- Security checks with [Bandit](https://github.com/PyCQA/bandit) and [pip-audit](https://github.com/pypa/pip-audit)
+- Continuous integration, releases, and labels with [GitHub Actions](https://github.com/features/actions), [Release Drafter](https://github.com/release-drafter/release-drafter), and [GitHub Labeler](https://github.com/marketplace/actions/github-labeler)
+- Documentation with [Sphinx](http://www.sphinx-doc.org/) ([autodoc](https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html), [napoleon](https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html), [MyST](https://myst-parser.readthedocs.io/)) on [Read the Docs](https://readthedocs.org/)
+- Version management with [bump-my-version](https://github.com/callowayproject/bump-my-version)
 
 ## Contributing
 
