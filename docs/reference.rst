@@ -101,8 +101,14 @@ Network solver
 .. automodule:: fluvial_particle.network.sources
    :members:
 
+.. automodule:: fluvial_particle.network.dispersion
+   :members:
+
 .. automodule:: fluvial_particle.network.solver
    :members:
 
 .. automodule:: fluvial_particle.network.results
+   :members:
+
+.. automodule:: fluvial_particle.network.writer
    :members:

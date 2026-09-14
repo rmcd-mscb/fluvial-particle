@@ -26,10 +26,11 @@ Particle convention
 -------------------
 
 A particle's state is ``(reach index, s)`` with ``0 <= s <= length`` from the reach's upstream end.
-Each step: exact advection ``s += velocity * dt`` with hops to ``to_index`` carrying the unused time
-(so any dt gives the same advective path), then one dispersive kick ``N(0, 1) * sqrt(2 K dt)`` with
-displacement carry across boundaries. Upstream overshoot returns to the reach the particle came from,
-or reflects at a headwater. At an outlet the particle exits and its exit time is recorded.
+Each step: exact advection ``s += velocity * tau`` with hops to ``to_index`` carrying the unused time
+(so any dt gives the same advective path), then one dispersive kick ``N(0, 1) * sqrt(2 K tau)`` with
+displacement carry across boundaries, where ``tau`` is the particle's time in the step: ``dt``, or
+less for a particle released mid-step. Upstream overshoot returns to the reach the particle came
+from, or reflects at a headwater. At an outlet the particle exits and its exit time is recorded.
 
 ``K`` is the Fischer coefficient ``0.011 v^2 w^2 / (d u*)`` times ``dispersion.scale``, optionally
 capped; ``model = "constant"`` and ``"none"`` are available.
