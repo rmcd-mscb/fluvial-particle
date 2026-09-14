@@ -30,7 +30,9 @@ Each step: exact advection ``s += velocity * tau`` with hops to ``to_index`` car
 (so any dt gives the same advective path), then one dispersive kick ``N(0, 1) * sqrt(2 K tau)`` with
 displacement carry across boundaries, where ``tau`` is the particle's time in the step: ``dt``, or
 less for a particle released mid-step. Upstream overshoot returns to the reach the particle came
-from, or reflects at a headwater. At an outlet the particle exits and its exit time is recorded.
+from; with no such history it enters one of the reach's parents, picked in proportion to that step's
+``flow_out`` of the parents (so a particle may enter a tributary it never visited), and it reflects
+only at a true headwater. At an outlet the particle exits and its exit time is recorded.
 
 ``K`` is the Fischer coefficient ``0.011 v^2 w^2 / (d u*)`` times ``dispersion.scale``, optionally
 capped; ``model = "constant"`` and ``"none"`` are available.
@@ -84,8 +86,9 @@ Approximations
 --------------
 
 ``K`` is sampled from the reach where the particle ends its advective move; a plain random walk across
-a jump in ``K`` slightly over-populates the low-``K`` side; dispersive exits are stamped at the end of
-the step. First-passage times are therefore late by at most about ``0.5826 * sqrt(2 K dt) / v + dt / 2``
+a jump in ``K`` slightly over-populates the low-``K`` side; an upstream hop with no recorded history
+picks a parent by flow share (a Fickian approximation to upstream spreading: the particle may enter a
+tributary it never visited); dispersive exits are stamped at the end of the step. First-passage times are therefore late by at most about ``0.5826 * sqrt(2 K dt) / v + dt / 2``
 (the Broadie-Glasserman-Kou continuity correction plus end-of-step stamping); this bound is tight when
 the dispersive kick dominates the step's displacement (``sqrt(2 K dt) >> v * dt``), and the bias is much
 smaller when advection dominates, because most exits then occur in the exactly monitored advective

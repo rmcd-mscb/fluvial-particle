@@ -74,9 +74,15 @@ them.
    reports the consequences of the chosen dt.
 3. **Dispersion**: Fischer (1975) coefficient from the exported hydraulics
    with a user scale factor and optional cap.
-4. **Upstream overshoot** from a dispersive kick returns the particle to
-   the reach it came from (one level of history); with no history it
-   reflects at s = 0.
+4. **Upstream overshoot** from a dispersive kick follows a hybrid rule:
+   the particle returns to the reach it came from when there is one (one
+   level of history); with no history it enters one of the current reach's
+   parents, chosen in proportion to that step's `flow_out` of the parents
+   (the only parent when there is one, uniformly when every parent's flow
+   is 0); only at a true headwater, which has no parent, does it reflect
+   at s = 0. Reflecting whenever history is absent — the particle was just
+   released, or has already hopped upstream once — would put a hard
+   barrier at the top of an interior reach and bias transport measurably.
 5. **Daily fields**: linear interpolation between timestamps by default,
    hold (piecewise constant) as an option.
 6. **Sources** are mass loadings in time (slug, constant or curve loading,
@@ -377,10 +383,15 @@ dt / 2`.
      `prev_reach = reach`; `reach = to_index[reach]`. If -1: exit with
      `exit_time = t + dt`, `exit_reach = prev_reach`. Otherwise
      `s = over`.
-   - Upstream (`s < 0`): if `prev_reach >= 0`, `r = prev_reach`;
-     `s = length[r] + s`; `reach = r`; `prev_reach = -1` (one level of
-     history; a further upstream overshoot then reflects). If
-     `prev_reach < 0`, reflect: `s = -s`.
+   - Upstream (`s < 0`), the hybrid rule of Decision 4: if
+     `prev_reach >= 0`, `r = prev_reach`; `s = length[r] + s`; `reach = r`;
+     `prev_reach = -1` (one level of history). Otherwise, if the reach has
+     parents, `r` is the only parent, or one drawn from the solver's `rng`
+     with probability proportional to this step's `flow_out` of the parents
+     (uniform if every parent's flow is 0); `s = length[r] + s`;
+     `reach = r`; `prev_reach = -1`. Otherwise (a true headwater, no
+     parents) reflect: `s = -s`. The parent branch is a Python loop over
+     the affected particles, which are rare in any one step.
    Same `max_hops` cap. The kick is drawn once per particle per step; the
    loop only redistributes it. Per-step random variance is therefore
    exactly `2 K tau`, and on a chain of reaches with uniform `K` the sum
@@ -393,6 +404,15 @@ which scales as sqrt(dt), and documented in the user docs:
 
 - `K` is sampled from the reach where the particle ends its advective
   move, not time-weighted over the reaches it visited in the step.
+- An upstream hop with no recorded history picks a parent by flow share,
+  so a particle can enter a tributary it never visited. This is the
+  Fickian approximation to upstream spreading: the population of parents a
+  dispersing particle should reach is not knowable from its own history,
+  and flow share is the natural weight. The alternative, reflecting
+  whenever there is no history, puts a hard barrier at the top of any
+  interior reach and biases transport (a release 40 m below a reach top on
+  a 20 km chain at K = 50, dt = 900 s moves its mean +43% and shrinks its
+  variance -37%).
 - A plain random walk across a jump in `K` slightly over-populates the
   low-`K` side (no drift correction). With reach Peclet numbers of
   hundreds this is below anything the demo can resolve; the generalized

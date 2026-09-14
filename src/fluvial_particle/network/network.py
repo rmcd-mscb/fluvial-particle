@@ -72,6 +72,14 @@ class Network:
         ptr, idx = self._build_parents()
         return idx[ptr[index] : ptr[index + 1]]
 
+    def parents_csr(self) -> tuple[IntArray, IntArray]:
+        """Parent lists in CSR form: the parents of reach ``i`` are ``idx[ptr[i] : ptr[i + 1]]``.
+
+        Returns:
+            The (ptr, idx) pair, built once and cached.
+        """
+        return self._build_parents()
+
     def headwaters(self, as_index: bool = False) -> IntArray:
         """Reaches with no upstream reach (ids by default, indices with as_index)."""
         ptr, _ = self._build_parents()

@@ -24,7 +24,7 @@ S0 = 500.0
 BETA = 0.5826
 
 
-def _run(tmp_path, ds, dt, end_seconds, output_interval, dispersion, release_s=0.0, particles=N):
+def _run(tmp_path, ds, dt, end_seconds, output_interval, dispersion, release_s=0.0, particles=N, reach_id=1):
     path = write_network_file(tmp_path / "chain.nc", ds)
     end = np.datetime64("1979-01-01", "ns") + np.timedelta64(int(end_seconds), "s")
     cfg = {
@@ -35,7 +35,7 @@ def _run(tmp_path, ds, dt, end_seconds, output_interval, dispersion, release_s=0
         "dispersion": dispersion,
         "sources": [
             {
-                "reach_id": 1,
+                "reach_id": reach_id,
                 "form": "slug",
                 "time": 0.0,
                 "mass": float(particles),
@@ -80,6 +80,43 @@ def test_gaussian_plume_moments_and_normality(tmp_path):
         assert abs(dist.mean() - mean) < 3.0 * np.sqrt(var / N)
         assert abs(dist.var() - var) < 3.0 * var * np.sqrt(2.0 / N)
         assert stats.normaltest(dist).pvalue > 0.01
+
+
+def test_mid_chain_release_is_unbiased_at_default_dt(tmp_path):
+    """A release just below a reach top disperses without bias under the hybrid upstream rule.
+
+    A particle released mid-chain has no recorded history, so every upstream overshoot in its first
+    steps leaves the release reach through its top. Reflecting there (the pre-hybrid rule) acts as a
+    hard barrier a few tens of meters above the release point and biases the plume downstream while
+    shrinking its variance. Under the hybrid rule the particle instead enters the reach's single
+    parent at ``length[parent] + s``, which is exactly continuous in the chain coordinate, so the
+    displacement is a plain random walk: mean ``v t`` and variance ``2 K t``.
+    """
+    v = 0.05  # slow enough that no particle reaches either end of the chain in 10 h
+    n_reach, l_reach, s0, t_end = 10, 2000.0, 40.0, 36000.0
+    ds = chain_dataset(n_reach=n_reach, length=l_reach, velocity=v, k_target=K)
+    with _run(
+        tmp_path,
+        ds,
+        dt=900.0,
+        end_seconds=t_end,
+        output_interval=t_end,
+        dispersion={"model": "constant", "value": K},
+        release_s=s0,
+        reach_id=5,  # reach index 4
+    ) as res:
+        df = res.positions(-1)
+        assert (df["status"] == 1).all(), "no particle should exit the chain"
+        cum_before = np.arange(n_reach) * l_reach
+        dist = cum_before[df["reach_index"].to_numpy()] + df["s"].to_numpy()
+        disp = dist - (cum_before[4] + s0)
+        mean, var = v * t_end, 2.0 * K * t_end
+        assert abs(disp.mean() - mean) < 3.0 * np.sqrt(var / N), (
+            f"mean displacement {disp.mean():.1f} m vs {mean:.1f} m (3 SE = {3.0 * np.sqrt(var / N):.1f} m)"
+        )
+        assert abs(disp.var() - var) < 3.0 * var * np.sqrt(2.0 / N), (
+            f"displacement variance {disp.var():.4g} vs {var:.4g} (tolerance {3.0 * var * np.sqrt(2.0 / N):.4g})"
+        )
 
 
 def test_inverse_gaussian_arrival_times(tmp_path):

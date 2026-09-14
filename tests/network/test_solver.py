@@ -109,14 +109,21 @@ def test_distance_along_helper():
 
 
 class FixedNormals:
-    """rng stub returning preset standard normals."""
+    """rng stub returning preset standard normals; ``choice`` delegates to a seeded RandomState."""
 
-    def __init__(self, values):
+    def __init__(self, values, seed=0):
         self.values = np.asarray(values, dtype=float)
+        self.choices = []
+        self._rs = np.random.RandomState(seed)
 
     def standard_normal(self, n):
         assert n == self.values.size
         return self.values.copy()
+
+    def choice(self, a, p=None):
+        out = self._rs.choice(a, p=p)
+        self.choices.append((tuple(np.asarray(a).tolist()), None if p is None else tuple(np.asarray(p).tolist())))
+        return out
 
 
 K50 = DispersionConfig(model="constant", value=50.0)
@@ -197,6 +204,52 @@ def test_reflect_without_history_and_after_second_overshoot():
     sol.release_time[0] = -1.0
     sol.step()  # -1050: back into reach 0 at -50, then reflect to 50
     assert sol.reach[0] == 0 and sol.s[0] == pytest.approx(50.0) and sol.prev_reach[0] == -1
+
+
+def test_upstream_hop_without_history_enters_a_flow_weighted_parent():
+    # Reach 2 (the outlet) has parents 0 (1000 m, flow 10) and 1 (2000 m, flow 5). A particle just
+    # released there has no history, so the hybrid rule sends it into one of the two parents.
+    landed = {}
+    for seed in range(25):
+        rng = FixedNormals([-1.0], seed=seed)
+        sol = make_solver(
+            three_reach_dataset(**STILL),
+            ParticleSchedule.simple(2, 50.0, 0.0),
+            dt=100.0,
+            dispersion=K50,
+            rng=rng,
+        )
+        sol.step()  # -100 m kick from s = 50 -> s = -50
+        r = int(sol.reach[0])
+        assert r in {0, 1}
+        assert sol.s[0] == pytest.approx(sol.network.length[r] - 50.0)
+        assert sol.prev_reach[0] == -1
+        assert rng.choices == [((0, 1), (10.0 / 15.0, 5.0 / 15.0))]  # weighted by this step's flow_out
+        landed.setdefault(r, 0)
+        landed[r] += 1
+    assert set(landed) == {0, 1}, f"both parents should be reachable, saw {landed}"
+
+
+def test_upstream_hop_at_a_true_headwater_reflects():
+    # Reach 0 is a headwater: no history and no parents, so the particle reflects off s = 0.
+    sol = make_solver(
+        three_reach_dataset(**STILL),
+        ParticleSchedule.simple(0, 50.0, 0.0),
+        dt=100.0,
+        dispersion=K50,
+        rng=FixedNormals([-1.0]),
+    )
+    sol.step()
+    assert sol.reach[0] == 0 and sol.s[0] == pytest.approx(50.0) and sol.prev_reach[0] == -1
+
+
+def test_upstream_hop_uses_uniform_weights_when_parent_flows_are_zero():
+    ds = three_reach_dataset(**{**STILL, "flow_out": [0.0, 0.0, 80.0]})
+    rng = FixedNormals([-1.0], seed=1)
+    sol = make_solver(ds, ParticleSchedule.simple(2, 50.0, 0.0), dt=100.0, dispersion=K50, rng=rng)
+    sol.step()
+    assert int(sol.reach[0]) in {0, 1}
+    assert rng.choices == [((0, 1), None)]  # all parent flows 0 -> uniform
 
 
 def test_max_hops_raises_on_cycle():

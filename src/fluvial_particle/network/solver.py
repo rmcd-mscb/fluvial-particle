@@ -103,7 +103,7 @@ class NetworkSolver:
         d = self.dispersion
         k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value)
         self._advect(v, tau, t, dt)
-        self._disperse(k, tau, t, dt)
+        self._disperse(k, tau, t, dt, np.asarray(h["flow_out"], dtype=np.float64))
         self.time = t + dt
 
     def _release(self, t: float, dt: float) -> FloatArray:
@@ -145,19 +145,21 @@ class NetworkSolver:
             idx = m
         raise RuntimeError(f"a particle hopped more than max_hops={self.max_hops} reaches in one advection step")
 
-    def _disperse(self, k: FloatArray, tau: FloatArray, t: float, dt: float) -> None:
+    def _disperse(self, k: FloatArray, tau: FloatArray, t: float, dt: float, flow_out: FloatArray) -> None:
         """Apply one dispersive kick per active particle, carrying overshoot across reach hops.
 
         Draws one `rng.standard_normal` per active particle and adds `xi * sqrt(2 * k[reach] * tau)`
         to `s`. Downstream overshoot carries the leftover displacement into the next reach (or exits
-        at an outlet with `exit_time = t + dt`); upstream overshoot returns to `prev_reach` (clearing
-        history) when there is one, otherwise reflects (`s = -s`) without history.
+        at an outlet with `exit_time = t + dt`). Upstream overshoot is handled by `_hop_upstream`:
+        back to `prev_reach` when there is history, else into a parent chosen in proportion to the
+        parents' `flow_out`, and reflected (`s = -s`) only at a true headwater.
 
         Args:
             k: per-reach dispersion coefficient (m^2/s).
             tau: per-particle time budget for this step (s).
             t: solver clock at the start of the step (s).
             dt: step size (s).
+            flow_out: per-reach outflow (m3/s) for this step, the parent-choice weights.
 
         Raises:
             RuntimeError: a particle hops more than `max_hops` reaches in one dispersion step.
@@ -189,15 +191,48 @@ class NetworkSolver:
             m = j[~exiting]
             self.reach[m] = nxt[~exiting]
             self.s[m] = over[~exiting]
-            # upstream: back into the reach the particle came from, else reflect
+            # upstream: back the way the particle came, else into a parent, else reflect
             u = idx[up]
-            pr = self.prev_reach[u].astype(np.int64)
-            has = pr >= 0
-            a = u[has]
-            self.s[a] = self._length[pr[has]] + self.s[a]
-            self.reach[a] = pr[has]
-            self.prev_reach[a] = -1
-            b = u[~has]
-            self.s[b] = -self.s[b]
+            self._hop_upstream(u, flow_out)
             idx = np.concatenate([m, u])
         raise RuntimeError(f"a particle hopped more than max_hops={self.max_hops} reaches in one dispersion step")
+
+    def _hop_upstream(self, u: IntArray, flow_out: FloatArray) -> None:
+        """Move particles whose dispersive kick took ``s`` below 0 one reach upstream (hybrid rule).
+
+        A particle with recorded history goes back to `prev_reach` (vectorized, history cleared).
+        One with no history goes to a parent of its reach: the only parent, or one drawn from
+        `self.rng` with probability proportional to the parents' `flow_out` for this step (uniform
+        when every parent's flow is 0). A particle in a true headwater, which has no parent, is
+        reflected off the top of its reach (`s = -s`). The parent branch runs as a Python loop over
+        the affected particles, which are rare in any one step.
+
+        Args:
+            u: indices of the particles with ``s < 0``.
+            flow_out: per-reach outflow (m3/s) for this step, the parent-choice weights.
+        """
+        if u.size == 0:
+            return
+        pr = self.prev_reach[u].astype(np.int64)
+        has = pr >= 0
+        a = u[has]
+        self.s[a] = self._length[pr[has]] + self.s[a]
+        self.reach[a] = pr[has]
+        self.prev_reach[a] = -1
+        ptr, pidx = self.network.parents_csr()
+        for i in u[~has]:
+            r = int(self.reach[i])
+            par = pidx[ptr[r] : ptr[r + 1]]
+            if par.size == 0:  # a true headwater: reflect off the top of the reach
+                self.s[i] = -self.s[i]
+                continue
+            if par.size == 1:
+                p = int(par[0])
+            else:
+                w = np.asarray(flow_out[par], dtype=np.float64)
+                w = np.where(np.isfinite(w) & (w > 0.0), w, 0.0)
+                total = float(w.sum())
+                p = int(self.rng.choice(par, p=w / total if total > 0.0 else None))
+            self.s[i] = self._length[p] + self.s[i]
+            self.reach[i] = p
+            self.prev_reach[i] = -1
