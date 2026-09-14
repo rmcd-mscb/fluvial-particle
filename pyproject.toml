@@ -19,6 +19,8 @@ classifiers = [
 
 dependencies = [
     "tomli>=2.0.0; python_version < '3.11'",  # TOML parser backport for Python 3.10
+    "xarray>=2023.1",   # network hydraulics input and results
+    "h5netcdf>=1.1",    # NetCDF4 output on h5py (serial or mpio)
 ]
 
 [project.optional-dependencies]
@@ -27,7 +29,7 @@ dependencies = [
 ci = [
     "h5py>=3.7.0",
     "numpy>=1.20",
-    "vtk>=9.3.1",
+    "vtk>=9.3.1,<9.7",  # 9.7 changes vtkProbeFilter results; legacy 2D/3D reference outputs predate it (see issue)
 ]
 dev = [
     # Linting and formatting (replaces black, flake8, darglint, etc.)
@@ -41,8 +43,8 @@ dev = [
     # Type checking
     "mypy>=1.0.1",
 
-    # Security and safety
-    "safety>=2.2.0",
+    # Dependency vulnerability audit (safety 3.x "check" is deprecated and crashes in CI)
+    "pip-audit>=2.7",
 
     # Testing
     "pytest>=7.1.2",
@@ -50,6 +52,8 @@ dev = [
     "typeguard>=2.13.3",
     "xdoctest>=1.0.0",
     "pandas>=2.0.0",
+    "scipy>=1.10",        # analytical acceptance tests (inverse Gaussian, KS)
+    "matplotlib>=3.7",    # demo notebook
 
     # Documentation
     "Sphinx>=7.0.0",
@@ -68,6 +72,8 @@ dev = [
 [project.scripts]
 fluvial_particle = "fluvial_particle.cli:track_serial"
 fluvial_particle_mpi = "fluvial_particle.cli:track_mpi"
+fluvial_particle_network = "fluvial_particle.cli:network_serial"
+fluvial_particle_network_mpi = "fluvial_particle.cli:network_mpi"
 
 [project.urls]
 Homepage = "https://code.usgs.gov/wma/nhgf/fluvparticle"
@@ -155,6 +161,11 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: analytical acceptance tests that take tens of seconds",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "docs"]

@@ -82,3 +82,33 @@ Command Line Interface
 
 .. automodule:: fluvial_particle.cli
    :members:
+
+Network solver
+--------------
+
+.. automodule:: fluvial_particle.network.run
+   :members:
+
+.. automodule:: fluvial_particle.network.config
+   :members:
+
+.. automodule:: fluvial_particle.network.provider
+   :members:
+
+.. automodule:: fluvial_particle.network.network
+   :members:
+
+.. automodule:: fluvial_particle.network.sources
+   :members:
+
+.. automodule:: fluvial_particle.network.dispersion
+   :members:
+
+.. automodule:: fluvial_particle.network.solver
+   :members:
+
+.. automodule:: fluvial_particle.network.results
+   :members:
+
+.. automodule:: fluvial_particle.network.writer
+   :members:

@@ -371,3 +371,138 @@ To force a specific method, use ``ustar_method``:
     [grid.friction]
     manning_n = 0.03
     ustar_method = "manning"  # Force this method even if others available
+
+
+Network solver settings
+==========================
+
+The 1D river-network solver (``fluvial_particle.network``) uses its own TOML configuration, a single
+``[network]`` table (with ``[network.dispersion]`` and ``[[network.sources]]`` sub-tables), separate
+from the 2D/3D options above. Generate a commented template with
+``fluvial_particle_network --init`` or ``get_network_config_template()``:
+
+.. code-block:: toml
+
+    # fluvial-particle network solver settings
+    # All keys live in the [network] table. Times are ISO datetimes or seconds from start_time.
+
+    [network]
+    hydraulics_file = "drb_network_hydraulics.nc"   # pywatershed network hydraulics export
+    interpolation = "linear"      # "linear" between daily values, or "hold"
+    dtype = "float64"             # "float32" for very large networks
+    # reach_subset = [4205, 4204]  # reach ids to keep; or {outlet = 4205} for everything upstream of one reach
+    # start_time = "1979-03-01"    # default: first timestamp in the file
+    # end_time = "1979-04-01"      # default: last timestamp in the file
+    dt = 900.0                    # solver step (s)
+    output_interval = 3600.0      # output every n*dt seconds
+    particle_mass = 1.0           # mass per particle; sources may override with particles = N
+    mass_units = "kg"             # label only; concentrations are reported in mass_units m-3
+    max_hops = 1000
+    # seed = 42
+
+    [network.dispersion]
+    model = "fischer"             # "fischer", "constant", or "none"
+    scale = 1.0                   # multiplier on the Fischer coefficient
+    # cap = 1000.0                # optional upper bound (m2/s)
+    # value = 10.0                # K for model = "constant"
+
+    # Sources: a slug (instantaneous mass), a loading (mass rate), or a concentration at the release point.
+    [[network.sources]]
+    reach_id = 1234
+    form = "slug"
+    time = 0.0
+    mass = 1000.0
+
+    [[network.sources]]
+    reach_id = 2345
+    s_frac = 0.5                  # release mid-reach (or s = meters from the upstream end)
+    form = "loading"
+    rate = 0.01                   # mass_units per second
+    start = 0.0
+    end = 86400.0
+    # spacing = "even"            # or "poisson"
+
+    [[network.sources]]
+    reach_id = 3456
+    form = "concentration"        # mass_units per m3 at the release point, times the reach flow
+    curve = [[0.0, 0.0], [3600.0, 5.0], [7200.0, 0.0]]
+    particles = 500               # fixed count for this source
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 20 20 45
+
+   * - Group
+     - Key
+     - Default
+     - Notes
+   * - input
+     - ``hydraulics_file``
+     - required
+     - path to the export
+   * -
+     - ``interpolation``
+     - ``"linear"``
+     - or ``"hold"``
+   * -
+     - ``reach_subset``
+     - ``None``
+     - list of ids or ``{outlet = id}``
+   * -
+     - ``dtype``
+     - ``"float64"``
+     - or ``"float32"``
+   * - time
+     - ``start_time``
+     - file first time
+     - ISO datetime
+   * -
+     - ``end_time``
+     - file last time
+     - ISO datetime
+   * -
+     - ``dt``
+     - 900.0
+     - seconds
+   * -
+     - ``output_interval``
+     - 3600.0
+     - seconds, integer multiple of ``dt``
+   * - dispersion
+     - ``model``
+     - ``"fischer"``
+     - ``"fischer"``, ``"constant"``, ``"none"``
+   * -
+     - ``scale``
+     - 1.0
+     - multiplies the Fischer coefficient
+   * -
+     - ``cap``
+     - ``None``
+     - m\ :sup:`2`/s
+   * -
+     - ``value``
+     - ``None``
+     - m\ :sup:`2`/s, required for ``"constant"``
+   * - sources
+     - ``particle_mass``
+     - ``None``
+     - global particle mass
+   * -
+     - ``mass_units``
+     - ``"kg"``
+     - label only
+   * -
+     - ``sources``
+     - required
+     - list of source rows
+   * - solver
+     - ``max_hops``
+     - 1000
+     -
+   * -
+     - ``seed``
+     - ``None``
+     - RNG seed; a ``seed`` passed to ``run_network_simulation`` takes precedence
+
+See :doc:`network` for the full solver description.

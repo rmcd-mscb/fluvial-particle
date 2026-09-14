@@ -20,7 +20,8 @@ src/fluvial_particle/
 ├── Particles.py      # Particle classes and movement
 ├── simulation.py     # Main simulation loop
 ├── Settings.py       # Options file parsing
-└── Helpers.py        # Utilities and I/O
+├── Helpers.py        # Utilities and I/O
+└── network/          # 1D river-network solver (see .claude/rules/network.md)
 ```
 
 ## Key Concepts
@@ -40,3 +41,4 @@ Detailed instructions are in `.claude/rules/`:
 - `file-formats.md` - VTK/VTS/NPZ and field mapping
 - `notebooks.md` - Jupyter notebook editing
 - `output-refactoring.md` - Planned refactoring for VTK output (HDF5 -> VTP/PVD)
+- `network.md` - 1D network solver modules and data locations

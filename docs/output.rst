@@ -103,3 +103,5 @@ The PVD file is an XML file that ParaView uses to load the entire time series at
 
 .. note::
    VTP output is currently only available for serial (non-MPI) simulations. For parallel runs, use the HDF5+XDMF output format.
+
+Network runs write ``network_particles.nc`` instead; see :doc:`network`.

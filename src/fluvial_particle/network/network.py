@@ -1,0 +1,311 @@
+"""Static river-network topology, polyline geometry, and sub-reach bins."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+
+import numpy as np
+import numpy.typing as npt
+
+
+FloatArray = npt.NDArray[np.float64]
+IntArray = npt.NDArray[np.int64]
+
+
+def _walk_to_outlets(to_index: npt.NDArray[np.int64]) -> npt.NDArray[np.bool_]:
+    """True for reaches whose downstream walk reaches an outlet; False marks a cycle."""
+    n = to_index.size
+    cur = to_index.copy()
+    done = cur < 0
+    for _ in range(n):
+        if done.all():
+            break
+        cur = np.where(done, -1, to_index[np.clip(cur, 0, n - 1)])
+        done |= cur < 0
+    return done
+
+
+class Network:
+    """Reach topology and geometry from a provider's static arrays.
+
+    Args:
+        static: mapping with at least reach_id, to_index, is_outlet, length; optionally the polyline block
+            (vertex_x, vertex_y, vertex_dist, reach_vertex_start, reach_vertex_count).
+        crs_wkt: CRS of the polylines, informational.
+
+    Construction validates the topology: `to_index` must be in range and acyclic and every `length`
+    must be positive and finite, or `ValueError` names the offending reach indices.
+    """
+
+    def __init__(self, static: Mapping[str, npt.NDArray[np.generic]], crs_wkt: str = "") -> None:
+        """Build the topology and geometry indices from a provider's static arrays.
+
+        Args:
+            static: mapping with at least reach_id, to_index, is_outlet, length; optionally the
+                polyline block (vertex_x, vertex_y, vertex_dist, reach_vertex_start, reach_vertex_count).
+            crs_wkt: CRS of the polylines, informational.
+        """
+        # A plain dict is copied so that later mutation by the caller cannot invalidate the topology
+        # checked here; any other Mapping (the provider's lazy StaticArrays, say) is read-only by
+        # contract and is kept as it is, so its polyline block stays unloaded until it is asked for.
+        self._static: Mapping[str, npt.NDArray[np.generic]] = dict(static) if isinstance(static, dict) else static
+        self.reach_id: IntArray = np.asarray(static["reach_id"], dtype=np.int64)
+        self.to_index: npt.NDArray[np.int32] = np.asarray(static["to_index"], dtype=np.int32)
+        self.length: FloatArray = np.asarray(static["length"], dtype=np.float64)
+        self.validate_static({"to_index": self.to_index, "length": self.length})
+        self.is_outlet: npt.NDArray[np.bool_] = self.to_index < 0
+        self.n_reach: int = int(self.reach_id.size)
+        self.crs_wkt = crs_wkt
+        self._index_by_id: dict[int, int] = {int(r): i for i, r in enumerate(self.reach_id)}
+        self._parents_ptr: IntArray | None = None
+        self._parents_idx: IntArray | None = None
+        self._poly_index: tuple[FloatArray, IntArray, FloatArray, FloatArray] | None = None
+
+    # ---- validation ---------------------------------------------------------
+    @staticmethod
+    def validate_static(static: Mapping[str, npt.NDArray[np.generic]]) -> None:
+        """Run the topology checks on raw static arrays, without building a Network.
+
+        The provider uses this on the file's full (pre-subset) arrays, where building an instance
+        would also build an id lookup over every reach in the file for nothing.
+
+        Args:
+            static: mapping with at least ``to_index`` and ``length``.
+
+        Raises:
+            ValueError: length is non-positive or non-finite, or to_index is out of range or
+                contains a cycle (the message names the first offending reach indices).
+        """
+        length = np.asarray(static["length"], dtype=np.float64)
+        bad_length = np.nonzero(~(length > 0.0) | ~np.isfinite(length))[0]
+        if bad_length.size:
+            raise ValueError(f"length must be positive and finite; bad at reach indices {bad_length[:10].tolist()}")
+        to_index = np.asarray(static["to_index"], dtype=np.int64)
+        n = to_index.size
+        bad = np.nonzero((to_index < -1) | (to_index >= n))[0]
+        if bad.size:
+            raise ValueError(f"to_index out of range [-1, {n}) at reach indices {bad[:10].tolist()}")
+        done = _walk_to_outlets(to_index)
+        if not done.all():
+            chain = np.nonzero(~done)[0]
+            raise ValueError(f"to_index contains a cycle through reach indices {chain[:10].tolist()}")
+
+    # ---- ids -------------------------------------------------------------
+    def index_of(self, reach_id: int) -> int:
+        """Index of a reach id; raises KeyError for an unknown id."""
+        return self._index_by_id[int(reach_id)]
+
+    def index_of_many(self, reach_ids: npt.ArrayLike) -> IntArray:
+        """Indices of several reach ids; raises KeyError naming the first unknown id."""
+        return np.array([self.index_of(r) for r in np.asarray(reach_ids).ravel()], dtype=np.int64)
+
+    def id_of(self, index: int) -> int:
+        """Reach id at an index."""
+        return int(self.reach_id[index])
+
+    # ---- topology ----------------------------------------------------------
+    def _build_parents(self) -> tuple[IntArray, IntArray]:
+        if self._parents_ptr is None:
+            child = self.to_index.astype(np.int64)
+            has = child >= 0
+            order = np.argsort(child[has], kind="stable")
+            src = np.nonzero(has)[0][order]
+            counts = np.bincount(child[has], minlength=self.n_reach)
+            self._parents_ptr = np.concatenate([[0], np.cumsum(counts)]).astype(np.int64)
+            self._parents_idx = src.astype(np.int64)
+        assert self._parents_idx is not None
+        return self._parents_ptr, self._parents_idx
+
+    def parents(self, index: int) -> IntArray:
+        """Indices of reaches flowing directly into ``index``."""
+        ptr, idx = self._build_parents()
+        return idx[ptr[index] : ptr[index + 1]]
+
+    def parents_csr(self) -> tuple[IntArray, IntArray]:
+        """Parent lists in CSR form: the parents of reach ``i`` are ``idx[ptr[i] : ptr[i + 1]]``.
+
+        Returns:
+            The (ptr, idx) pair, built once and cached.
+        """
+        return self._build_parents()
+
+    def headwaters(self, as_index: bool = False) -> IntArray:
+        """Reaches with no upstream reach (ids by default, indices with as_index)."""
+        ptr, _ = self._build_parents()
+        idx = np.nonzero(np.diff(ptr) == 0)[0].astype(np.int64)
+        return idx if as_index else self.reach_id[idx]
+
+    def outlets(self, as_index: bool = False) -> IntArray:
+        """Reaches with to_index == -1 (ids by default, indices with as_index)."""
+        idx = np.nonzero(self.is_outlet)[0].astype(np.int64)
+        return idx if as_index else self.reach_id[idx]
+
+    def upstream_of(self, reach_id: int) -> IntArray:
+        """Ids of every reach draining to ``reach_id``, inclusive, in breadth-first order."""
+        ptr, idx = self._build_parents()
+        seen = [self.index_of(reach_id)]
+        frontier = list(seen)
+        while frontier:
+            nxt: list[int] = []
+            for i in frontier:
+                nxt.extend(int(p) for p in idx[ptr[i] : ptr[i + 1]])
+            seen.extend(nxt)
+            frontier = nxt
+        return self.reach_id[np.array(seen, dtype=np.int64)]
+
+    # ---- geometry ----------------------------------------------------------
+    @property
+    def has_polylines(self) -> bool:
+        """True when the static arrays carry the polyline block."""
+        return "reach_vertex_start" in self._static
+
+    def _build_poly_index(self) -> tuple[FloatArray, IntArray, FloatArray, FloatArray]:
+        if self._poly_index is None:
+            start = np.asarray(self._static["reach_vertex_start"], dtype=np.int64)
+            count = np.asarray(self._static["reach_vertex_count"], dtype=np.int64)
+            vdist = np.asarray(self._static["vertex_dist"], dtype=np.float64)
+            reach_of_vertex = np.repeat(np.arange(self.n_reach), count)
+            total = np.where(count > 0, vdist[np.clip(start + count - 1, 0, vdist.size - 1)], 0.0)
+            stride = float(total.max()) + 1.0 if total.size else 1.0
+            offset = np.arange(self.n_reach, dtype=np.float64) * stride
+            # vertices of a reach are contiguous at start..start+count-1, in file order
+            vertex_ids = np.concatenate([np.arange(s, s + c) for s, c in zip(start, count, strict=True)]).astype(
+                np.int64
+            )
+            key = offset[reach_of_vertex] + vdist[vertex_ids]
+            order = np.argsort(key, kind="stable")
+            self._poly_index = (key[order], vertex_ids[order], total, offset)
+        return self._poly_index
+
+    def _fill_midpoints(self, x: FloatArray, y: FloatArray, reach: IntArray, sel: npt.NDArray[np.bool_]) -> None:
+        """Fill x, y at ``sel`` from the static x_mid/y_mid arrays, leaving NaN when there are none."""
+        if not sel.any() or "x_mid" not in self._static or "y_mid" not in self._static:
+            return
+        x[sel] = np.asarray(self._static["x_mid"], dtype=np.float64)[reach[sel]]
+        y[sel] = np.asarray(self._static["y_mid"], dtype=np.float64)[reach[sel]]
+
+    def map_position(self, reach: npt.ArrayLike, s: npt.ArrayLike) -> tuple[FloatArray, FloatArray]:
+        """Map (reach, s) to x, y by scaling s / length onto the reach polyline's arc length.
+
+        Args:
+            reach: reach indices (-1 for inactive particles).
+            s: distance from the upstream end (m); NaN for inactive particles.
+
+        A reach with a single vertex maps to that vertex and a reach with none falls back to the
+        static ``x_mid``/``y_mid`` when the file carries them, so a degenerate polyline drops a
+        particle onto its reach rather than out of the output entirely.
+
+        Returns:
+            x and y arrays; NaN only where the particle is inactive or the reach has no polyline and
+            no midpoint to fall back on.
+        """
+        r_all = np.asarray(reach, dtype=np.int64)
+        s_all = np.asarray(s, dtype=np.float64)
+        x = np.full(r_all.shape, np.nan)
+        y = np.full(r_all.shape, np.nan)
+        if r_all.size == 0:
+            return x, y
+        live = (r_all >= 0) & np.isfinite(s_all)
+        if not self.has_polylines:
+            self._fill_midpoints(x, y, r_all, live)
+            return x, y
+        sorted_key, sorted_vertex, total, offset = self._build_poly_index()
+        start = np.asarray(self._static["reach_vertex_start"], dtype=np.int64)
+        count = np.asarray(self._static["reach_vertex_count"], dtype=np.int64)
+        vx = np.asarray(self._static["vertex_x"], dtype=np.float64)
+        vy = np.asarray(self._static["vertex_y"], dtype=np.float64)
+        vd = np.asarray(self._static["vertex_dist"], dtype=np.float64)
+        n_vertex = np.zeros(r_all.shape, dtype=np.int64)
+        n_vertex[live] = count[r_all[live]]
+        single = live & (n_vertex == 1)
+        if single.any():
+            only = start[r_all[single]]
+            x[single] = vx[only]
+            y[single] = vy[only]
+        self._fill_midpoints(x, y, r_all, live & (n_vertex == 0))
+        ok = live & (n_vertex >= 2)
+        if not ok.any():
+            return x, y
+        r = r_all[ok]
+        frac = np.clip(s_all[ok] / self.length[r], 0.0, 1.0)
+        target = frac * total[r]
+        pos = np.searchsorted(sorted_key, offset[r] + target, side="right") - 1
+        v0 = sorted_vertex[np.clip(pos, 0, sorted_vertex.size - 1)]
+        last = start[r] + count[r] - 1
+        v0 = np.clip(v0, start[r], last)
+        v1 = np.minimum(v0 + 1, last)
+        span = vd[v1] - vd[v0]
+        w = np.where(span > 0.0, (target - vd[v0]) / np.where(span > 0.0, span, 1.0), 0.0)
+        x[ok] = vx[v0] + w * (vx[v1] - vx[v0])
+        y[ok] = vy[v0] + w * (vy[v1] - vy[v0])
+        return x, y
+
+    def polylines(self) -> list[tuple[FloatArray, FloatArray]]:
+        """Per-reach (x, y) vertex arrays for plotting; empty when there are no polylines."""
+        if not self.has_polylines:
+            return []
+        start = np.asarray(self._static["reach_vertex_start"], dtype=np.int64)
+        count = np.asarray(self._static["reach_vertex_count"], dtype=np.int64)
+        vx = np.asarray(self._static["vertex_x"], dtype=np.float64)
+        vy = np.asarray(self._static["vertex_y"], dtype=np.float64)
+        return [(vx[s : s + c], vy[s : s + c]) for s, c in zip(start, count, strict=True)]
+
+
+class NetworkBins:
+    """Nearly uniform sub-reach bins for counts and concentration.
+
+    Each reach is split into ``ceil(length / bin_length)`` bins of equal width within the reach.
+
+    Args:
+        network: the Network to discretize.
+        bin_length: target bin length (m); ``np.inf`` gives one bin per reach.
+    """
+
+    def __init__(self, network: Network, bin_length: float) -> None:
+        """Initialize sub-reach bins.
+
+        Args:
+            network: the Network to discretize.
+            bin_length: target bin length (m); ``np.inf`` gives one bin per reach.
+        """
+        self.network = network
+        self.bin_length = float(bin_length)
+        length = network.length
+        if np.isinf(self.bin_length):
+            n = np.ones(network.n_reach, dtype=np.int64)
+        else:
+            if self.bin_length <= 0.0:
+                raise ValueError("bin_length must be positive")
+            n = np.maximum(1, np.ceil(length / self.bin_length)).astype(np.int64)
+        self.bins_per_reach: IntArray = n
+        self.reach_bin_start: IntArray = (np.cumsum(n) - n).astype(np.int64)
+        self.n_bins: int = int(n.sum())
+        self.bin_reach: IntArray = np.repeat(np.arange(network.n_reach, dtype=np.int64), n)
+        self._width_per_reach: FloatArray = length / n
+        self.bin_width: FloatArray = np.repeat(self._width_per_reach, n)
+        local = np.arange(self.n_bins, dtype=np.float64) - self.reach_bin_start[self.bin_reach]
+        self.s_start: FloatArray = local * self.bin_width
+        self.s_end: FloatArray = (local + 1.0) * self.bin_width
+
+    def bin_of(self, reach: npt.ArrayLike, s: npt.ArrayLike) -> IntArray:
+        """Global bin index for (reach, s); s == length maps to the reach's last bin.
+
+        Args:
+            reach: reach indices.
+            s: distance from the upstream end (m); s == length maps to the reach's last bin.
+
+        Returns:
+            Global bin indices.
+        """
+        r = np.asarray(reach, dtype=np.int64)
+        local = np.floor(np.asarray(s, dtype=np.float64) / self._width_per_reach[r]).astype(np.int64)
+        local = np.clip(local, 0, self.bins_per_reach[r] - 1)
+        return self.reach_bin_start[r] + local
+
+    def midpoints_xy(self) -> tuple[FloatArray, FloatArray]:
+        """Map coordinates of every bin midpoint (NaN without polylines).
+
+        Returns:
+            x and y coordinate arrays for bin midpoints.
+        """
+        return self.network.map_position(self.bin_reach, 0.5 * (self.s_start + self.s_end))

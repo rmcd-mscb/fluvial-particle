@@ -60,7 +60,7 @@ repos:
         args: [--remove]
       - id: name-tests-test # Test files should match test_*.py
         args: [--pytest-test-first]
-        exclude: ^tests/(support\.py|data/)
+        exclude: ^tests/(support\.py|network/(support|mpi_run)\.py|data/)
 
       # JSON/YAML formatting
       # Disabled: causes circular formatting issues
