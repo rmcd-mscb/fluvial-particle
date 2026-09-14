@@ -3,6 +3,8 @@
 import numpy as np
 import pandas as pd
 import pytest
+import vtk
+from vtk.util import numpy_support
 
 from fluvial_particle.network.run import run_network_simulation
 from tests.network.support import three_reach_dataset, write_network_file
@@ -136,3 +138,32 @@ def test_to_vtp(run, tmp_path):
     pvd = run.to_vtp(tmp_path / "vtk", times=[1, 2])
     assert pvd.name == "network.pvd" and pvd.exists()
     assert sorted(p.name for p in (tmp_path / "vtk" / "vtp").glob("*.vtp")) == ["network_0001.vtp", "network_0002.vtp"]
+
+    reader = vtk.vtkXMLPolyDataReader()
+    reader.SetFileName(str(tmp_path / "vtk" / "vtp" / "network_0001.vtp"))
+    reader.Update()
+    polydata = reader.GetOutput()
+
+    active = run.positions(1)
+    active = active[active["status"] == 1]
+
+    assert polydata.GetNumberOfPoints() == len(active)
+    point_data = polydata.GetPointData()
+    for name in ["reach_index", "s", "mass", "status", "source_index"]:
+        assert point_data.GetArray(name) is not None
+
+    reach_index = numpy_support.vtk_to_numpy(point_data.GetArray("reach_index"))
+    status = numpy_support.vtk_to_numpy(point_data.GetArray("status"))
+    assert reach_index.dtype.kind == "i"
+    assert status.dtype.kind == "i"
+
+    s = numpy_support.vtk_to_numpy(point_data.GetArray("s"))
+    np.testing.assert_allclose(s, active["s"].to_numpy())
+
+
+def test_to_vtp_all_unreleased(tmp_path, run):
+    # At output time 0 every particle is unreleased (status 0, s NaN), so write_points finds
+    # no valid points and no VTP file is written for that timestep.
+    pvd = run.to_vtp(tmp_path / "vtk0", times=[0])
+    assert len(list((tmp_path / "vtk0" / "vtp").glob("*.vtp"))) == 0
+    assert pvd.exists()
