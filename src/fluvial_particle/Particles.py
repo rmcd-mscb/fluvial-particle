@@ -754,15 +754,25 @@ class Particles:
         """
         # Pre-fill with True so that deactivated particles are ignored
         # check cell centered values instead
+        if self.in_bounds_mask is None:
+            wet_dry_vtk = self.mesh.probe2d.GetOutput().GetPointData().GetArray("CellWetDry")
+            return np.asarray(numpy_support.vtk_to_numpy(wet_dry_vtk), dtype=bool)
+
+        wet = np.full((self.nparts,), dtype=bool, fill_value=True)
+        idx = self.indices[self.in_bounds_mask]
+        if idx.size == 0:
+            # validate_2d_pos just deactivated the last active particles. The probe was neither
+            # resized nor re-run (both only happen for a non-empty active set), so its output
+            # still has the previous active set's length. Nothing is left to check.
+            return wet
         wet_dry_vtk = self.mesh.probe2d.GetOutput().GetPointData().GetArray("CellWetDry")
         ibc = numpy_support.vtk_to_numpy(wet_dry_vtk)
-        if self.in_bounds_mask is None:
-            wet = np.asarray(ibc, dtype=bool)
-        else:
-            wet = np.full((self.nparts,), dtype=bool, fill_value=True)
-            idx = self.indices[self.in_bounds_mask]
-            wet[idx] = ibc
-
+        if ibc.size != idx.size:
+            raise RuntimeError(
+                f"probe2d output has {ibc.size} points but {idx.size} particles are active; "
+                "the 2D probe pipeline was not rebuilt after the active set changed"
+            )
+        wet[idx] = ibc
         return wet
 
     def move(self, time, dt):
@@ -909,15 +919,33 @@ class Particles:
                 self.mesh.update_2d_pipeline(px, py, idx)
 
     def validate_z(self, pz):
-        """Check that new particle vertical position is within bounds.
+        """Reflect new vertical positions that left the water column back inside it (in place).
+
+        Positions are bounded to [bedelev + vertbound * depth, wse - vertbound * depth].
 
         Args:
-            pz (float NumPy array): new elevation array
+            pz (float NumPy array): new elevation array, modified in place
         """
-        a = self.indices[pz > self.wse - self.vertbound * self.depth]
-        b = self.indices[pz < self.bedelev + self.vertbound * self.depth]
-        pz[a] = self.wse[a] - self.vertbound * self.depth[a]
-        pz[b] = self.bedelev[b] + self.vertbound * self.depth[b]
+        # Mirror-reflect off the bed and water surface (no-flux walls for a passive tracer), inset
+        # by vertbound * depth. Clamping instead of reflecting piles particles onto the bounds: a
+        # well-mixed column ended up with ~11% of its particles exactly on them (measured with the
+        # old clamp in the setup of tests/test_analytical.py::test_well_mixed_vertical_stays_uniform).
+        # The fold handles a step that crosses the column more than once. Subclasses that should not
+        # be bounced off a boundary (FallingParticles) override this with a clamp.
+        lo = self.bedelev + self.vertbound * self.depth
+        hi = self.wse - self.vertbound * self.depth
+        span = hi - lo
+        finite = np.isfinite(pz)
+        a = self.indices[finite & (span > 0.0) & ((pz < lo) | (pz > hi))]
+        if a.size > 0:
+            u = np.mod(pz[a] - lo[a], 2.0 * span[a])
+            pz[a] = lo[a] + np.where(u > span[a], 2.0 * span[a] - u, u)
+        # A column with no usable width (2D runs force vertbound = 0.5, or a zero-depth cell) has
+        # nothing to reflect off; pin the particle to the single admissible elevation instead.
+        b = self.indices[finite & np.isfinite(span) & (span <= 0.0) & (pz != lo)]
+        if b.size > 0:
+            pz[b] = lo[b]
+        # Deactivated particles carry NaN positions and are left untouched.
 
     def write_hdf5(self, obj, tidx, start, end, time, rank):
         """Write particle positions and interpolated quantities to file.
