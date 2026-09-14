@@ -106,3 +106,131 @@ def test_distance_along_helper():
     sol.step()
     cum_before = np.array([0.0, 1000.0, 2000.0])
     assert sol.distance_along(cum_before)[0] == pytest.approx(1500.0)
+
+
+class FixedNormals:
+    """rng stub returning preset standard normals."""
+
+    def __init__(self, values):
+        self.values = np.asarray(values, dtype=float)
+
+    def standard_normal(self, n):
+        assert n == self.values.size
+        return self.values.copy()
+
+
+K50 = DispersionConfig(model="constant", value=50.0)
+STILL = {"velocity": [0.0, 0.0, 0.0], "flow_out": [10.0, 5.0, 80.0]}  # flow > 0 so K applies, but no advection
+
+
+def test_kick_scale_is_sqrt_2k_tau():
+    # sqrt(2 * 50 * 100) = 100 m per unit normal
+    sol = make_solver(
+        three_reach_dataset(**STILL),
+        ParticleSchedule.simple(0, 500.0, 0.0),
+        dt=100.0,
+        dispersion=K50,
+        rng=FixedNormals([0.5]),
+    )
+    sol.step()
+    assert sol.s[0] == pytest.approx(550.0) and sol.reach[0] == 0
+
+
+def test_dispersive_downstream_hop_carries_displacement():
+    sol = make_solver(
+        three_reach_dataset(**STILL),
+        ParticleSchedule.simple(0, 900.0, 0.0),
+        dt=100.0,
+        dispersion=K50,
+        rng=FixedNormals([2.0]),
+    )
+    sol.step()
+    assert sol.reach[0] == 2 and sol.s[0] == pytest.approx(100.0) and sol.prev_reach[0] == 0
+
+
+def test_dispersive_exit_at_end_of_step():
+    sol = make_solver(
+        three_reach_dataset(**STILL),
+        ParticleSchedule.simple(2, 2950.0, 0.0),
+        dt=100.0,
+        dispersion=K50,
+        rng=FixedNormals([1.0]),
+    )
+    sol.step()
+    assert sol.status[0] == EXITED and sol.exit_time[0] == 100.0 and sol.exit_reach[0] == 2
+
+
+def test_upstream_hop_returns_to_previous_reach():
+    sol = make_solver(
+        three_reach_dataset(**STILL),
+        ParticleSchedule.simple(2, 50.0, 0.0),
+        dt=100.0,
+        dispersion=K50,
+        rng=FixedNormals([-1.0]),
+    )
+    sol.status[:] = ACTIVE  # pre-place the particle with history
+    sol.reach[0], sol.s[0], sol.prev_reach[0] = 2, 50.0, 0
+    sol.release_time[0] = -1.0  # already released
+    sol.step()
+    assert sol.reach[0] == 0 and sol.s[0] == pytest.approx(950.0) and sol.prev_reach[0] == -1
+
+
+def test_reflect_without_history_and_after_second_overshoot():
+    sol = make_solver(
+        three_reach_dataset(**STILL),
+        ParticleSchedule.simple(0, 50.0, 0.0),
+        dt=100.0,
+        dispersion=K50,
+        rng=FixedNormals([-1.0]),
+    )
+    sol.step()
+    assert sol.reach[0] == 0 and sol.s[0] == pytest.approx(50.0)
+    sol = make_solver(
+        three_reach_dataset(**STILL),
+        ParticleSchedule.simple(2, 50.0, 0.0),
+        dt=100.0,
+        dispersion=K50,
+        rng=FixedNormals([-11.0]),
+    )
+    sol.status[:] = ACTIVE
+    sol.reach[0], sol.s[0], sol.prev_reach[0] = 2, 50.0, 0
+    sol.release_time[0] = -1.0
+    sol.step()  # -1050: back into reach 0 at -50, then reflect to 50
+    assert sol.reach[0] == 0 and sol.s[0] == pytest.approx(50.0) and sol.prev_reach[0] == -1
+
+
+def test_max_hops_raises_on_cycle():
+    prov = ArrayHydraulicsProvider.from_dataset(three_reach_dataset(velocity=[100.0, 100.0, 100.0]))
+    static = dict(prov.static)
+    static["to_index"] = np.array([1, 0, -1], dtype=np.int32)  # 0 <-> 1 cycle, never validated here
+    net = Network(static)
+    sol = NetworkSolver(
+        net,
+        prov,
+        ParticleSchedule.simple(0, 0.0, 0.0),
+        start_time=T0,
+        dt=1000.0,
+        dispersion=NONE,
+        rng=np.random.RandomState(0),
+        max_hops=3,
+    )
+    with pytest.raises(RuntimeError, match="max_hops"):
+        sol.step()
+
+
+def test_seeded_reproducibility_and_conservation_with_dispersion():
+    n = 200
+    sch = ParticleSchedule(
+        np.zeros(n, dtype=np.int32), np.zeros(n), np.zeros(n), np.ones(n), np.zeros(n, dtype=np.int32)
+    )
+    a = make_solver(three_reach_dataset(), sch, dt=300.0, dispersion=DispersionConfig(), seed=7)
+    b = make_solver(three_reach_dataset(), sch, dt=300.0, dispersion=DispersionConfig(), seed=7)
+    for _ in range(12):
+        a.step()
+        b.step()
+        assert np.bincount(a.status, minlength=3).sum() == n
+    np.testing.assert_array_equal(a.reach, b.reach)
+    np.testing.assert_allclose(a.s, b.s, equal_nan=True)
+    assert np.all(
+        (a.s[a.status == ACTIVE] >= 0.0) & (a.s[a.status == ACTIVE] <= a.network.length[a.reach[a.status == ACTIVE]])
+    )

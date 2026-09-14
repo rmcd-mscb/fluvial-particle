@@ -145,6 +145,59 @@ class NetworkSolver:
             idx = m
         raise RuntimeError(f"a particle hopped more than max_hops={self.max_hops} reaches in one advection step")
 
-    def _disperse(self, _k: FloatArray, _tau: FloatArray, _t: float, _dt: float) -> None:
-        """Replaced in the dispersion task."""
-        return
+    def _disperse(self, k: FloatArray, tau: FloatArray, t: float, dt: float) -> None:
+        """Apply one dispersive kick per active particle, carrying overshoot across reach hops.
+
+        Draws one `rng.standard_normal` per active particle and adds `xi * sqrt(2 * k[reach] * tau)`
+        to `s`. Downstream overshoot carries the leftover displacement into the next reach (or exits
+        at an outlet with `exit_time = t + dt`); upstream overshoot returns to `prev_reach` (clearing
+        history) when there is one, otherwise reflects (`s = -s`) without history.
+
+        Args:
+            k: per-reach dispersion coefficient (m^2/s).
+            tau: per-particle time budget for this step (s).
+            t: solver clock at the start of the step (s).
+            dt: step size (s).
+
+        Raises:
+            RuntimeError: a particle hops more than `max_hops` reaches in one dispersion step.
+        """
+        idx = np.nonzero(self.status == ACTIVE)[0]
+        if idx.size == 0:
+            return
+        xi = np.asarray(self.rng.standard_normal(idx.size), dtype=np.float64)
+        self.s[idx] += xi * np.sqrt(2.0 * k[self.reach[idx]] * tau[idx])
+        for _ in range(self.max_hops):
+            r = self.reach[idx].astype(np.int64)
+            down = self.s[idx] > self._length[r]
+            up = self.s[idx] < 0.0
+            if not (down.any() or up.any()):
+                return
+            # downstream: carry the overshoot into the next reach, or exit at the end of the step
+            j = idx[down]
+            rj = self.reach[j].astype(np.int64)
+            over = self.s[j] - self._length[rj]
+            self.prev_reach[j] = rj
+            nxt = self._to_index[rj]
+            exiting = nxt < 0
+            e = j[exiting]
+            self.status[e] = EXITED
+            self.exit_time[e] = t + dt
+            self.exit_reach[e] = rj[exiting]
+            self.reach[e] = -1
+            self.s[e] = np.nan
+            m = j[~exiting]
+            self.reach[m] = nxt[~exiting]
+            self.s[m] = over[~exiting]
+            # upstream: back into the reach the particle came from, else reflect
+            u = idx[up]
+            pr = self.prev_reach[u].astype(np.int64)
+            has = pr >= 0
+            a = u[has]
+            self.s[a] = self._length[pr[has]] + self.s[a]
+            self.reach[a] = pr[has]
+            self.prev_reach[a] = -1
+            b = u[~has]
+            self.s[b] = -self.s[b]
+            idx = np.concatenate([m, u])
+        raise RuntimeError(f"a particle hopped more than max_hops={self.max_hops} reaches in one dispersion step")
