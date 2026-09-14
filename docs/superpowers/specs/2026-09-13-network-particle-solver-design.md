@@ -388,8 +388,8 @@ dt / 2`.
 
 5. **Clock.** `time += dt`.
 
-Notes on the approximations, all first order in dt and documented in the
-user docs:
+Notes on the approximations, first order in dt except the exit-time bias,
+which scales as sqrt(dt), and documented in the user docs:
 
 - `K` is sampled from the reach where the particle ends its advective
   move, not time-weighted over the reaches it visited in the step.
@@ -397,7 +397,11 @@ user docs:
   low-`K` side (no drift correction). With reach Peclet numbers of
   hundreds this is below anything the demo can resolve; the generalized
   random walk of LaBolle et al. is the follow-on if it ever matters.
-- Exit time from a dispersive hop is the end of the step.
+- Exit time from a dispersive hop is the end of the step, and the outlet
+  is checked only at step ends, so first-passage times are late by about
+  0.5826·sqrt(2 K dt)/v + dt/2 (the Broadie–Glasserman–Kou continuity
+  correction plus stamping); this term scales as sqrt(dt), not dt, and
+  the analytical arrival-time test corrects for it.
 
 ### Dispersion coefficient
 
@@ -742,6 +746,10 @@ the DRB export and a note that it is produced by
 - **Streaming beyond two slices** (prefetch) if I/O ever dominates.
 - **Sub-reach hydraulics** if a source ever provides them; bins already
   carry `s_start`/`s_end` for it.
+- **Brownian-bridge exit detection**: for a particle ending a step within
+  a few sigma of an outlet, exit with the bridge crossing probability
+  exp(-2 d1 d2 / sigma^2) and interpolate the crossing time; removes the
+  sqrt(dt) first-passage bias.
 
 ## References
 
