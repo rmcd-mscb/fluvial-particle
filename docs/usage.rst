@@ -103,3 +103,24 @@ For programmatic use in scripts or Jupyter notebooks:
     df = results.to_dataframe(timestep=-1)
 
 See the :doc:`example` page for detailed examples.
+
+Network Runs
+------------
+
+The 1D river-network solver has its own settings table and entry points. It reads a network
+hydraulics NetCDF export (from pywatershed) instead of a 2D/3D mesh::
+
+    fluvial_particle_network settings.toml -o output
+    mpiexec -n 4 fluvial_particle_network_mpi settings.toml -o output
+    fluvial_particle_network --init      # print the [network] settings template
+
+From Python::
+
+    from fluvial_particle import run_network_simulation
+
+    results = run_network_simulation("settings.toml", "./output", seed=42)
+    print(results.summary())
+    arrivals = results.arrival_histogram(outlet=4205, bin_seconds=3600)
+
+See :doc:`network` for the input schema, the particle convention, sources, output, and
+post-processing.

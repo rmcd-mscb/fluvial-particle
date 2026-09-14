@@ -49,3 +49,6 @@ myst_enable_extensions = [
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 autodoc_typehints = "description"
 html_theme = "sphinx_rtd_theme"
+
+# Design specs and implementation plans are not user documentation.
+exclude_patterns = ["superpowers"]

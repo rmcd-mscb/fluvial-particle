@@ -181,3 +181,19 @@ Python configuration files are still supported. Update :python:`"path/to/repo"` 
 
     # Optional keyword arguments
     lev = 0.00025  # reach-averaged lateral eddy viscosity
+
+Network Examples
+----------------
+
+Two notebooks under ``notebooks/`` demonstrate the 1D river-network solver (see :doc:`network`):
+
+- ``network-drb-demo.ipynb``: the Delaware River Basin from the pywatershed network hydraulics export.
+  Headwater slugs plus a week-long continuous loading on the mainstem, breakthrough at the outlets,
+  concentration along the mainstem, concentration versus time at four sites, and a two-panel map
+  animation of particles and reach concentration.
+- ``network-chain-dispersion-demo.ipynb``: a synthetic chain of 100 identical reaches with steady flow
+  and one slug, compared with the analytical advection-dispersion solution: concentration along the
+  channel and at fixed stations, plume variance against 2Kt, and outlet arrivals against the inverse
+  Gaussian first-passage distribution.
+
+Both notebooks save every figure as a captioned PNG in their output directory.
