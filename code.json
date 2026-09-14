@@ -10,14 +10,14 @@
       "licenses": [
         {
           "name": "CC0 1.0",
-          "URL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/main/LICENSE.md"
+          "URL": "https://raw.githubusercontent.com/rmcd-mscb/fluvial-particle/main/LICENSE.md"
         }
       ]
     },
-    "homepageURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
-    "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/main/fluvparticle-main.zip",
-    "disclaimerURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/main/DISCLAIMER.md",
-    "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle.git",
+    "homepageURL": "https://github.com/rmcd-mscb/fluvial-particle",
+    "downloadURL": "https://github.com/rmcd-mscb/fluvial-particle/archive/refs/heads/main.zip",
+    "disclaimerURL": "https://raw.githubusercontent.com/rmcd-mscb/fluvial-particle/main/DISCLAIMER.md",
+    "repositoryURL": "https://github.com/rmcd-mscb/fluvial-particle.git",
     "vcs": "git",
     "laborHours": 0,
     "tags": ["Lagrangian", "particle-tracking", "hydraulic", "fluvial"],
@@ -41,14 +41,14 @@
       "licenses": [
         {
           "name": "CC0 1.0",
-          "URL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/0.0.3/LICENSE.md"
+          "URL": "https://raw.githubusercontent.com/rmcd-mscb/fluvial-particle/0.0.3/LICENSE.md"
         }
       ]
     },
-    "homepageURL": "https://code.usgs.gov/wma/nhgf/fluvparticle",
-    "downloadURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/archive/0.0.3/fluvparticle-0.0.3.zip",
-    "disclaimerURL": "https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/0.0.3/DISCLAIMER.md",
-    "repositoryURL": "https://code.usgs.gov/wma/nhgf/fluvparticle.git",
+    "homepageURL": "https://github.com/rmcd-mscb/fluvial-particle",
+    "downloadURL": "https://github.com/rmcd-mscb/fluvial-particle/archive/refs/tags/0.0.3.zip",
+    "disclaimerURL": "https://raw.githubusercontent.com/rmcd-mscb/fluvial-particle/0.0.3/DISCLAIMER.md",
+    "repositoryURL": "https://github.com/rmcd-mscb/fluvial-particle.git",
     "vcs": "git",
     "laborHours": 0,
     "tags": ["Lagrangian", "particle-tracking", "hydraulic", "fluvial"],

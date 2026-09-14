@@ -81,7 +81,7 @@ It is recommended that the Miniconda environment and the *fluvial-particle* git 
 
      pip install vtk
 
-7. Install *fluvial-particle* on the fluvial-mpi conda environment using uv. If you haven't already, clone the repository into your Caldera work space with :bash:`git clone https://code.usgs.gov/wma/nhgf/fluvparticle.git`.
+7. Install *fluvial-particle* on the fluvial-mpi conda environment using uv. If you haven't already, clone the repository into your Caldera work space with :bash:`git clone https://github.com/rmcd-mscb/fluvial-particle.git`.
 
     .. code:: bash
 

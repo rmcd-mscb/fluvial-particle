@@ -1,77 +1,92 @@
 ---
 name: Release
 
+# Drafts release notes on every push to main; builds, publishes the notes, and
+# (when a PYPI_TOKEN secret is configured) uploads to PyPI on a version tag,
+# which bump-my-version creates and pushes as v<major>.<minor>.<patch>.
+
 on:
   push:
     branches:
       - main
-      - master
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
+  draft:
+    name: Update the draft release notes
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update the draft
+        uses: release-drafter/release-drafter@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release:
-    name: Release
+    name: Build and publish ${{ github.ref_name }}
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v2.3.4
-        with:
-          fetch-depth: 2
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v2.2.2
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.8"
+          python-version: "3.13"
 
-      - name: Upgrade pip
+      - name: Check that the tag matches the package version
+        run: |
+          version=$(python -c "import re, pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('src/fluvial_particle/__init__.py').read_text()).group(1))")
+          if [ "v$version" != "${{ github.ref_name }}" ]; then
+            echo "tag ${{ github.ref_name }} does not match __version__ $version"
+            exit 1
+          fi
+
+      - name: Build the sdist and wheel
         run: |
           pip install --constraint=.github/workflows/constraints.txt pip
-          pip --version
+          pip install build
+          python -m build
 
-      - name: Install tools
-        run: |
-          pip install bump2version wheel
-
-      - name: Check if there is a parent commit
-        id: check-parent-commit
-        run: |
-          echo "::set-output name=sha::$(git rev-parse --verify --quiet HEAD^)"
-
-      - name: Detect and tag new version
-        id: check-version
-        if: steps.check-parent-commit.outputs.sha
-        uses: salsify/action-detect-and-tag-new-version@v2.0.1
+      - name: Upload the distributions as a workflow artifact
+        uses: actions/upload-artifact@v4
         with:
-          version-command: |
-            bash -o pipefail -c "grep '__version__' src/fluvial_particle/__init__.py | awk '{print substr($3, 2, length($3) - 2)}'"
-
-      - name: Bump version for developmental release
-        if: "! steps.check-version.outputs.tag"
-        run: |
-          bump2version build
-
-      - name: Build package
-        run: |
-          /usr/bin/env python3 setup.py bdist_wheel
-
-      - name: Publish package on PyPI
-        if: steps.check-version.outputs.tag
-        uses: pypa/gh-action-pypi-publish@v1.4.2
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_TOKEN }}
-
-      - name: Publish package on TestPyPI
-        if: "! steps.check-version.outputs.tag"
-        uses: pypa/gh-action-pypi-publish@v1.4.2
-        with:
-          user: __token__
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository_url: https://test.pypi.org/legacy/
+          name: dist
+          path: dist/
 
       - name: Publish the release notes
-        uses: release-drafter/release-drafter@v5.15.0
+        uses: release-drafter/release-drafter@v6
         with:
-          publish: ${{ steps.check-version.outputs.tag != '' }}
-          tag: ${{ steps.check-version.outputs.tag }}
+          publish: true
+          tag: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attach the distributions to the release
+        run: gh release upload "${{ github.ref_name }}" dist/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for a PyPI token
+        id: pypi
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          if [ -n "$PYPI_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "PYPI_TOKEN is not set; skipping the PyPI upload"
+          fi
+
+      - name: Publish to PyPI
+        if: steps.pypi.outputs.configured == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}

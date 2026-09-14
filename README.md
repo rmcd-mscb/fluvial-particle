@@ -6,14 +6,14 @@
 [![License](https://img.shields.io/pypi/l/fluvial-particle)](https://creativecommons.org/publicdomain/zero/1.0/legalcode)
 [![Read the Docs](https://img.shields.io/readthedocs/fluvial-particle/latest.svg?label=Read%20the%20Docs)](https://fluvial-particle.readthedocs.io/)
 
-[![Tests](https://code.usgs.gov/wma/nhgf/fluvparticle/badges/main/pipeline.svg)](https://code.usgs.gov/wma/nhgf/fluvparticle/-/commits/main)
+[![Tests](https://github.com/rmcd-mscb/fluvial-particle/actions/workflows/tests.yml/badge.svg)](https://github.com/rmcd-mscb/fluvial-particle/actions/workflows/tests.yml)
 [![Codecov](https://codecov.io/gh/rmcd-mscb/fluvial-particle/branch/main/graph/badge.svg)](https://codecov.io/gh/rmcd-mscb/fluvial-particle)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 A Python package to efficiently model active- and passive-particle transport in flowing rivers.
 
-![An animated image shows a fluvial-particle simulation output in the Kootenai River, Idaho, USA](https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/main/docs/data/kootenai_2to27_particles_fpc2d_rotate.gif "KootenaiParticles")
+![An animated image shows a fluvial-particle simulation output in the Kootenai River, Idaho, USA](https://raw.githubusercontent.com/rmcd-mscb/fluvial-particle/main/docs/data/kootenai_2to27_particles_fpc2d_rotate.gif "KootenaiParticles")
 
 ## Description
 
@@ -25,7 +25,7 @@ As the total simulation duration, the size of the mesh, or the number of particl
 
 Prohibitively large or long simulation problems can be made tractable with the highly scalable _fluvial-particle_ package. The mpi4py package enables massively-parallel execution mode to simulate millions or billions of particles (or more!). A strong-scaling test simulation of 2<sup>27</sup> particles on the Kootenai River over many thousands of CPUs shows that MPI-enabled fluvial-particle scales well, as shown in the figure below.
 
-![Strong-scaling panel shows the decrease in simulation time and the simulation speed-up as a function of the number of CPUs (from 2^10 to 2^13 CPUs) used in the simulation. The scaling is very close to ideal over this range.](https://code.usgs.gov/wma/nhgf/fluvparticle/-/raw/main/docs/data/strongscalingpanel.png "Parallel strong scaling")
+![Strong-scaling panel shows the decrease in simulation time and the simulation speed-up as a function of the number of CPUs (from 2^10 to 2^13 CPUs) used in the simulation. The scaling is very close to ideal over this range.](https://raw.githubusercontent.com/rmcd-mscb/fluvial-particle/main/docs/data/strongscalingpanel.png "Parallel strong scaling")
 
 ## Features
 
@@ -122,7 +122,7 @@ Distributed under the terms of the [CCO 1.0 license](https://creativecommons.org
 ## Issues
 
 If you encounter any problems,
-please [file an issue](https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues) along with a detailed description.
+please [file an issue](https://github.com/rmcd-mscb/fluvial-particle/issues) along with a detailed description.
 
 ## Credits
 

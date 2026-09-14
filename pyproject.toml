@@ -76,8 +76,8 @@ fluvial_particle_network = "fluvial_particle.cli:network_serial"
 fluvial_particle_network_mpi = "fluvial_particle.cli:network_mpi"
 
 [project.urls]
-Homepage = "https://code.usgs.gov/wma/nhgf/fluvparticle"
-Repository = "https://code.usgs.gov/wma/nhgf/fluvparticle"
+Homepage = "https://github.com/rmcd-mscb/fluvial-particle"
+Repository = "https://github.com/rmcd-mscb/fluvial-particle"
 Documentation = "https://fluvial-particle.readthedocs.io/en/latest/"
 
 [build-system]
