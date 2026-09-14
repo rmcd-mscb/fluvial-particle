@@ -677,7 +677,8 @@ Provider: every validation error names the variable; `to_index` range,
 cycle, and `is_outlet` consistency; `hold` and `linear` values against
 hand arithmetic; zero-flow guard on a dry-to-wet interval; the window
 holds two slices and advances once per crossed timestamp (spy on the
-dataset indexing); backwards request resets with a warning; subset by ids
+dataset indexing); a backwards request resets the window (two reads, no
+warning); subset by ids
 and by outlet closure remaps `to_index` and truncates the reach dimension;
 float32 dtype; out-of-range time raises; chunk warning on a badly chunked
 file; polylines are not read until requested.

@@ -117,7 +117,8 @@ class VTPWriter:
             x: point x coordinates; NaN marks points to skip.
             y: point y coordinates.
             z: point z coordinates.
-            scalars: name -> per-point array (integer arrays are written as Int64, others as Float64).
+            scalars: name -> per-point array; integer arrays are cast to Int64 and every other array
+                is written in the dtype it already has.
             time: time value stored in field data.
             tidx: time step index used in the file name.
             prefix: file name prefix, ``<prefix>_<tidx:04d>.vtp``.

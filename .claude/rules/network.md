@@ -16,5 +16,6 @@ pywatershed repo: `docs/superpowers/specs/2026-09-11-network-hydraulics-export-d
 
 Rules: dict keys and file variables use the export's names; solver never depends on bins or polylines;
 tests use synthetic files from `tests/network/support.py`; the DRB file is not committed
-(`FLUVIAL_PARTICLE_DRB_FILE` points at it for the optional test). Sample data:
-`/home/rmcd/projects/pywatershed/examples/02a_network_hydraulics_export/drb_network_hydraulics.nc`.
+(`FLUVIAL_PARTICLE_DRB_FILE` points at it for the optional test). Sample data: the file named by
+`FLUVIAL_PARTICLE_DRB_FILE`; on rmcd's machine it lives under
+`~/projects/pywatershed/examples/02a_network_hydraulics_export/`.

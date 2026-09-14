@@ -34,6 +34,7 @@ def fischer_coefficient(
 
     Returns:
         K (m^2/s), 0 where depth, ustar, or velocity is 0.
+        (`dispersion_coefficient` additionally zeroes K where flow_out is 0.)
     """
     v = np.asarray(velocity, dtype=np.float64)
     d = np.asarray(depth, dtype=np.float64)
@@ -66,7 +67,8 @@ def dispersion_coefficient(
         value: constant K (m^2/s) for the "constant" model.
 
     Returns:
-        K per reach (m^2/s); 0 where flow_out is 0 for every model.
+        K per reach (m^2/s); 0 where depth, ustar or velocity is 0 (and, for the constant
+        model, where flow_out is 0).
 
     Raises:
         ValueError: unknown model, or "constant" without a value.

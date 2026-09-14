@@ -206,6 +206,37 @@ def test_to_vtp(run, tmp_path):
     np.testing.assert_allclose(s, active["s"].to_numpy())
 
 
+def test_to_vtp_writes_particles_in_a_single_vertex_reach(tmp_path):
+    # Reach 101's polyline has one vertex: its particles map to that vertex instead of being
+    # dropped from the VTP file for want of coordinates.
+    ds = three_reach_dataset(
+        polylines=[
+            [(-1000.0, 500.0)],
+            [(-2000.0, -500.0), (-1000.0, -250.0), (0.0, 0.0)],
+            [(0.0, 0.0), (1500.0, 0.0), (3000.0, 0.0)],
+        ]
+    )
+    path = write_network_file(tmp_path / "degenerate.nc", ds)
+    cfg = {
+        "hydraulics_file": str(path),
+        "dt": 300.0,
+        "output_interval": 300.0,
+        "end_time": "1979-01-01T00:10",
+        "dispersion": {"model": "none"},
+        "sources": [{"reach_id": 101, "form": "slug", "time": 0.0, "mass": 2.0, "particles": 2}],
+    }
+    with run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=True) as res:
+        df = res.map_positions(1)
+        assert (df["reach_index"] == 0).all()
+        np.testing.assert_allclose(df["x"], -1000.0)
+        np.testing.assert_allclose(df["y"], 500.0)
+        res.to_vtp(tmp_path / "vtk", times=[1])
+    reader = vtk.vtkXMLPolyDataReader()
+    reader.SetFileName(str(tmp_path / "vtk" / "vtp" / "network_0001.vtp"))
+    reader.Update()
+    assert reader.GetOutput().GetNumberOfPoints() == 2
+
+
 def test_to_vtp_all_unreleased(tmp_path, run):
     # At output time 0 every particle is unreleased (status 0, s NaN), so write_points finds
     # no valid points and no VTP file is written for that timestep.

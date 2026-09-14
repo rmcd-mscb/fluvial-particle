@@ -169,6 +169,13 @@ class Network:
             self._poly_index = (key[order], vertex_ids[order], total, offset)
         return self._poly_index
 
+    def _fill_midpoints(self, x: FloatArray, y: FloatArray, reach: IntArray, sel: npt.NDArray[np.bool_]) -> None:
+        """Fill x, y at ``sel`` from the static x_mid/y_mid arrays, leaving NaN when there are none."""
+        if not sel.any() or "x_mid" not in self._static or "y_mid" not in self._static:
+            return
+        x[sel] = np.asarray(self._static["x_mid"], dtype=np.float64)[reach[sel]]
+        y[sel] = np.asarray(self._static["y_mid"], dtype=np.float64)[reach[sel]]
+
     def map_position(self, reach: npt.ArrayLike, s: npt.ArrayLike) -> tuple[FloatArray, FloatArray]:
         """Map (reach, s) to x, y by scaling s / length onto the reach polyline's arc length.
 
@@ -176,15 +183,23 @@ class Network:
             reach: reach indices (-1 for inactive particles).
             s: distance from the upstream end (m); NaN for inactive particles.
 
+        A reach with a single vertex maps to that vertex and a reach with none falls back to the
+        static ``x_mid``/``y_mid`` when the file carries them, so a degenerate polyline drops a
+        particle onto its reach rather than out of the output entirely.
+
         Returns:
-            x and y arrays; NaN where there is no polyline, the reach has fewer than two vertices,
-            or the particle is inactive.
+            x and y arrays; NaN only where the particle is inactive or the reach has no polyline and
+            no midpoint to fall back on.
         """
         r_all = np.asarray(reach, dtype=np.int64)
         s_all = np.asarray(s, dtype=np.float64)
         x = np.full(r_all.shape, np.nan)
         y = np.full(r_all.shape, np.nan)
-        if not self.has_polylines or r_all.size == 0:
+        if r_all.size == 0:
+            return x, y
+        live = (r_all >= 0) & np.isfinite(s_all)
+        if not self.has_polylines:
+            self._fill_midpoints(x, y, r_all, live)
             return x, y
         sorted_key, sorted_vertex, total, offset = self._build_poly_index()
         start = np.asarray(self._static["reach_vertex_start"], dtype=np.int64)
@@ -192,8 +207,15 @@ class Network:
         vx = np.asarray(self._static["vertex_x"], dtype=np.float64)
         vy = np.asarray(self._static["vertex_y"], dtype=np.float64)
         vd = np.asarray(self._static["vertex_dist"], dtype=np.float64)
-        ok = (r_all >= 0) & np.isfinite(s_all)
-        ok[ok] &= count[r_all[ok]] >= 2
+        n_vertex = np.zeros(r_all.shape, dtype=np.int64)
+        n_vertex[live] = count[r_all[live]]
+        single = live & (n_vertex == 1)
+        if single.any():
+            only = start[r_all[single]]
+            x[single] = vx[only]
+            y[single] = vy[only]
+        self._fill_midpoints(x, y, r_all, live & (n_vertex == 0))
+        ok = live & (n_vertex >= 2)
         if not ok.any():
             return x, y
         r = r_all[ok]

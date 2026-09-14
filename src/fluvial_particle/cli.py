@@ -64,6 +64,8 @@ def _network_args(argv: Sequence[str] | None) -> argparse.Namespace:
         The parsed and validated namespace.
 
     Raises:
+        SystemExit: ``--init`` prints the settings template and exits with status 0; a missing
+            settings_file or --output exits with argparse's status 2.
         FileNotFoundError: if the settings file does not exist.
     """
     from .network.config import get_network_config_template

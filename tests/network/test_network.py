@@ -117,3 +117,32 @@ def test_bins_reject_a_non_positive_bin_length(net):
         NetworkBins(net, -1.0)
     with pytest.raises(ValueError, match="bin_length must be positive"):
         NetworkBins(net, 0.0)
+
+
+def test_map_position_single_vertex_reach_uses_that_vertex():
+    ds = three_reach_dataset(
+        polylines=[
+            [(-1000.0, 500.0)],  # degenerate: one vertex
+            [(-2000.0, -500.0), (-1000.0, -250.0), (0.0, 0.0)],
+            [(0.0, 0.0), (1500.0, 0.0), (3000.0, 0.0)],
+        ]
+    )
+    net = Network(ArrayHydraulicsProvider.from_dataset(ds).static)
+    x, y = net.map_position(np.array([0, 0, 2]), np.array([0.0, 900.0, 1500.0]))
+    np.testing.assert_allclose(x, [-1000.0, -1000.0, 1500.0])
+    np.testing.assert_allclose(y, [500.0, 500.0, 0.0])
+
+
+def test_map_position_zero_vertex_reach_falls_back_to_x_mid():
+    static = dict(ArrayHydraulicsProvider.from_dataset(three_reach_dataset()).static)
+    static["reach_vertex_count"] = np.array([0, 3, 3], dtype=np.int32)  # reach 0 has no polyline
+    static["reach_vertex_start"] = np.array([2, 2, 5], dtype=np.int64)
+    static["x_mid"] = np.array([-500.0, -1000.0, 1500.0])
+    static["y_mid"] = np.array([250.0, -250.0, 0.0])
+    net = Network(static)
+    x, y = net.map_position(np.array([0, 1, -1]), np.array([100.0, 1000.0, np.nan]))
+    np.testing.assert_allclose(x, [-500.0, -1000.0, np.nan])
+    np.testing.assert_allclose(y, [250.0, -250.0, np.nan])
+    del static["x_mid"], static["y_mid"]  # nothing to fall back on: NaN
+    x, _ = Network(static).map_position(np.array([0]), np.array([100.0]))
+    assert np.isnan(x[0])

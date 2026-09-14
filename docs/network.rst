@@ -18,9 +18,13 @@ One NetCDF file with dimensions ``reach``, ``time``, and optionally ``vertex``:
 * time-varying ``(time, reach)``: ``flow_in``, ``flow_out`` (m3/s), ``velocity`` (m/s), ``depth``,
   ``width`` (m), ``ustar`` (m/s), optional ``water_temperature``.
 
-Where ``flow_out`` is 0 the hydraulics are 0 and particles wait. The provider validates variables,
-units, and topology at open, streams two time slices at a time, and can subset reaches
-(``reach_subset = [ids]`` or ``{outlet = id}``).
+Where ``flow_out`` is 0 the file's hydraulics are 0 and particles wait. Under
+``interpolation = "linear"`` velocity and ustar are additionally forced to 0 whenever either
+bracketing day is dry, so a particle never advects on a half-interpolated velocity into a reach that
+has no water; flow itself still interpolates. Under ``interpolation = "hold"`` no masking is applied
+and the file's own zeros are what the solver sees. The provider validates variables, units, field
+values (finite and non-negative), and topology at open, streams two time slices at a time, and can
+subset reaches (``reach_subset = [ids]`` or ``{outlet = id}``).
 
 Particle convention
 -------------------

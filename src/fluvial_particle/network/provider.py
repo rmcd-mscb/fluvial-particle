@@ -401,7 +401,16 @@ class FileHydraulicsProvider:
         self._time_window = (t0, t1)
 
     def memory_estimate(self, n_particles: int) -> dict[str, int]:
-        """Bytes for the two-slice window, static arrays, and particle arrays for ``n_particles``."""
+        """Bytes the run needs, for ``n_particles`` particles.
+
+        Args:
+            n_particles: particle count to size the state and output arrays for.
+
+        Returns:
+            dict with ``window_bytes`` (the two loaded time slices of every field),
+            ``static_bytes`` (the loaded per-reach static arrays), ``particle_bytes`` (the solver's
+            per-particle state), and ``output_time_bytes`` (one output time's reach, s, and status).
+        """
         n_fields = len(self._field_names)
         window = 2 * self.n_reach * n_fields * self.dtype.itemsize
         static = sum(int(v.nbytes) for k, v in self.static._data.items())
@@ -451,7 +460,12 @@ class FileHydraulicsProvider:
         self._window_k = k
 
     def hydraulics(self, t: np.datetime64) -> dict[str, FloatArray]:
-        """Per-reach hydraulics at ``t`` (hold or linear); velocity and ustar are 0 across dry intervals.
+        """Per-reach hydraulics at ``t``, holding or linearly interpolating between the file's timestamps.
+
+        Under ``linear``, velocity and ustar are forced to 0 whenever either bracketing timestamp is
+        dry (``flow_out <= 0``), so a particle never advects on a half-interpolated velocity into a
+        reach that has no water; flow itself still interpolates. Under ``hold`` no such masking is
+        applied: the file's own zeros on a dry day are what the solver sees.
 
         Args:
             t: requested time; must be within the file range and the time_window when set.
