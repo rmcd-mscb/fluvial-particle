@@ -8,7 +8,7 @@ import time as _time
 import warnings
 from collections.abc import Mapping
 from os import getpid
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 
@@ -16,7 +16,7 @@ from .. import __version__
 from .config import NetworkConfig
 from .dispersion import dispersion_coefficient
 from .network import Network
-from .provider import FileHydraulicsProvider, HydraulicsProvider
+from .provider import FileHydraulicsProvider
 from .results import NetworkResults
 from .solver import NetworkSolver
 from .sources import ParticleSchedule, expand_sources
@@ -82,9 +82,13 @@ def diagnostics_report(
             f"mass {mass_per_source[i]:.6g} {config.mass_units}"
         )
     inside = provider.times[(provider.times >= start) & (provider.times <= end)]
-    if inside.size == 0:
-        inside = provider.times[[int(np.searchsorted(provider.times, start, side="right")) - 1]]
-    sample = inside[np.unique(np.linspace(0, inside.size - 1, min(inside.size, 64)).astype(int))]
+    # Always anchor the sample to the run window's own endpoints (which hydraulics() accepts under
+    # provider.time_window) rather than a timestamp outside it, so a run window that contains no
+    # hydraulics timestamp (e.g. a sub-day run on a daily file) still samples successfully.
+    candidates = np.unique(np.concatenate([inside, np.array([start, end])]))
+    if candidates.size > 64:
+        candidates = candidates[np.unique(np.linspace(0, candidates.size - 1, 64).astype(int))]
+    sample = candidates
     kicks: list[np.ndarray] = []
     crossed: list[np.ndarray] = []
     d = config.dispersion
@@ -149,7 +153,7 @@ def run_network_simulation(
         schedule = expand_sources(
             cfg.sources,
             network,
-            cast("HydraulicsProvider", provider),
+            provider,
             start_time=start,
             end_time=end,
             particle_mass=cfg.particle_mass,
@@ -159,7 +163,7 @@ def run_network_simulation(
         lo, hi = rank * n // size, (rank + 1) * n // size
         solver = NetworkSolver(
             network,
-            cast("HydraulicsProvider", provider),
+            provider,
             schedule.slice(lo, hi),
             start_time=start,
             dt=cfg.dt,
@@ -184,15 +188,15 @@ def run_network_simulation(
 
         attrs: dict[str, Any] = {
             "hydraulics_file": str(pathlib.Path(cfg.hydraulics_file).resolve()),
-            "reach_subset": json.dumps(cfg.to_dict()["reach_subset"]),
+            "reach_subset": json.dumps(cfg.to_dict()["reach_subset"], default=str),
             "interpolation": cfg.interpolation,
             "dt": cfg.dt,
             "output_interval": cfg.output_interval,
             "end_time": str(stop.astype("datetime64[s]")),
             "seed": base_seed,
             "mass_units": cfg.mass_units,
-            "dispersion": json.dumps(cfg.dispersion.to_dict()),
-            "sources": json.dumps(cfg.to_dict()["sources"]),
+            "dispersion": json.dumps(cfg.dispersion.to_dict(), default=str),
+            "sources": json.dumps(cfg.to_dict()["sources"], default=str),
             "fluvial_particle_version": __version__,
             "created": str(np.datetime64("now", "s")),
             "conventions_note": provider.conventions_note,

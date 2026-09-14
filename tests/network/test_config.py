@@ -74,6 +74,39 @@ def test_resolve_times():
         NetworkConfig.from_dict({**MINIMAL, "start_time": "1979-01-03", "end_time": "1979-01-02"})
 
 
+def test_source_form_requires_its_keys():
+    with pytest.raises(ValueError, match=r"sources\[0\].*slug.*time and mass"):
+        NetworkConfig.from_dict({**MINIMAL, "sources": [{"reach_id": 1, "form": "slug", "mass": 1.0}]})
+    with pytest.raises(ValueError, match=r"sources\[0\].*slug.*time and mass"):
+        NetworkConfig.from_dict({**MINIMAL, "sources": [{"reach_id": 1, "form": "slug", "time": 0.0}]})
+    with pytest.raises(ValueError, match=r"sources\[0\].*loading.*rate or curve"):
+        NetworkConfig.from_dict({**MINIMAL, "sources": [{"reach_id": 1, "form": "loading", "particles": 1}]})
+    with pytest.raises(ValueError, match=r"sources\[0\].*concentration.*value or curve"):
+        NetworkConfig.from_dict({**MINIMAL, "sources": [{"reach_id": 1, "form": "concentration", "particles": 1}]})
+
+
+def test_toml_source_with_unquoted_datetime_is_json_safe(tmp_path):
+    # tomllib parses an unquoted TOML datetime (no surrounding quotes) as datetime.datetime, not str;
+    # to_dict() (and thus json.dumps of it, as run.py does for the output file's attrs) must not choke.
+    lines = [
+        "[network]",
+        'hydraulics_file = "net.nc"',
+        "particle_mass = 1.0",
+        "[[network.sources]]",
+        "reach_id = 101",
+        'form = "loading"',
+        "rate = 0.01",
+        "start = 1979-01-01T00:00:00",
+        "end = 1979-01-02T00:00:00",
+    ]
+    path = tmp_path / "unquoted.toml"
+    path.write_text("\n".join(lines) + "\n")
+    cfg = NetworkConfig.from_toml(path)
+    assert isinstance(cfg.sources[0]["start"], str)
+    assert isinstance(cfg.sources[0]["end"], str)
+    json.dumps(cfg.to_dict())  # must not raise TypeError
+
+
 def test_toml_round_trip(tmp_path):
     text = get_network_config_template()
     parsed = tomllib.loads(text)

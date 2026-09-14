@@ -100,6 +100,22 @@ class DispersionConfig:
         return dataclasses.asdict(self)
 
 
+_DATETIME_KEYS = ("time", "start", "end")
+
+
+def _jsonify_datetime(value: Any) -> Any:
+    """Normalize a `datetime.datetime`/`datetime.date`/`np.datetime64` to an ISO string; pass through otherwise.
+
+    tomllib parses an unquoted TOML datetime as `datetime.datetime`, which `json.dumps` (used by
+    `NetworkConfig.to_dict()` consumers such as `run.py`'s output attrs) cannot serialize.
+    """
+    if isinstance(value, np.datetime64):
+        return str(value.astype("datetime64[s]"))
+    if isinstance(value, dtm.date | dtm.datetime):
+        return value.isoformat()
+    return value
+
+
 def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None) -> dict[str, Any]:
     """Validate one source row.
 
@@ -109,12 +125,15 @@ def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None
         particle_mass: the config's global particle mass, if any.
 
     Returns:
-        A plain dict copy of the validated row.
+        A plain dict copy of the validated row, with any `datetime.datetime`/`datetime.date`/
+        `np.datetime64` values in ``time``, ``start``, ``end``, or ``curve`` pairs normalized to ISO
+        strings so the row is JSON-safe by construction.
 
     Raises:
         ValueError: the row is missing a reach_id, has an invalid form, sets
-            both s and s_frac, has a non-positive particles count, or lacks
-            both particles and a global particle_mass.
+            both s and s_frac, has a non-positive particles count, lacks both
+            particles and a global particle_mass, or is missing a key its
+            form requires.
     """
     if "reach_id" not in row:
         raise ValueError(f"sources[{i}] needs a reach_id")
@@ -127,7 +146,19 @@ def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None
         raise ValueError(f"sources[{i}] particles must be a positive integer")
     if "particles" not in row and particle_mass is None:
         raise ValueError(f"sources[{i}] needs particles, or set a global particle_mass")
-    return dict(row)
+    if form == "slug" and not {"time", "mass"} <= set(row):
+        raise ValueError(f"sources[{i}] form 'slug' needs time and mass")
+    if form == "loading" and not ({"rate"} <= set(row) or {"curve"} <= set(row)):
+        raise ValueError(f"sources[{i}] form 'loading' needs rate or curve")
+    if form == "concentration" and not ({"value"} <= set(row) or {"curve"} <= set(row)):
+        raise ValueError(f"sources[{i}] form 'concentration' needs value or curve")
+    out = dict(row)
+    for key in _DATETIME_KEYS:
+        if key in out:
+            out[key] = _jsonify_datetime(out[key])
+    if "curve" in out:
+        out["curve"] = [(_jsonify_datetime(t), v) for t, v in out["curve"]]
+    return out
 
 
 @dataclasses.dataclass(frozen=True)

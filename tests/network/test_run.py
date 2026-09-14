@@ -88,3 +88,48 @@ def test_resolve_seed():
     assert resolve_seed(5, None) == 5
     s = resolve_seed(None, None)
     assert isinstance(s, int) and s >= 0
+
+
+def test_run_with_unquoted_toml_datetime_writes_file(tmp_path):
+    # A TOML source row with an unquoted datetime (tomllib -> datetime.datetime) must not crash the
+    # run's json.dumps of the output attrs.
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    toml = tmp_path / "run.toml"
+    lines = [
+        "[network]",
+        f'hydraulics_file = "{path}"',
+        "dt = 600.0",
+        "output_interval = 1200.0",
+        'end_time = "1979-01-01T01:00"',
+        "[network.dispersion]",
+        'model = "none"',
+        "[[network.sources]]",
+        "reach_id = 101",
+        'form = "loading"',
+        "rate = 0.001",
+        "start = 1979-01-01T00:00:00",
+        "end = 1979-01-01T00:30:00",
+        "particles = 2",
+    ]
+    toml.write_text("\n".join(lines) + "\n")
+    res = run_network_simulation(toml, tmp_path / "out5", seed=1, quiet=True)
+    assert (tmp_path / "out5" / OUTPUT_FILENAME).exists()
+    res.close()
+
+
+def test_run_window_with_no_hydraulics_timestamp_inside(tmp_path, capsys):
+    # three_reach_dataset's default time axis is daily (1979-01-01, -02, -03); a 6h-18h run window
+    # on day 1 contains none of those timestamps, so diagnostics_report's dt-check sampling must not
+    # fall back to a timestamp before start (the provider's time_window rejects it).
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    cfg = config_for(
+        path,
+        start_time="1979-01-01T06:00",
+        end_time="1979-01-01T18:00",
+        dt=600.0,
+        output_interval=600.0,
+    )
+    res = run_network_simulation(cfg, tmp_path / "out4", seed=1, quiet=False)
+    out = capsys.readouterr().out
+    assert "dt check" in out
+    res.close()
