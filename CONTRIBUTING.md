@@ -8,14 +8,14 @@ and pull requests.
 
 Here is a list of important resources for contributors:
 
-- [Source Code](https://code.usgs.gov/wma/nhgf/fluvparticle)
+- [Source Code](https://github.com/rmcd-mscb/fluvial-particle)
 - [Documentation](https://fluvial-particle.readthedocs.io/)
-- [Issue Tracker](https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues)
-- [Code of Conduct](https://code.usgs.gov/wma/nhgf/fluvparticle/-/blob/main/CODE_OF_CONDUCT.md)
+- [Issue Tracker](https://github.com/rmcd-mscb/fluvial-particle/issues)
+- [Code of Conduct](https://github.com/rmcd-mscb/fluvial-particle/blob/main/CODE_OF_CONDUCT.md)
 
 ## How to report a bug
 
-Report bugs on the [Issue Tracker](https://code.usgs.gov/wma/nhgf/fluvparticle/-/issues).
+Report bugs on the [Issue Tracker](https://github.com/rmcd-mscb/fluvial-particle/issues).
 
 When filing an issue, make sure to answer these questions:
 
@@ -34,7 +34,7 @@ Request features on the [Issue Tracker\_]{.title-ref}.
 
 ## How to submit changes
 
-Open a [pull request](https://code.usgs.gov/wma/nhgf/fluvparticle/-/merge_requests)
+Open a [pull request](https://github.com/rmcd-mscb/fluvial-particle/pulls)
 to submit changes to this project.
 
 Your pull request needs to meet the following guidelines for acceptance:
@@ -66,8 +66,8 @@ To set up your development environment do the following.
 ### Fork the repository
 
 Code edits must be made on your personal fork of
-the [main repository](https://code.usgs.gov/wma/nhgf/fluvparticle/-/tree/main).
-Read the [Gitlab forking workflow documentation](https://docs.gitlab.com/ee/user/project/repository/forking_workflow.html)
+the [main repository](https://github.com/rmcd-mscb/fluvial-particle/tree/main).
+Read the [GitHub forking documentation](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
 for forking instructions and additional information.
 
 ### Clone the forked repository
@@ -76,7 +76,7 @@ To remind yourself that you're working on a fork of the main repository,
 we suggest using the name _fluvial-particle-fork_ for your local repo:
 
 ```shell
-git clone git@code.usgs.gov:<user_id>/fluvparticle.git fluvial-particle-fork
+git clone git@github.com:<user_id>/fluvial-particle.git fluvial-particle-fork
 ```
 
 ### Setup development environment

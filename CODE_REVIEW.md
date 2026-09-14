@@ -480,7 +480,7 @@ Track these metrics to measure progress:
 ## References
 
 - McDonald & Nelson (2021). "Fluvial-Particle: A Python package for Lagrangian particle tracking in rivers." Journal of Ecohydraulics.
-- Repository: https://code.usgs.gov/vtcfwru/fluvial-particle
+- Repository: https://github.com/rmcd-mscb/fluvial-particle
 - Documentation: https://fluvial-particle.readthedocs.io/
 
 ---
