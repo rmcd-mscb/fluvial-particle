@@ -29,7 +29,7 @@ dependencies = [
 ci = [
     "h5py>=3.7.0",
     "numpy>=1.20",
-    "vtk>=9.3.1,<9.7",  # 9.7 changes vtkProbeFilter results; legacy 2D/3D reference outputs predate it (see issue)
+    "vtk>=9.3.1",
 ]
 dev = [
     # Linting and formatting (replaces black, flake8, darglint, etc.)

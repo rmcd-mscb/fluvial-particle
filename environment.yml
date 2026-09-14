@@ -16,7 +16,7 @@ dependencies:
   - pip
 
   # Compiled dependencies - better from conda than pip
-  - vtk>=9.3.1,<9.7 # Complex C++ visualization library; 9.7 changes probe results (see pyproject ci extras)
+  - vtk>=9.3.1 # Complex C++ visualization library
   - h5py>=3.7.0 # HDF5 with C bindings
   - numpy>=1.20 # NumPy with MKL optimizations
 
