@@ -304,7 +304,7 @@ class RiverGrid:
         self.probe2d = vtk.vtkProbeFilter()
         self.probe2d.SetInputData(self.ptset2d)
         self.probe2d.SetSourceData(self.vtksgrid2d)
-        self.probe2d.SetFindCellStrategy(self.strategy2d)
+        self._configure_probe(self.probe2d, self.strategy2d)
         # Objects for 3d grid interpolation
         if self.track3d:
             self.pt3d_np = np.zeros((nparts, 3))
@@ -320,7 +320,28 @@ class RiverGrid:
             self.pts3d.SetPoints(self.pt3d)
             self.probe3d.SetInputData(self.pts3d)
             self.probe3d.SetSourceData(self.vtksgrid3d)
-            self.probe3d.SetFindCellStrategy(strategy3d)
+            self._configure_probe(self.probe3d, strategy3d)
+
+    @staticmethod
+    def _configure_probe(probe, strategy):
+        """Make the probe locate cells exactly, with no tolerance band at cell boundaries.
+
+        vtkProbeFilter defaults to an auto-computed tolerance. Before VTK 9.7 the cell-locator
+        strategy ignored it, so cell location was exact. VTK 9.7 passes the tolerance through to
+        the locator, which assigns points within a few millimetres of a cell face to the
+        neighbouring cell: wet/dry checks flip at the bank and near-bed velocities are
+        extrapolated from the wrong cell (issue #41). A zero tolerance restores exact location
+        on 9.7 and changes nothing on earlier versions. The strategy classes are deprecated in
+        9.7, so the strategy is only attached where it is still needed.
+
+        Args:
+            probe (vtkProbeFilter): the probe to configure
+            strategy (vtkCellLocatorStrategy): the find-cell strategy for VTK < 9.7
+        """
+        probe.ComputeToleranceOff()
+        probe.SetTolerance(0.0)
+        if (vtk.vtkVersion.GetVTKMajorVersion(), vtk.vtkVersion.GetVTKMinorVersion()) < (9, 7):
+            probe.SetFindCellStrategy(strategy)
 
     def create_hdf5(self, nprints, time, fname="cells.h5", **dset_kwargs):
         """Create HDF5 file for cell-centered results.

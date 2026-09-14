@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Bug Fixes
+- Lifted the `vtk<9.7` pin (#41). VTK 9.7 started passing `vtkProbeFilter`'s auto-computed tolerance through to the cell locator, so points within a few millimetres of a cell face were assigned to the neighbouring cell: wet/dry checks flipped at the bank and near-bed velocities were extrapolated from the wrong cell, which is why every 2D/3D regression fixture changed. `RiverGrid` now sets a zero probe tolerance, which restores exact cell location on 9.7 and changes nothing on earlier versions; the deprecated find-cell strategy is only attached on VTK < 9.7. `tests/test_probe_tolerance.py` guards it
 - `Particles.validate_z` now mirror-reflects particles off the bed and water surface (inset by `vertbound` x depth) instead of clamping them onto the bounds. The clamp left about 11% of a well-mixed column sitting exactly on the bounds after 200 s and inflated the vertical variance by 19%. `LarvalBotParticles` and `LarvalTopParticles` inherit the reflection. `FallingParticles` keeps the clamp so settling particles are not bounced back up off the bed. A column with no usable width (2D runs, or a zero-depth cell) still pins the particle to the single admissible elevation. Regression fixtures under `tests/data/output_straight*` regenerated
 - Fixed a crash (`ValueError` in `Particles._is_part_wet`) when the last active particles leave the grid in the same time step
 
