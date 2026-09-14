@@ -55,3 +55,45 @@ def test_network_serial_runs(tmp_path):
     assert (tmp_path / "out" / "network_particles.nc").exists()
     with pytest.raises(FileNotFoundError):
         network_serial([str(tmp_path / "missing.toml"), "-o", str(tmp_path / "out")])
+
+
+def test_network_serial_closes_the_results(tmp_path, monkeypatch):
+    from fluvial_particle.network import results as results_module
+
+    closed = []
+    original = results_module.NetworkResults.close
+    monkeypatch.setattr(
+        results_module.NetworkResults,
+        "close",
+        lambda self: (closed.append(self.path), original(self))[1],
+    )
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    toml = tmp_path / "run.toml"
+    toml.write_text(
+        "\n".join([
+            "[network]",
+            f'hydraulics_file = "{path}"',
+            "dt = 600.0",
+            "output_interval = 1200.0",
+            'end_time = "1979-01-01T01:00"',
+            "[network.dispersion]",
+            'model = "none"',
+            "[[network.sources]]",
+            "reach_id = 101",
+            'form = "slug"',
+            "time = 0.0",
+            "mass = 2.0",
+            "particles = 2",
+        ])
+        + "\n"
+    )
+    network_serial([str(toml), "-o", str(tmp_path / "out"), "--seed", "1", "--quiet"])
+    assert closed == [tmp_path / "out" / "network_particles.nc"]
+
+
+def test_missing_arguments_exit_with_code_two(capsys):
+    for argv in ([], ["s.toml"], ["-o", "out"]):
+        with pytest.raises(SystemExit) as exc:
+            network_serial(argv)
+        assert exc.value.code == 2
+        assert "required" in capsys.readouterr().err

@@ -98,11 +98,14 @@ class NetworkResults:
 
     @property
     def provider(self) -> FileHydraulicsProvider:
-        """The hydraulics file the run used, reopened with the same subset and interpolation."""
+        """The hydraulics file the run used, reopened with the same subset, interpolation, and dtype."""
         if self._provider is None:
             subset = json.loads(self._ds.attrs.get("reach_subset", "null"))
             self._provider = FileHydraulicsProvider(
-                self._ds.attrs["hydraulics_file"], interpolation=self._ds.attrs["interpolation"], reach_subset=subset
+                self._ds.attrs["hydraulics_file"],
+                interpolation=self._ds.attrs["interpolation"],
+                dtype=self._ds.attrs.get("dtype", "float64"),
+                reach_subset=subset,
             )
         return self._provider
 
@@ -283,6 +286,9 @@ class NetworkResults:
     def concentration(self, time: Any, bin_length: float = 100.0, smoothing: float | str | None = None) -> xr.DataArray:
         """Mass per bin volume (width * depth * bin width) in mass_units m-3; NaN where flow_out is 0.
 
+        The run's ``mass_units`` attribute names the units; a file without it is not a network
+        particle file and indexing it raises KeyError rather than quietly labelling the result "kg".
+
         Args:
             time: an output index, datetime, list of either, slice, or None for all times.
             bin_length: bin size in meters (np.inf for one bin per reach).
@@ -300,12 +306,12 @@ class NetworkResults:
                 c = np.where(vol > 0.0, m / vol, np.nan)
             c[np.asarray(h["flow_out"])[bins.bin_reach] <= 0.0] = np.nan
             rows.append(c)
-        units = f"{self._ds.attrs.get('mass_units', 'kg')} m-3"
+        units = f"{self._ds.attrs['mass_units']} m-3"
         return self._wrap(np.stack(rows), idx, bins, time, "concentration", units)
 
-    def reach_concentration(self, time: Any, smoothing: float | str | None = None) -> xr.DataArray:
-        """concentration() with one bin per reach."""
-        return self.concentration(time, bin_length=np.inf, smoothing=smoothing)
+    def reach_concentration(self, time: Any) -> xr.DataArray:
+        """concentration() with one bin per reach (no smoothing: there is only one bin to smooth over)."""
+        return self.concentration(time, bin_length=np.inf)
 
     def _wrap(
         self, data: npt.NDArray[Any], idx: npt.NDArray[np.int64], bins: NetworkBins, time: Any, name: str, units: str

@@ -89,7 +89,9 @@ def network_serial(argv: Sequence[str] | None = None) -> None:
     from .network.run import run_network_simulation
 
     args = _network_args(argv)
-    run_network_simulation(args.settings_file, args.output, seed=args.seed, quiet=args.quiet)
+    res = run_network_simulation(args.settings_file, args.output, seed=args.seed, quiet=args.quiet)
+    if res is not None:
+        res.close()
 
 
 def network_mpi(argv: Sequence[str] | None = None) -> None:

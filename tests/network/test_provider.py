@@ -58,15 +58,31 @@ def test_missing_required_variable_lists_all(tmp_path):
     assert "ustar" in str(exc.value)
 
 
-def test_wrong_units_raise_and_missing_units_warn(tmp_path):
+def test_wrong_units_and_missing_units_both_raise(tmp_path):
     ds = three_reach_dataset()
     ds["velocity"].attrs["units"] = "ft s-1"
     with pytest.raises(ValueError, match=r"velocity.*units"):
         FileHydraulicsProvider(write_network_file(tmp_path / "u1.nc", ds))
     ds = three_reach_dataset()
     del ds["depth"].attrs["units"]
-    with pytest.warns(UserWarning, match="depth"):
-        FileHydraulicsProvider(write_network_file(tmp_path / "u2.nc", ds)).close()
+    with pytest.raises(ValueError, match=r"depth has no units"):
+        FileHydraulicsProvider(write_network_file(tmp_path / "u2.nc", ds))
+
+
+def test_negative_field_values_raise(tmp_path):
+    ds = three_reach_dataset()
+    ds["velocity"].values[1, 2] = -1.0
+    with pytest.raises(ValueError, match=r"velocity has 1 negative value") as exc:
+        FileHydraulicsProvider(write_network_file(tmp_path / "neg.nc", ds))
+    assert "non-negative" in str(exc.value)
+
+
+def test_non_finite_field_values_raise(tmp_path):
+    ds = three_reach_dataset()
+    ds["depth"].values[0, 0] = np.nan
+    ds["depth"].values[2, 1] = np.inf
+    with pytest.raises(ValueError, match=r"depth has 2 non-finite value"):
+        FileHydraulicsProvider(write_network_file(tmp_path / "nan.nc", ds))
 
 
 def test_bad_to_index_and_cycle(tmp_path):

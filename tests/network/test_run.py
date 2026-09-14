@@ -84,6 +84,21 @@ def test_run_warns_on_non_integer_steps(tmp_path):
     res.close()
 
 
+def test_sub_second_run_length_is_not_truncated(tmp_path):
+    # 14 steps of 0.7 s stop at 9.8 s, not at 9 s: the stop instant is computed in nanoseconds.
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    cfg = config_for(
+        path,
+        dt=0.7,
+        output_interval=1.4,
+        end_time="1979-01-01T00:00:10",
+        sources=[{"reach_id": 101, "form": "slug", "time": 0.0, "mass": 1.0, "particles": 1}],
+    )
+    with pytest.warns(UserWarning, match=r"stops at 1979-01-01T00:00:09\.8"):
+        res = run_network_simulation(cfg, tmp_path / "outsub", seed=1, quiet=True)
+    res.close()
+
+
 def test_resolve_seed():
     assert resolve_seed(5, None) == 5
     s = resolve_seed(None, None)

@@ -102,6 +102,8 @@ def test_counts_and_concentration(run):
     assert np.nansum(conc.values[:10]) == pytest.approx(conc.values[6])
     rc = run.reach_concentration(1)
     assert rc.sizes["bin"] == 3 and rc.values[0] == pytest.approx(3.0 / (10.0 * 1.0 * 1000.0))
+    with pytest.raises(TypeError):  # smoothing is gone: one bin per reach has nothing to smooth
+        run.reach_concentration(1, smoothing=100.0)
 
 
 def test_concentration_multi_time_and_smoothing(run):
@@ -131,6 +133,42 @@ def test_dry_reach_is_nan(tmp_path):
     with run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=True) as res:
         conc = res.reach_concentration(1)
         assert np.isnan(conc.values[1]) and res.counts(1, np.inf).values[1] == 1
+
+
+def test_concentration_requires_mass_units(run, tmp_path):
+    # A foreign file (or one written by an older version) must fail loudly rather than report
+    # concentrations labelled with a default unit the run never used.
+    import shutil
+
+    import h5py
+
+    from fluvial_particle.network.results import NetworkResults
+
+    copy = tmp_path / "no_units.nc"
+    shutil.copy(run.path, copy)
+    with h5py.File(copy, "r+") as f:
+        del f.attrs["mass_units"]
+    with NetworkResults(copy) as res:
+        with pytest.raises(KeyError, match="mass_units"):
+            res.concentration(1, bin_length=100.0)
+        assert "mass units ?" in res.summary()  # summary() stays tolerant
+
+
+def test_provider_reopens_with_the_run_dtype(tmp_path):
+    path = write_network_file(tmp_path / "f32.nc", three_reach_dataset())
+    cfg = {
+        "hydraulics_file": str(path),
+        "dtype": "float32",
+        "dt": 600.0,
+        "output_interval": 600.0,
+        "end_time": "1979-01-01T00:20",
+        "dispersion": {"model": "none"},
+        "sources": [{"reach_id": 101, "form": "slug", "time": 0.0, "mass": 1.0, "particles": 1}],
+    }
+    with run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=True) as res:
+        assert res.attrs["dtype"] == "float32"
+        assert res.provider.dtype == np.dtype("float32")
+        assert res.provider.hydraulics(res.times[0])["velocity"].dtype == np.float32
 
 
 def test_persist(run, tmp_path):

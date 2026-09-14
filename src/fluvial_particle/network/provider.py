@@ -156,7 +156,8 @@ class FileHydraulicsProvider:
         time_window: (start, end) datetime64 bounds accepted by hydraulics(); default the file's range.
 
     Raises:
-        ValueError: schema, units, topology, or time-axis problems (message names the variable).
+        ValueError: schema, units, field-value, topology, or time-axis problems (message names the
+            variable).
         KeyError: a reach id in reach_subset is not in the file.
     """
 
@@ -180,7 +181,8 @@ class FileHydraulicsProvider:
             time_window: (start, end) datetime64 bounds accepted by hydraulics(); default the file's range.
 
         Raises:
-            ValueError: schema, units, topology, or time-axis problems (message names the variable).
+            ValueError: schema, units, field-value, topology, or time-axis problems (message names
+                the variable).
         """
         if interpolation not in INTERPOLATIONS:
             raise ValueError(f"interpolation must be one of {INTERPOLATIONS}, got {interpolation!r}")
@@ -189,6 +191,7 @@ class FileHydraulicsProvider:
         self.dtype = np.dtype(dtype)
         self._ds = xr.open_dataset(self.path, engine="h5netcdf")
         self._validate_schema()
+        self._validate_field_values()
         self.times: npt.NDArray[np.datetime64] = self._ds["time"].values.astype("datetime64[ns]")
         self._n_time = int(self.times.size)
         if self._n_time > 1 and not np.all(np.diff(self.times) > np.timedelta64(0, "ns")):
@@ -229,8 +232,8 @@ class FileHydraulicsProvider:
         """Check required variables, dimensions, and units are present and consistent.
 
         Raises:
-            ValueError: a required variable is missing, has the wrong dimensions, has the wrong
-                units, or time does not decode to datetime64.
+            ValueError: a required variable is missing, has the wrong dimensions, has missing or
+                wrong units, or time does not decode to datetime64.
         """
         ds = self._ds
         missing = [v for v in list(REQUIRED_STATIC) + list(REQUIRED_FIELDS) if v not in ds]
@@ -246,11 +249,31 @@ class FileHydraulicsProvider:
         for name, units in expected.items():
             got = ds[name].attrs.get("units")
             if got is None:
-                warnings.warn(f"{name} has no units attribute; assuming {units!r}", UserWarning, stacklevel=3)
-            elif got != units:
+                raise ValueError(f"{name} has no units attribute; expected {units!r}")
+            if got != units:
                 raise ValueError(f"{name} units are {got!r}, expected {units!r}")
         if ds["time"].dtype.kind != "M":
             raise ValueError("time must decode to datetime64")
+
+    def _validate_field_values(self) -> None:
+        """Check every required time-varying field is finite and non-negative over the whole file.
+
+        Each variable is read once, which is a single pass over the file even at NWM scale; a
+        silently negative velocity or a NaN depth would otherwise reach the solver as a particle
+        moving upstream or a dispersion coefficient that poisons every downstream reach.
+
+        Raises:
+            ValueError: a required field holds non-finite or negative values (the message names the
+                variable and how many values offend).
+        """
+        for name in REQUIRED_FIELDS:
+            arr = np.asarray(self._ds[name].values, dtype=np.float64)
+            bad_finite = int((~np.isfinite(arr)).sum())
+            if bad_finite:
+                raise ValueError(f"{name} has {bad_finite} non-finite value(s); it must be finite everywhere")
+            bad_sign = int((arr < 0.0).sum())
+            if bad_sign:
+                raise ValueError(f"{name} has {bad_sign} negative value(s); it must be non-negative")
 
     def _load_static(self) -> dict[str, npt.NDArray[Any]]:
         """Eagerly load the per-reach static arrays (not the polyline block)."""

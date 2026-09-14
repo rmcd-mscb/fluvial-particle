@@ -107,6 +107,24 @@ def test_toml_source_with_unquoted_datetime_is_json_safe(tmp_path):
     json.dumps(cfg.to_dict())  # must not raise TypeError
 
 
+def test_numpy_scalars_in_a_source_row_are_json_safe():
+    # A row built programmatically (from a DataFrame, say) carries numpy scalars; to_dict() must
+    # emit Python scalars so json.dumps works without a default= fallback.
+    row = {
+        "reach_id": np.int64(101),
+        "form": "loading",
+        "rate": np.float64(0.01),
+        "particles": np.int32(4),
+        "curve": [(np.float64(0.0), np.float64(1.0)), (np.int64(10), np.float32(2.0))],
+    }
+    cfg = NetworkConfig.from_dict({**MINIMAL, "sources": [row]})
+    out = cfg.to_dict()["sources"][0]
+    assert isinstance(out["reach_id"], int) and not isinstance(out["reach_id"], np.integer)
+    assert isinstance(out["rate"], float) and isinstance(out["particles"], int)
+    assert all(isinstance(t, int | float) and not isinstance(t, np.generic) for pair in out["curve"] for t in pair)
+    json.dumps(cfg.to_dict())  # must not raise TypeError
+
+
 def test_toml_round_trip(tmp_path):
     text = get_network_config_template()
     parsed = tomllib.loads(text)

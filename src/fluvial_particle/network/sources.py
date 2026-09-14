@@ -304,6 +304,10 @@ def estimate_particles(
 
     Returns:
         DataFrame with columns source, form, reach_id, total_mass, particle_mass, particles.
+
+    Raises:
+        ValueError: a continuous source's release reach has a mean velocity of 0 over its window, so
+            there is no travel distance to spread its particles over.
     """
     network = Network(provider.static, crs_wkt=provider.crs_wkt)
     start, end = config.resolve_times(provider.times)
@@ -317,12 +321,10 @@ def estimate_particles(
             t0 = t1 = seconds_from_start(row["time"], start)
             mass_total = float(row["mass"])
         else:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                if form == "concentration":
-                    t, v = _concentration_rate(i, row, provider, start, idx, s / float(network.length[idx]), total)
-                else:
-                    t, v = _curve(i, row, "rate", start, total)
+            if form == "concentration":
+                t, v = _concentration_rate(i, row, provider, start, idx, s / float(network.length[idx]), total)
+            else:
+                t, v = _curve(i, row, "rate", start, total)
             t0, t1 = float(t[0]), float(t[-1])
             mass_total = float(_cumulative(t, v)[-1])
         sample = np.unique(np.clip(np.linspace(t0, t1, 8), 0.0, total))
@@ -334,8 +336,13 @@ def estimate_particles(
             kk.append(
                 float(dispersion_coefficient(h, disp.model, scale=disp.scale, cap=disp.cap, value=disp.value)[idx])
             )
-        v_mean = max(float(np.mean(vel)), 1e-12)
+        v_mean = float(np.mean(vel))
         k_mean = float(np.mean(kk))
+        if form != "slug" and v_mean <= 0.0:
+            raise ValueError(
+                f"sources[{i}] on reach {row['reach_id']} has mean velocity {v_mean:g} m/s over its window; "
+                "a continuous source needs a positive velocity to size its particles"
+            )
         if form == "slug":
             sigma = np.sqrt(2.0 * k_mean * reference_travel_time)
             n = max(1, int(np.ceil(target_per_bin * max(sigma * np.sqrt(2.0 * np.pi) / bin_length, 1.0))))

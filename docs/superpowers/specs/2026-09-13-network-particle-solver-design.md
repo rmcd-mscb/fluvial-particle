@@ -523,7 +523,8 @@ first time a method needs hydraulics or polylines. Context-manager and
   mass is conserved per reach. `time` may be a slice or list to get a
   `(time, bin)` DataArray; a `persist(path, bin_length, smoothing)` method
   writes the full cube to a derived NetCDF for animations.
-- `reach_concentration(time, ...)`: the same with `bin_length=np.inf`.
+- `reach_concentration(time)`: the same with `bin_length=np.inf` (and no
+  `smoothing`: there is one bin per reach to smooth over).
 - `arrival_times(outlet=None)`: DataFrame of exited particles with
   `exit_time`, `exit_reach`, `reach_id`, `release_*`, `mass`; filtered to
   one outlet id when given. `arrival_histogram(outlet, bin_seconds)` returns

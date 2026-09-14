@@ -177,7 +177,7 @@ def run_network_simulation(
         total = float((end - start) / np.timedelta64(1, "s"))
         n_steps = int(np.floor(total / cfg.dt + 1e-9))
         every = round(cfg.output_interval / cfg.dt)
-        stop = start + np.timedelta64(int(n_steps * cfg.dt), "s")
+        stop = start + np.timedelta64(round(n_steps * cfg.dt * 1e9), "ns")
         if abs(total - n_steps * cfg.dt) > 1e-6:
             warnings.warn(
                 f"run window {total:.6g} s is not an integer number of dt={cfg.dt} s steps; "
@@ -188,15 +188,16 @@ def run_network_simulation(
 
         attrs: dict[str, Any] = {
             "hydraulics_file": str(pathlib.Path(cfg.hydraulics_file).resolve()),
-            "reach_subset": json.dumps(cfg.to_dict()["reach_subset"], default=str),
+            "reach_subset": json.dumps(cfg.to_dict()["reach_subset"]),
             "interpolation": cfg.interpolation,
+            "dtype": cfg.dtype,
             "dt": cfg.dt,
             "output_interval": cfg.output_interval,
             "end_time": str(stop.astype("datetime64[s]")),
             "seed": base_seed,
             "mass_units": cfg.mass_units,
-            "dispersion": json.dumps(cfg.dispersion.to_dict(), default=str),
-            "sources": json.dumps(cfg.to_dict()["sources"], default=str),
+            "dispersion": json.dumps(cfg.dispersion.to_dict()),
+            "sources": json.dumps(cfg.to_dict()["sources"]),
             "fluvial_particle_version": __version__,
             "created": str(np.datetime64("now", "s")),
             "conventions_note": provider.conventions_note,

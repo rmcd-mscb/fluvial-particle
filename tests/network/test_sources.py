@@ -141,6 +141,54 @@ def test_schedule_simple_and_concat():
     assert c.n == 2 and list(c.mass) == [1.0, 2.0]
 
 
+def test_tabulated_curve_truncation_warns_and_conserves_mass(env):
+    # A curve whose points straddle the end of the run window: the part inside carries mass, the
+    # part outside is dropped with a warning rather than silently.
+    row = {"reach_id": 101, "form": "loading", "curve": [[0.0, 1.0], [2 * DAY, 1.0], [3 * DAY, 1.0]], "particles": 4}
+    with pytest.warns(UserWarning, match="truncated"):
+        sch = expand(env, [row])
+    np.testing.assert_allclose(sch.mass.sum(), 2 * DAY, rtol=1e-12)  # only the two days inside
+
+
+def test_curve_entirely_outside_the_window_raises(env):
+    row = {
+        "reach_id": 101,
+        "form": "loading",
+        "curve": [[3 * DAY, 1.0], [4 * DAY, 1.0]],
+        "particles": 4,
+    }
+    with pytest.warns(UserWarning, match="truncated"), pytest.raises(ValueError, match="zero mass"):
+        expand(env, [row])
+
+
+def test_mass_conservation_is_exact(env):
+    sch = expand(env, [{"reach_id": 101, "form": "slug", "time": 0.0, "mass": 7.0}], particle_mass=0.3)
+    np.testing.assert_allclose(sch.mass.sum(), 7.0, rtol=1e-12)
+    sch = expand(env, [{"reach_id": 101, "form": "loading", "rate": 0.01, "end": 1000.0, "particles": 7}])
+    np.testing.assert_allclose(sch.mass.sum(), 10.0, rtol=1e-12)
+
+
+def test_estimate_particles_surfaces_truncation_warning(env):
+    _, prov = env
+    cfg = NetworkConfig.from_dict({
+        "hydraulics_file": "unused.nc",
+        "sources": [{"reach_id": 101, "form": "loading", "rate": 0.01, "start": 0.0, "end": 3 * DAY, "particles": 1}],
+    })
+    with pytest.warns(UserWarning, match="truncated"):
+        estimate_particles(cfg, prov)
+
+
+def test_estimate_particles_zero_velocity_raises():
+    ds = three_reach_dataset(velocity=[0.0, 0.5, 2.0], flow_out=[10.0, 5.0, 80.0])
+    prov = ArrayHydraulicsProvider.from_dataset(ds)
+    cfg = NetworkConfig.from_dict({
+        "hydraulics_file": "unused.nc",
+        "sources": [{"reach_id": 101, "form": "loading", "rate": 0.01, "start": 0.0, "end": DAY, "particles": 1}],
+    })
+    with pytest.raises(ValueError, match=r"sources\[0\] on reach 101 has mean velocity"):
+        estimate_particles(cfg, prov)
+
+
 def test_estimate_particles_hand_values(env):
     _, prov = env
     cfg = NetworkConfig.from_dict({

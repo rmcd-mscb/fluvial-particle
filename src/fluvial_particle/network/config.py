@@ -100,19 +100,23 @@ class DispersionConfig:
         return dataclasses.asdict(self)
 
 
-_DATETIME_KEYS = ("time", "start", "end")
+def _jsonify(value: Any) -> Any:
+    """Normalize a datetime or a numpy scalar to a JSON-serializable value; pass through otherwise.
 
-
-def _jsonify_datetime(value: Any) -> Any:
-    """Normalize a `datetime.datetime`/`datetime.date`/`np.datetime64` to an ISO string; pass through otherwise.
-
-    tomllib parses an unquoted TOML datetime as `datetime.datetime`, which `json.dumps` (used by
-    `NetworkConfig.to_dict()` consumers such as `run.py`'s output attrs) cannot serialize.
+    tomllib parses an unquoted TOML datetime as `datetime.datetime` and a caller building source
+    rows programmatically may hand over `np.int64`/`np.float64` scalars, none of which `json.dumps`
+    (used by `NetworkConfig.to_dict()` consumers such as `run.py`'s output attrs) can serialize.
     """
     if isinstance(value, np.datetime64):
         return str(value.astype("datetime64[s]"))
     if isinstance(value, dtm.date | dtm.datetime):
         return value.isoformat()
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
     return value
 
 
@@ -125,9 +129,9 @@ def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None
         particle_mass: the config's global particle mass, if any.
 
     Returns:
-        A plain dict copy of the validated row, with any `datetime.datetime`/`datetime.date`/
-        `np.datetime64` values in ``time``, ``start``, ``end``, or ``curve`` pairs normalized to ISO
-        strings so the row is JSON-safe by construction.
+        A plain dict copy of the validated row with every value normalized by `_jsonify`
+        (datetimes to ISO strings, numpy scalars to Python scalars, in ``curve`` pairs too), so the
+        row is JSON-safe by construction.
 
     Raises:
         ValueError: the row is missing a reach_id, has an invalid form, sets
@@ -152,12 +156,9 @@ def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None
         raise ValueError(f"sources[{i}] form 'loading' needs rate or curve")
     if form == "concentration" and not ({"value"} <= set(row) or {"curve"} <= set(row)):
         raise ValueError(f"sources[{i}] form 'concentration' needs value or curve")
-    out = dict(row)
-    for key in _DATETIME_KEYS:
-        if key in out:
-            out[key] = _jsonify_datetime(out[key])
+    out = {k: _jsonify(v) for k, v in row.items()}
     if "curve" in out:
-        out["curve"] = [(_jsonify_datetime(t), v) for t, v in out["curve"]]
+        out["curve"] = [(_jsonify(t), _jsonify(v)) for t, v in row["curve"]]
     return out
 
 
