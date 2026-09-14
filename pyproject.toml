@@ -29,7 +29,7 @@ dependencies = [
 ci = [
     "h5py>=3.7.0",
     "numpy>=1.20",
-    "vtk>=9.3.1",
+    "vtk>=9.3.1,<9.7",  # 9.7 changes vtkProbeFilter results; legacy 2D/3D reference outputs predate it (see issue)
 ]
 dev = [
     # Linting and formatting (replaces black, flake8, darglint, etc.)
@@ -43,8 +43,8 @@ dev = [
     # Type checking
     "mypy>=1.0.1",
 
-    # Security and safety
-    "safety>=2.2.0",
+    # Dependency vulnerability audit (safety 3.x "check" is deprecated and crashes in CI)
+    "pip-audit>=2.7",
 
     # Testing
     "pytest>=7.1.2",

@@ -10,6 +10,8 @@ import nox
 
 package = "fluvial_particle"
 python_versions = ["3.13"]
+# Keep in step with the ruff-pre-commit rev in .pre-commit-config.yaml so CI and hooks agree.
+RUFF = "ruff==0.14.11"
 nox.needs_version = ">= 2024.3.2"  # Version with uv support
 nox.options.sessions = (
     "pre-commit",
@@ -90,7 +92,7 @@ def precommit(session: nox.Session) -> None:
 def ruff_check(session: nox.Session) -> None:
     """Run ruff linter."""
     session.install("-e", ".[ci]")
-    session.install("ruff")
+    session.install(RUFF)
     args = session.posargs or ["check", "src", "tests", "noxfile.py"]
     session.run("ruff", *args)
 
@@ -99,17 +101,17 @@ def ruff_check(session: nox.Session) -> None:
 def ruff_format(session: nox.Session) -> None:
     """Check ruff formatting."""
     session.install("-e", ".[ci]")
-    session.install("ruff")
+    session.install(RUFF)
     args = session.posargs or ["format", "--check", "src", "tests", "noxfile.py"]
     session.run("ruff", *args)
 
 
 @nox.session(python="3.13")
 def safety(session: nox.Session) -> None:
-    """Scan dependencies for insecure packages."""
+    """Scan dependencies for insecure packages with pip-audit (safety 3.x "check" is deprecated and crashes)."""
     session.install("-e", ".[ci,dev]")
-    session.install("safety")
-    session.run("safety", "check", "--full-report")
+    session.install("pip-audit")
+    session.run("pip-audit", "--skip-editable", "--progress-spinner", "off")
 
 
 @nox.session(python=python_versions)
@@ -168,7 +170,7 @@ def xdoctest(session: nox.Session) -> None:
 def docs_build(session: nox.Session) -> None:
     """Build the documentation."""
     session.install("-e", ".[ci,dev]")
-    session.install("sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser", "sphinx-autobuild")
+    session.install("sphinx", "sphinx-click", "sphinx-rtd-theme", "myst-parser", "linkify-it-py", "sphinx-autobuild")
     args = session.posargs or ["docs", "docs/_build/html"]
 
     build_dir = Path("docs", "_build/html")
@@ -182,7 +184,7 @@ def docs_build(session: nox.Session) -> None:
 def docs(session: nox.Session) -> None:
     """Build and serve the documentation with live reloading on file changes."""
     session.install("-e", ".[ci,dev]")
-    session.install("sphinx", "sphinx-autobuild", "sphinx-click", "sphinx-rtd-theme")
+    session.install("sphinx", "sphinx-autobuild", "sphinx-click", "sphinx-rtd-theme", "myst-parser", "linkify-it-py")
     args = session.posargs or ["--open-browser", "docs", "docs/_build"]
 
     build_dir = Path("docs", "_build")
