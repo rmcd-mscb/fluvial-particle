@@ -144,16 +144,25 @@ def test_toml_round_trip(tmp_path):
 
 
 def test_validated_sources_and_reach_subset_are_read_only():
-    cfg = NetworkConfig.from_dict({**MINIMAL, "reach_subset": {"outlet": 103}})
+    curve_row = {"reach_id": 102, "form": "loading", "curve": [[0.0, 0.0], [10.0, 1.0]], "particles": 2}
+    cfg = NetworkConfig.from_dict({
+        **MINIMAL,
+        "reach_subset": {"outlet": 103},
+        "sources": [*MINIMAL["sources"], curve_row],
+    })
     with pytest.raises(TypeError):
         cfg.sources[0]["mass"] = 1
     with pytest.raises(TypeError):
         cfg.reach_subset["outlet"] = 1
+    with pytest.raises(TypeError):  # the curve is a tuple of tuples: immutable one level down
+        cfg.sources[1]["curve"][0] = (0.0, 9.0)
     d = cfg.to_dict()
     assert isinstance(d["sources"][0], dict) and isinstance(d["reach_subset"], dict)
     d["sources"][0]["mass"] = 9.0  # the emitted dicts are plain and editable
+    d["sources"][1]["curve"] = [[0.0, 9.0]]  # and editing one cannot reach the frozen config
     json.dumps(d)
     assert cfg.sources[0]["mass"] == 5.0
+    assert cfg.sources[1]["curve"] == ((0.0, 0.0), (10.0, 1.0))
 
 
 def test_guard_rails_on_scalars():

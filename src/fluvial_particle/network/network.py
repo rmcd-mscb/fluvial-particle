@@ -52,7 +52,7 @@ class Network:
         self.reach_id: IntArray = np.asarray(static["reach_id"], dtype=np.int64)
         self.to_index: npt.NDArray[np.int32] = np.asarray(static["to_index"], dtype=np.int32)
         self.length: FloatArray = np.asarray(static["length"], dtype=np.float64)
-        self._validate_topology()
+        self.validate_static({"to_index": self.to_index, "length": self.length})
         self.is_outlet: npt.NDArray[np.bool_] = self.to_index < 0
         self.n_reach: int = int(self.reach_id.size)
         self.crs_wkt = crs_wkt
@@ -62,17 +62,25 @@ class Network:
         self._poly_index: tuple[FloatArray, IntArray, FloatArray, FloatArray] | None = None
 
     # ---- validation ---------------------------------------------------------
-    def _validate_topology(self) -> None:
-        """Check to_index is in range and acyclic and that every length is positive and finite.
+    @staticmethod
+    def validate_static(static: Mapping[str, npt.NDArray[np.generic]]) -> None:
+        """Run the topology checks on raw static arrays, without building a Network.
+
+        The provider uses this on the file's full (pre-subset) arrays, where building an instance
+        would also build an id lookup over every reach in the file for nothing.
+
+        Args:
+            static: mapping with at least ``to_index`` and ``length``.
 
         Raises:
-            ValueError: to_index is out of range, to_index contains a cycle, or length is
-                non-positive or non-finite (the message names the first offending reach indices).
+            ValueError: length is non-positive or non-finite, or to_index is out of range or
+                contains a cycle (the message names the first offending reach indices).
         """
-        bad_length = np.nonzero(~(self.length > 0.0) | ~np.isfinite(self.length))[0]
+        length = np.asarray(static["length"], dtype=np.float64)
+        bad_length = np.nonzero(~(length > 0.0) | ~np.isfinite(length))[0]
         if bad_length.size:
             raise ValueError(f"length must be positive and finite; bad at reach indices {bad_length[:10].tolist()}")
-        to_index = self.to_index.astype(np.int64)
+        to_index = np.asarray(static["to_index"], dtype=np.int64)
         n = to_index.size
         bad = np.nonzero((to_index < -1) | (to_index >= n))[0]
         if bad.size:

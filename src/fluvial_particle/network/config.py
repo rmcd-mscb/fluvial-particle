@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import datetime as dtm
 import pathlib
@@ -130,10 +131,10 @@ def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None
         particle_mass: the config's global particle mass, if any.
 
     Returns:
-        A read-only copy of the validated row (a `types.MappingProxyType`) with every value
-        normalized by `_jsonify` (datetimes to ISO strings, numpy scalars to Python scalars, in
-        ``curve`` pairs too), so the row is JSON-safe by construction and cannot be edited past
-        these checks.
+        A read-only copy of the validated row (a `types.MappingProxyType`, with ``curve`` as a
+        tuple of tuples so the row is immutable one level down) whose every value is normalized by
+        `_jsonify` (datetimes to ISO strings, numpy scalars to Python scalars, in ``curve`` pairs
+        too), so the row is JSON-safe by construction and cannot be edited past these checks.
 
     Raises:
         ValueError: the row is missing a reach_id, has an invalid form, sets
@@ -160,7 +161,7 @@ def _validate_source(i: int, row: Mapping[str, Any], particle_mass: float | None
         raise ValueError(f"sources[{i}] form 'concentration' needs value or curve")
     out = {k: _jsonify(v) for k, v in row.items()}
     if "curve" in out:
-        out["curve"] = [(_jsonify(t), _jsonify(v)) for t, v in row["curve"]]
+        out["curve"] = tuple((_jsonify(t), _jsonify(v)) for t, v in row["curve"])
     # Read-only: a validated row must not be edited past the checks above (NetworkConfig is frozen).
     return types.MappingProxyType(out)
 
@@ -342,7 +343,8 @@ class NetworkConfig:
             A JSON-safe dict of the config's fields.
         """
         d: dict[str, Any] = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
-        d["sources"] = [dict(r) for r in self.sources]
+        # Deep copy: a caller editing an emitted row's nested curve must not reach the frozen config.
+        d["sources"] = [copy.deepcopy(dict(r)) for r in self.sources]
         d["dispersion"] = self.dispersion.to_dict()
         for name in ("start_time", "end_time"):
             if d[name] is not None:

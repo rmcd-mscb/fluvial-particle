@@ -304,7 +304,7 @@ class FileHydraulicsProvider:
             ValueError: to_index is out of range, contains a cycle, disagrees with
                 is_outlet, or length is non-positive or non-finite.
         """
-        Network(static)  # range, cycles, and positive finite lengths are the Network's invariants
+        Network.validate_static(static)  # range, cycles, and positive finite lengths
         to_index = np.asarray(static["to_index"], dtype=np.int64)
         is_outlet = np.asarray(static["is_outlet"]) != 0
         if not np.array_equal(is_outlet, to_index < 0):

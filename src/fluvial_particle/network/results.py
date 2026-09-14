@@ -161,7 +161,12 @@ class NetworkResults:
         })
 
     def map_positions(self, time: int | np.datetime64 | str) -> pd.DataFrame:
-        """positions(time) with x, y from the polylines (NaN without polylines or when inactive)."""
+        """positions(time) with x, y from the polylines.
+
+        A reach with a single vertex maps to that vertex and one with no vertices to the static
+        x_mid/y_mid, so x and y are NaN only for an inactive particle or for a reach with neither
+        polyline nor midpoint.
+        """
         df = self.positions(time)
         assert isinstance(df, pd.DataFrame)
         x, y = self.network.map_position(df["reach_index"].to_numpy(), df["s"].to_numpy())

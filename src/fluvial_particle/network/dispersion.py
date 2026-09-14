@@ -33,8 +33,9 @@ def fischer_coefficient(
         cap: optional upper bound (m^2/s).
 
     Returns:
-        K (m^2/s), 0 where depth, ustar, or velocity is 0.
-        (`dispersion_coefficient` additionally zeroes K where flow_out is 0.)
+        K (m^2/s), 0 where depth, ustar, or velocity is 0. (The Fischer model is not masked on
+        flow_out: a dry reach already has depth or ustar 0. Only `dispersion_coefficient`'s
+        "constant" model masks on flow_out, since its K does not come from the hydraulics.)
     """
     v = np.asarray(velocity, dtype=np.float64)
     d = np.asarray(depth, dtype=np.float64)
