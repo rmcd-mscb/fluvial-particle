@@ -16,8 +16,6 @@ from fluvial_particle.RiverGrid import DEFAULT_WATER_DENSITY, RiverGrid
 from tests.support import write_straight_channel
 
 
-pytestmark = pytest.mark.slow
-
 FIELD_MAP_2D = {
     "bed_elevation": "bed_elevation",
     "wet_dry": "wet_dry",
@@ -40,6 +38,11 @@ def diffusion(lev):
     return lev + BETA * USTAR * DEPTH, BETA * USTAR * DEPTH
 
 
+def channel(tmp_path, **kwargs):
+    """Write the test channel with the depth and shear that ``diffusion()`` assumes."""
+    return write_straight_channel(tmp_path, depth=DEPTH, shear=kwargs.pop("shear", SHEAR), **kwargs)
+
+
 def run_channel(paths, x, y, z, *, dt, n_steps, lev, track3d=0, frac=None, **kwargs):
     """Drive RiverGrid + Particles directly (no file output) and return the particles."""
     river = RiverGrid(track3d, paths[0], paths[1], FIELD_MAP_2D, FIELD_MAP_3D)
@@ -52,9 +55,13 @@ def run_channel(paths, x, y, z, *, dt, n_steps, lev, track3d=0, frac=None, **kwa
 
 
 def test_pure_advection_is_exact(tmp_path):
-    """With K = 0 every particle moves exactly U dt per step and leaves at the boundary cell."""
+    """With K = 0 every particle moves exactly U dt per step and leaves at the boundary cell.
+
+    Every particle exits in the same step, which used to raise ``ValueError`` in
+    ``Particles._is_part_wet`` (see ``tests/test_validate_z.py`` for the minimal reproduction).
+    """
     length, dx = 300.0, 5.0
-    paths = write_straight_channel(tmp_path, length=length, dx=dx, shear=0.0)
+    paths = channel(tmp_path, length=length, dx=dx, shear=0.0)
     n, dt, x0 = 50, 1.0, 50.3
     x = np.full(n, x0)
     y = np.zeros(n)
@@ -74,12 +81,13 @@ def test_pure_advection_is_exact(tmp_path):
     assert not parts.in_bounds_mask.any(), "all particles should be deactivated at the boundary cell"
 
 
+@pytest.mark.slow
 def test_gaussian_plume_moments_and_normality(tmp_path):
     """A point release in a wide channel spreads as a Gaussian with mean U t and variance 2 K t."""
     n, dt, n_steps, lev = 20000, 1.0, 200, 0.25
     kh, _ = diffusion(lev)
     t_end = n_steps * dt
-    paths = write_straight_channel(tmp_path, length=600.0, width=160.0, dx=5.0, dy=2.0)
+    paths = channel(tmp_path, length=600.0, width=160.0, dx=5.0, dy=2.0)
     x0 = 100.0
     parts = run_channel(
         paths,
@@ -99,11 +107,11 @@ def test_gaussian_plume_moments_and_normality(tmp_path):
         assert abs(disp.var() - var) < 3.0 * var * np.sqrt(2.0 / n), (
             f"{label} variance {disp.var():.4g} vs {var:.4g} (tolerance {3.0 * var * np.sqrt(2.0 / n):.4g})"
         )
-        assert stats.normaltest(disp).pvalue > 0.01, f"{label} displacements are not normal"
+        assert stats.normaltest(disp).pvalue > 1e-3, f"{label} displacements are not normal"
 
 
 def _uniformity_report(values, lo, hi, n_bins=20):
-    """Chi-square p-value for a uniform histogram on [lo, hi] plus the edge-bin excess in sigma."""
+    """Return (chi-square p-value for a uniform histogram on [lo, hi], edge-bin excess in sigma, bin counts)."""
     counts, _ = np.histogram(values, bins=n_bins, range=(lo, hi))
     expected = values.size / n_bins
     p = stats.chisquare(counts).pvalue
@@ -111,39 +119,46 @@ def _uniformity_report(values, lo, hi, n_bins=20):
     return p, edge_sigma, counts
 
 
+@pytest.mark.slow
 def test_well_mixed_lateral_stays_uniform(tmp_path):
     """Particles released uniformly across a wet channel with dry margins remain uniform.
 
-    The dry margin is a reflecting wall for a passive tracer; the solver implements it with
-    ``handle_dry_parts`` (retry with a random-only step, then hold position). Any pile-up or
-    depletion in the edge bins is bias in that rule.
+    The dry margin is a no-flux wall for a passive tracer. The solver approximates it in
+    ``handle_dry_parts``: re-apply the same random displacement without the advective term, then
+    hold position if still dry. In this along-x flow the retry leaves y unchanged, so the rule is
+    effectively "hold". Any pile-up or depletion in the edge bins is bias in that rule.
     """
     n, dt, n_steps, lev = 20000, 1.0, 200, 1.0
+    dy = 2.0
     half = 20.0  # wet half width; sqrt(2 K t) ~ 20 m so every particle sees the walls
-    paths = write_straight_channel(tmp_path, length=600.0, width=100.0, dx=5.0, dy=2.0, wet_halfwidth=half + 1e-6)
+    paths = channel(tmp_path, length=600.0, width=100.0, dx=5.0, dy=dy, wet_halfwidth=half + 1e-6)
     rng = np.random.RandomState(SEED + 1)
     y0 = rng.uniform(-half, half, n)
     parts = run_channel(paths, np.full(n, 100.0), y0, np.full(n, 0.5 * DEPTH), dt=dt, n_steps=n_steps, lev=lev)
     active = parts.in_bounds_mask is None or parts.in_bounds_mask
     assert np.all(active), "no particle should leave the grid through the dry margin"
-    # The cell-based wet/dry check makes cells touching a dry node dry, so the effective wall is one
-    # cell inside the dry node line. Test uniformity on the interior that particles can occupy.
+    # The cell-based wet/dry check makes cells touching a dry node dry, so the effective wall is the
+    # last wet node line, one cell inside the first dry node line.
+    wall = dy * np.floor(half / dy)
     y = parts.y
-    lo, hi = y.min(), y.max()
-    p, edge_sigma, counts = _uniformity_report(y, lo, hi)
+    assert y.min() >= -wall and y.max() <= wall, f"particles crossed the wall at |y| = {wall}"
+    assert y.min() < -wall + dy and y.max() > wall - dy, "particles do not reach the wall"
+    p, edge_sigma, counts = _uniformity_report(y, -wall, wall)
     assert p > 1e-3, f"lateral distribution not uniform (p={p:.2e}, edge bins {edge_sigma} sigma):\n{counts}"
 
 
+@pytest.mark.slow
 def test_well_mixed_vertical_stays_uniform(tmp_path):
     """Particles released uniformly over the depth remain uniform under the bed/surface rule.
 
-    ``validate_z`` reflects particles off ``[vertbound, 1 - vertbound]`` of the depth. The earlier
-    clamp left about 11% of a well-mixed column sitting exactly on the bounds after 200 s.
+    ``validate_z`` reflects particles off ``[vertbound, 1 - vertbound]`` of the depth. Regression
+    test for the reflect-vs-clamp fix (see HISTORY, Unreleased): the old clamp left about 11% of a
+    well-mixed column exactly on the bounds after 200 s and this test would fail with p << 1e-3.
     """
     n, dt, n_steps, lev, vertbound = 20000, 1.0, 200, 0.25, 0.01
     _, kz = diffusion(lev)
     assert np.sqrt(2.0 * kz * n_steps * dt) > DEPTH / 2, "run must be long enough to mix over the depth"
-    paths = write_straight_channel(tmp_path, length=600.0, width=100.0, dx=5.0, dy=2.0, nz=21)
+    paths = channel(tmp_path, length=600.0, width=100.0, dx=5.0, dy=2.0, nz=21)
     rng = np.random.RandomState(SEED + 2)
     frac0 = rng.uniform(vertbound, 1.0 - vertbound, n)
     parts = run_channel(

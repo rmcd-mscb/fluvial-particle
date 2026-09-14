@@ -5,6 +5,7 @@ import time
 from os.path import join
 from tempfile import TemporaryDirectory
 
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_equal
 
@@ -117,6 +118,18 @@ def test_particle(argdict: dict, test_out_path: str) -> None:
         test_points = get_points(test_file, test_nts - 1, twod=True)
 
         assert_allclose(test_points, new_points, atol=1e-4, rtol=0.0)
+
+        # Vertical bound rule: FallingParticles clamp, so settled particles sit exactly on the
+        # lower bound; every other class reflects, so no particle sits exactly on a bound.
+        vertbound = Settings.read(argdict["settings_file"])["vertbound"]
+        frac = new_file["properties"]["htabvbed"][new_nts - 1, :] / new_file["properties"]["depth"][new_nts - 1, :]
+        frac = frac[np.isfinite(frac)]
+        assert np.all(frac >= vertbound - 1e-12) and np.all(frac <= 1.0 - vertbound + 1e-12)
+        on_bound = np.isclose(frac, vertbound) | np.isclose(frac, 1.0 - vertbound)
+        if "falling" in argdict["settings_file"]:
+            assert on_bound.sum() >= 10, "settling particles should be clamped onto the lower bound"
+        else:
+            assert not on_bound.any(), "reflected particles should not pile up on the bounds"
 
 
 @pytest.fixture

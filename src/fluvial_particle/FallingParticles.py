@@ -112,14 +112,15 @@ class FallingParticles(Particles):
         return pz
 
     def validate_z(self, pz):
-        """Clamp new vertical positions to the water column.
+        """Clamp new vertical positions to the water column (in place).
 
-        Unlike the base class, which reflects, a settling particle that reaches the bed stays
-        there (deposition), so positions are clamped to
-        [bedelev + vertbound * depth, wse - vertbound * depth].
+        Unlike the base class, which mirror-reflects, a settling particle that reaches the lower
+        bound is not bounced back up into the column, so positions are clamped (at both the bed
+        and the surface) to [bedelev + vertbound * depth, wse - vertbound * depth]. The random
+        walk can still lift a clamped particle on a later step.
 
         Args:
-            pz (float NumPy array): new elevation array
+            pz (float NumPy array): new elevation array, modified in place
         """
         a = self.indices[pz > self.wse - self.vertbound * self.depth]
         b = self.indices[pz < self.bedelev + self.vertbound * self.depth]
