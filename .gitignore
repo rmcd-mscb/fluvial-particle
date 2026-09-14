@@ -167,3 +167,4 @@ tags
 # Persistent undo
 [._]*.un~
 notebooks/network-drb-demo-output/
+notebooks/network-chain-dispersion-output/
