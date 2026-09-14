@@ -1,6 +1,7 @@
 """End-to-end tests for run_network_simulation."""
 
 import numpy as np
+import pytest
 import xarray as xr
 
 from fluvial_particle.network.run import resolve_seed, run_network_simulation
@@ -69,7 +70,17 @@ def test_run_accepts_toml_and_prints_report(tmp_path, capsys):
     res = run_network_simulation(toml, tmp_path / "out2")
     out = capsys.readouterr().out
     assert "reaches" in out and "dispersion kick" in out and "memory" in out.lower()
+    assert "particle mass" in out and "source 0" in out
     assert res.times.size == 4
+    res.close()
+
+
+def test_run_warns_on_non_integer_steps(tmp_path):
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    cfg = config_for(path, dt=700.0, output_interval=700.0)
+    with pytest.warns(UserWarning, match="stops"):
+        res = run_network_simulation(cfg, tmp_path / "out3", seed=1, quiet=True)
+    assert res.attrs["end_time"] == "1979-01-01T01:56:40"
     res.close()
 
 

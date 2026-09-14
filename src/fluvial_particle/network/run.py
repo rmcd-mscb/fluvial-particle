@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import pathlib
 import time as _time
+import warnings
 from collections.abc import Mapping
 from os import getpid
 from typing import Any, cast
@@ -70,6 +71,16 @@ def diagnostics_report(
         f"  sources: {len(config.sources)} rows, {schedule.n} particles, total mass {schedule.mass.sum():.6g} "
         f"{config.mass_units}",
     ]
+    pm = "per-source" if config.particle_mass is None else f"{config.particle_mass:.6g} {config.mass_units}"
+    lines.append(f"  particle mass: {pm}")
+    n_sources = len(config.sources)
+    counts = np.bincount(schedule.source_index, minlength=n_sources)
+    mass_per_source = np.bincount(schedule.source_index, weights=schedule.mass, minlength=n_sources)
+    for i, row in enumerate(config.sources):
+        lines.append(
+            f"    source {i}: reach {row['reach_id']} ({row['form']}), {int(counts[i])} particles, "
+            f"mass {mass_per_source[i]:.6g} {config.mass_units}"
+        )
     inside = provider.times[(provider.times >= start) & (provider.times <= end)]
     if inside.size == 0:
         inside = provider.times[[int(np.searchsorted(provider.times, start, side="right")) - 1]]
@@ -128,75 +139,86 @@ def run_network_simulation(
     if comm is not None:
         comm.Barrier()
 
-    provider = FileHydraulicsProvider(
+    with FileHydraulicsProvider(
         cfg.hydraulics_file, interpolation=cfg.interpolation, dtype=cfg.dtype, reach_subset=cfg.reach_subset
-    )
-    start, end = cfg.resolve_times(provider.times)
-    provider.time_window = (start, end)
-    network = Network(provider.static, crs_wkt=provider.crs_wkt)
-    base_seed = resolve_seed(seed if seed is not None else cfg.seed, comm)
-    schedule = expand_sources(
-        cfg.sources,
-        network,
-        cast("HydraulicsProvider", provider),
-        start_time=start,
-        end_time=end,
-        particle_mass=cfg.particle_mass,
-        rng=np.random.RandomState(base_seed),
-    )
-    n = schedule.n
-    lo, hi = rank * n // size, (rank + 1) * n // size
-    solver = NetworkSolver(
-        network,
-        cast("HydraulicsProvider", provider),
-        schedule.slice(lo, hi),
-        start_time=start,
-        dt=cfg.dt,
-        dispersion=cfg.dispersion,
-        rng=np.random.RandomState(base_seed + 1 + rank),
-        max_hops=cfg.max_hops,
-    )
-    if rank == 0 and not quiet:
-        print(diagnostics_report(network, provider, schedule, cfg, start, end), flush=True)
+    ) as provider:
+        start, end = cfg.resolve_times(provider.times)
+        provider.time_window = (start, end)
+        network = Network(provider.static, crs_wkt=provider.crs_wkt)
+        base_seed = resolve_seed(seed if seed is not None else cfg.seed, comm)
+        schedule = expand_sources(
+            cfg.sources,
+            network,
+            cast("HydraulicsProvider", provider),
+            start_time=start,
+            end_time=end,
+            particle_mass=cfg.particle_mass,
+            rng=np.random.RandomState(base_seed),
+        )
+        n = schedule.n
+        lo, hi = rank * n // size, (rank + 1) * n // size
+        solver = NetworkSolver(
+            network,
+            cast("HydraulicsProvider", provider),
+            schedule.slice(lo, hi),
+            start_time=start,
+            dt=cfg.dt,
+            dispersion=cfg.dispersion,
+            rng=np.random.RandomState(base_seed + 1 + rank),
+            max_hops=cfg.max_hops,
+        )
+        if rank == 0 and not quiet:
+            print(diagnostics_report(network, provider, schedule, cfg, start, end), flush=True)
 
-    attrs: dict[str, Any] = {
-        "hydraulics_file": str(pathlib.Path(cfg.hydraulics_file).resolve()),
-        "reach_subset": json.dumps(cfg.to_dict()["reach_subset"]),
-        "interpolation": cfg.interpolation,
-        "dt": cfg.dt,
-        "output_interval": cfg.output_interval,
-        "end_time": str(end.astype("datetime64[s]")),
-        "seed": base_seed,
-        "mass_units": cfg.mass_units,
-        "dispersion": json.dumps(cfg.dispersion.to_dict()),
-        "sources": json.dumps(cfg.to_dict()["sources"]),
-        "fluvial_particle_version": __version__,
-        "created": str(np.datetime64("now", "s")),
-        "conventions_note": provider.conventions_note,
-    }
-    total = float((end - start) / np.timedelta64(1, "s"))
-    n_steps = int(np.floor(total / cfg.dt + 1e-9))
-    every = round(cfg.output_interval / cfg.dt)
-    with NetworkWriter(
-        out / OUTPUT_FILENAME,
-        n_particles=n,
-        reach_id=network.reach_id,
-        start_time=start,
-        attrs=attrs,
-        dtype=provider.dtype,
-        comm=comm,
-    ) as writer:
-        writer.write_schedule(schedule.slice(lo, hi), lo, hi)
-        writer.write_step(0, 0.0, solver.reach, solver.s, solver.status, lo, hi)
-        itime = 1
-        for k in range(n_steps):
-            solver.step()
-            if (k + 1) % every == 0 or k == n_steps - 1:
-                writer.write_step(itime, solver.time, solver.reach, solver.s, solver.status, lo, hi)
-                itime += 1
-        writer.write_exits(solver.exit_time, solver.exit_reach, lo, hi)
-    provider.close()
-    if rank == 0 and not quiet:
-        exited = int((solver.status == 2).sum())
-        print(f"Done: {n_steps} steps, {itime} output times, {exited} of {solver.n} local particles exited", flush=True)
-    return NetworkResults(out) if rank == 0 else None
+        total = float((end - start) / np.timedelta64(1, "s"))
+        n_steps = int(np.floor(total / cfg.dt + 1e-9))
+        every = round(cfg.output_interval / cfg.dt)
+        stop = start + np.timedelta64(int(n_steps * cfg.dt), "s")
+        if abs(total - n_steps * cfg.dt) > 1e-6:
+            warnings.warn(
+                f"run window {total:.6g} s is not an integer number of dt={cfg.dt} s steps; "
+                f"the simulation stops at {stop} rather than end_time {end}",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        attrs: dict[str, Any] = {
+            "hydraulics_file": str(pathlib.Path(cfg.hydraulics_file).resolve()),
+            "reach_subset": json.dumps(cfg.to_dict()["reach_subset"]),
+            "interpolation": cfg.interpolation,
+            "dt": cfg.dt,
+            "output_interval": cfg.output_interval,
+            "end_time": str(stop.astype("datetime64[s]")),
+            "seed": base_seed,
+            "mass_units": cfg.mass_units,
+            "dispersion": json.dumps(cfg.dispersion.to_dict()),
+            "sources": json.dumps(cfg.to_dict()["sources"]),
+            "fluvial_particle_version": __version__,
+            "created": str(np.datetime64("now", "s")),
+            "conventions_note": provider.conventions_note,
+        }
+        with NetworkWriter(
+            out / OUTPUT_FILENAME,
+            n_particles=n,
+            reach_id=network.reach_id,
+            start_time=start,
+            attrs=attrs,
+            dtype=provider.dtype,
+            comm=comm,
+        ) as writer:
+            writer.write_schedule(schedule.slice(lo, hi), lo, hi)
+            writer.write_step(0, 0.0, solver.reach, solver.s, solver.status, lo, hi)
+            itime = 1
+            for k in range(n_steps):
+                solver.step()
+                if (k + 1) % every == 0 or k == n_steps - 1:
+                    writer.write_step(itime, solver.time, solver.reach, solver.s, solver.status, lo, hi)
+                    itime += 1
+            writer.write_exits(solver.exit_time, solver.exit_reach, lo, hi)
+        if rank == 0 and not quiet:
+            exited = int((solver.status == 2).sum())
+            print(
+                f"Done: {n_steps} steps, {itime} output times, {exited} of {solver.n} local particles exited",
+                flush=True,
+            )
+        return NetworkResults(out) if rank == 0 else None
