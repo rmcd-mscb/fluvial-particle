@@ -166,3 +166,4 @@ Sessionx.vim
 tags
 # Persistent undo
 [._]*.un~
+notebooks/network-drb-demo-output/
