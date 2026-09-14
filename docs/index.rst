@@ -10,6 +10,7 @@
    optionsfile
    example
    output
+   network
    scaling
    hpcinstall
    reference
