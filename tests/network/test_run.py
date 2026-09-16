@@ -162,3 +162,17 @@ def test_run_uses_the_configured_particle_model(tmp_path):
         assert res.positions(1).loc[0, "s"] == pytest.approx(300.0)
     with run_network_simulation(config_for(path), tmp_path / "out2", seed=1, quiet=True) as res:
         assert res.attrs["particle_model"] == "passive"
+
+
+def test_run_drift_model_writes_zeta_and_reports_substeps(tmp_path, capsys):
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    cfg = config_for(path, particles={"model": "drift", "settling_velocity": 0.001})
+    with run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=False) as res:
+        assert res.attrs["particle_model"] == "drift"
+        assert res.state_variables == ("zeta",)
+        df = res.positions(1)
+        active = df[df["status"] == 1]
+        assert ((active["zeta"] > 0.0) & (active["zeta"] < 1.0)).all()
+        assert res.positions()["zeta"].attrs["fluvial_particle_state"] == 1
+    out = capsys.readouterr().out
+    assert "sub-steps" in out and "shear correction" in out

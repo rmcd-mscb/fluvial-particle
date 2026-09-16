@@ -174,7 +174,11 @@ def run_network_simulation(
             params=cfg.particles.params,
         )
         if rank == 0 and not quiet:
-            print(diagnostics_report(network, provider, schedule, cfg, start, end), flush=True)
+            report = diagnostics_report(network, provider, schedule, cfg, start, end)
+            model_lines = solver.diagnostics(provider.hydraulics(start))
+            if model_lines:
+                report += "\n" + "\n".join([f"  particle model: {cfg.particles.model}", *model_lines])
+            print(report, flush=True)
 
         total = float((end - start) / np.timedelta64(1, "s"))
         n_steps = int(np.floor(total / cfg.dt + 1e-9))

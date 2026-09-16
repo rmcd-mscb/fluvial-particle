@@ -101,6 +101,13 @@ def test_taylor_coefficient_small_ratio_limit_matches_unfloored():
     )
 
 
+def test_taylor_coefficient_is_zero_without_vertical_mixing():
+    cfg = VerticalDispersionConfig(profile="value", value=0.0)
+    assert shear_dispersion_coefficient(cfg, zeta_min=0.001, ustar_depth=0.1) == 0.0
+    vp = VerticalProfiles(cfg, zeta_min=0.001)
+    assert list(vp.shear_coefficient(np.array([0.1]), np.array([0.7]), np.array([1.0]))) == [0.0]
+
+
 def test_taylor_coefficient_value_profile_needs_the_reach_scale():
     cfg = VerticalDispersionConfig(profile="value", value=0.01)
     with pytest.raises(ValueError, match="ustar"):

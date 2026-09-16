@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 class ShearTable(Protocol):
     """What the shear correction needs from a model: Taylor's coefficient per reach."""
 
-    def shear_coefficient(self, ustar: FloatArray, v: FloatArray) -> FloatArray:
+    def shear_coefficient(self, ustar: FloatArray, v: FloatArray, h: FloatArray | None = None) -> FloatArray:
         """Dimensionless shear-dispersion coefficient ``c`` per reach (``K_shear = c ustar h``)."""
         ...
 
@@ -197,8 +197,9 @@ class NetworkSolver:
         if self._shear_table is None:
             return k
         ustar = np.asarray(h["ustar"], dtype=np.float64)
-        c = self._shear_table.shear_coefficient(ustar, np.asarray(h["velocity"], dtype=np.float64))
-        return np.maximum(k - c * ustar * np.asarray(h["depth"], dtype=np.float64), 0.0)
+        depth = np.asarray(h["depth"], dtype=np.float64)
+        c = self._shear_table.shear_coefficient(ustar, np.asarray(h["velocity"], dtype=np.float64), depth)
+        return np.maximum(k - c * ustar * depth, 0.0)
 
     @classmethod
     def validate_params(cls, params: Mapping[str, Any]) -> dict[str, Any]:
@@ -337,6 +338,10 @@ class NetworkSolver:
             A length-``n`` array of velocity factors, or None.
         """
         return None
+
+    def diagnostics(self, h: Hydraulics) -> list[str]:  # noqa: ARG002
+        """Hook: lines for the startup report about this model on one hydraulics slice (none in the base)."""
+        return []
 
     def _release(self, t: float, dt: float, h: Hydraulics) -> FloatArray:
         """Activate particles due in (t, t + dt] (and any still pending at t); return per-particle time budgets."""

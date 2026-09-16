@@ -9,7 +9,6 @@ so the correction to the longitudinal K removes exactly what the resolved vertic
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -113,14 +112,17 @@ def shear_dispersion_coefficient(
         n: quadrature points.
 
     Returns:
-        ``c``; 0 for the uniform velocity profile. A ``"value"`` profile or a non-zero background
-        without ``ustar_depth`` raises ValueError.
+        ``c``; 0 for the uniform velocity profile, and 0 when ``Kz`` is 0 (no vertical mixing means
+        no Taylor regime and nothing for the walk to generate as dispersion within a step). A
+        ``"value"`` profile or a non-zero background without ``ustar_depth`` raises ValueError.
     """
     if cfg.velocity_profile == "uniform":
         return 0.0
     z = _domain(zeta_min, n)
-    gt = _deviation(z, cfg.kappa, ratio)
     q = _dimensionless_kz(cfg, z, ustar_depth)
+    if not np.all(q > 0.0):
+        return 0.0
+    gt = _deviation(z, cfg.kappa, ratio)
     return _taylor(z, gt, q)
 
 
@@ -284,6 +286,16 @@ class VerticalProfiles:
         return c
 
 
+def substep_counts(dt: float, kz_max: FloatArray, h: FloatArray, *, c: float = 0.1) -> npt.NDArray[np.int64]:
+    """Uncapped sub-steps per reach, ``ceil(dt / (c h^2 / Kz_max))``; 1 where there is no depth or no mixing."""
+    kz_max = np.asarray(kz_max, dtype=np.float64)
+    h = np.asarray(h, dtype=np.float64)
+    ok = (h > 0.0) & (kz_max > 0.0)
+    n = np.ones(kz_max.shape, dtype=np.int64)
+    n[ok] = np.ceil(float(dt) * kz_max[ok] / (c * h[ok] ** 2) - 1e-9).astype(np.int64)
+    return np.maximum(n, 1)
+
+
 def substep_count(dt: float, kz_max: FloatArray, h: FloatArray, *, c: float = 0.1, max_substeps: int = 500) -> int:
     """Sub-steps for the vertical walk: ``ceil(dt / (c h^2 / Kz_max))`` over the reaches, capped.
 
@@ -300,13 +312,8 @@ def substep_count(dt: float, kz_max: FloatArray, h: FloatArray, *, c: float = 0.
     Returns:
         The sub-step count.
     """
-    kz_max = np.asarray(kz_max, dtype=np.float64)
-    h = np.asarray(h, dtype=np.float64)
-    ok = (h > 0.0) & (kz_max > 0.0)
-    if not ok.any():
-        return 1
-    dt_sub = c * h[ok] ** 2 / kz_max[ok]
-    n = math.ceil(float(dt) / float(dt_sub.min()) - 1e-9)
+    counts = substep_counts(dt, kz_max, h, c=c)
+    n = int(counts.max()) if counts.size else 1
     return int(min(max(n, 1), max_substeps))
 
 
