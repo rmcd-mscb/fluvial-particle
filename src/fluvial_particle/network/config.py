@@ -540,8 +540,9 @@ scale = 1.0                   # multiplier on the Fischer coefficient
 # swim_velocity = 0.0          # m/s, positive up
 # deposition_velocity = 0.0    # m/s; 0 is a reflecting bed
 # critical_ustar = 0.2         # m/s; no deposition where the reach ustar exceeds it
-# zeta_min = 0.001             # walk domain [zeta_min, 1 - zeta_min]
-# max_substeps = 500
+# zeta_min = 0.001             # velocity-factor clip and bed contact-layer thickness (fraction of depth)
+# substep_fraction = 0.03      # fraction of the column mixing time per vertical sub-step
+# max_substeps = 1000
 # initial_zeta = "uniform"     # or a number
 # [network.particles.diel]    # optional sinusoidal vertical velocity
 # amplitude = 0.005            # m/s

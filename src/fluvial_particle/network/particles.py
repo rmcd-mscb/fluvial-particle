@@ -11,7 +11,7 @@ import numpy as np
 
 from ..random_walk import reflect_interval
 from .solver import ACTIVE, SETTLED, FloatArray, Hydraulics, IntArray, NetworkSolver
-from .vertical import VerticalProfiles, deposition_probability, substep_count, substep_counts
+from .vertical import SUBSTEP_FRACTION, VerticalProfiles, deposition_probability, substep_count, substep_counts
 
 
 STATE_KINDS = ("extensive", "intensive")
@@ -107,20 +107,30 @@ def _validate_diel(diel: Mapping[str, Any]) -> dict[str, float]:
 class DriftParticles(NetworkSolver):
     """Quasi-2D drift: a resolved vertical position per particle with settling, swimming and deposition.
 
-    Each particle carries ``zeta = z / h`` (0 bed, 1 surface) on ``[zeta_min, 1 - zeta_min]``,
-    preserved across reach hops. Per step the vertical random walk runs ``n_sub`` sub-steps of the
-    Ito form ``d zeta = [dKz/dz - w] / h dt + sqrt(2 Kz / h^2) dW`` with the configured mixing
-    profile (``[network.dispersion.vertical]``), reflecting at the surface and at the bed, where a
-    sub-step that crosses ``zeta_min`` deposits with the per-contact probability that reproduces a
-    Robin boundary with deposition velocity ``k_d`` (see ``vertical.deposition_probability``). The
-    velocity factor handed to advection is the mean of ``u(zeta) / v`` over the sub-steps. ``w`` is
-    positive downward: ``settling_velocity - swim_velocity + diel``.
+    Each particle carries ``zeta = z / h`` (0 bed, 1 surface) on ``[0, 1]``, preserved across reach
+    hops. Per step the vertical walk runs ``n_sub`` sub-steps, each an operator split of
+
+    1. mixing with the configured profile (``[network.dispersion.vertical]``) by a kernel that leaves
+       a uniform column exactly uniform at any step (``VerticalProfiles.mix``: a random rotation on
+       the sphere for the parabolic profile, a reflected Gaussian step for a constant one);
+    2. the vertical velocity ``w`` (positive down: ``settling_velocity - swim_velocity + diel``) as a
+       displacement ``-w dt / h``, mirror-reflected at the surface and the bed;
+    3. deposition: a particle whose shifted position, before reflection, is in the bed contact layer
+       ``zeta < zeta_min`` (or below the bed) has made contact and deposits with the probability that
+       reproduces a Robin bed condition with deposition velocity ``k_d``
+       (``vertical.deposition_probability``), else reflects and keeps walking.
+
+    The velocity factor handed to advection is the mean of ``u(zeta) / v`` over the sub-steps, with
+    the log law evaluated at ``clip(zeta, zeta_min, 1 - zeta_min)`` and normalized to unit mean over
+    the column, exactly as the shear-dispersion quadrature uses it.
 
     Parameters (``[network.particles]``, ``model = "drift"``): ``settling_velocity`` (m/s, down),
     ``swim_velocity`` (m/s, up), ``diel`` (``{amplitude, period, phase}``: ``w`` gains
     ``amplitude sin(2 pi t / period + phase)``), ``deposition_velocity`` (m/s; 0 is a reflecting
     bed), ``critical_ustar`` (m/s; Krone's factor ``max(0, 1 - (ustar / critical_ustar)^2)`` on the
-    deposition velocity), ``zeta_min``, ``max_substeps``, ``initial_zeta`` (``"uniform"`` or a number).
+    deposition velocity), ``zeta_min`` (velocity clip and contact-layer thickness), ``substep_fraction``
+    (fraction of the column mixing time per sub-step), ``max_substeps``, ``initial_zeta``
+    (``"uniform"`` or a number).
     """
 
     resolves_vertical = True
@@ -135,7 +145,8 @@ class DriftParticles(NetworkSolver):
         "deposition_velocity": 0.0,
         "critical_ustar": None,
         "zeta_min": 0.001,
-        "max_substeps": 500,
+        "substep_fraction": SUBSTEP_FRACTION,
+        "max_substeps": 1000,
         "initial_zeta": "uniform",
     }
 
@@ -170,6 +181,9 @@ class DriftParticles(NetworkSolver):
         p["max_substeps"] = int(p["max_substeps"])
         if p["max_substeps"] < 1:
             raise ValueError("max_substeps must be at least 1")
+        p["substep_fraction"] = float(p["substep_fraction"])
+        if p["substep_fraction"] <= 0.0:
+            raise ValueError("substep_fraction must be positive")
         p["initial_zeta"] = _validate_initial_zeta(p["initial_zeta"], p["zeta_min"])
         if p["diel"] is not None:
             p["diel"] = _validate_diel(p["diel"])
@@ -202,10 +216,9 @@ class DriftParticles(NetworkSolver):
     # ---- hooks -------------------------------------------------------------------
     def on_release(self, idx: IntArray, h: Hydraulics) -> None:  # noqa: ARG002
         """Draw the initial relative elevation of the particles released this step."""
-        zmin = self.params["zeta_min"]
         init = self.params["initial_zeta"]
         if init == "uniform":
-            self._state["zeta"][idx] = self.rng.uniform(zmin, 1.0 - zmin, idx.size)
+            self._state["zeta"][idx] = self.rng.uniform(0.0, 1.0, idx.size)
         else:
             self._state["zeta"][idx] = float(init)
 
@@ -223,38 +236,46 @@ class DriftParticles(NetworkSolver):
         ustar = np.asarray(h["ustar"], dtype=np.float64)[r]
         depth = np.asarray(h["depth"], dtype=np.float64)[r]
         v = np.asarray(h["velocity"], dtype=np.float64)[r]
-        zmin = self.params["zeta_min"]
-        lo, hi = zmin, 1.0 - zmin
-        n_sub = substep_count(dt, self.profiles.kz_max(ustar, depth), depth, max_substeps=self.params["max_substeps"])
+        n_sub = substep_count(
+            dt,
+            self.profiles.kz_max(ustar, depth),
+            depth,
+            c=self.params["substep_fraction"],
+            max_substeps=self.params["max_substeps"],
+        )
         self.last_substeps = n_sub
         w = self._vertical_velocity(t + 0.5 * dt)
         k_d = self._deposition_velocity(ustar)
         # A dry reach (depth 0) has nothing to walk in: its particles keep their zeta.
-        inv_depth = np.where(depth > 0.0, 1.0 / np.where(depth > 0.0, depth, 1.0), 0.0)
+        wet = depth > 0.0
+        inv_depth = np.where(wet, 1.0 / np.where(wet, depth, 1.0), 0.0)
         zeta = self._state["zeta"][idx].copy()
         fsum = np.zeros(idx.size)
         alive = np.ones(idx.size, dtype=bool)
         dts = tau[idx] / n_sub  # particles released mid-step walk only for their time budget
-        kz_bed = self.profiles.kz(np.full(idx.size, lo), ustar, depth)
+        zmin = self.params["zeta_min"]
+        p_dep = deposition_probability(k_d, dts, zmin * depth, settling=w)
+        check_bed = np.any(p_dep > 0.0)
         for _ in range(n_sub):
             a = np.nonzero(alive)[0]
             if a.size == 0:
                 break
-            za, ua, da, ida, dta = zeta[a], ustar[a], depth[a], inv_depth[a], dts[a]
-            kz = self.profiles.kz(za, ua, da)
-            drift = (self.profiles.dkz_dz(za, ua, da) - w) * ida
-            noise = np.sqrt(2.0 * kz * dta) * ida * self.rng.standard_normal(a.size)
-            zeta_new = za + drift * dta + noise
-            below = zeta_new < lo
-            if below.any() and np.any(k_d[a] > 0.0):
-                b = a[below]
-                p = deposition_probability(k_d[b], dts[b], kz_bed[b])
-                deposited = b[self.rng.uniform(size=b.size) < p]
-                alive[deposited] = False
-            zeta[a] = reflect_interval(zeta_new, lo, hi)
-            zeta[~alive] = lo
+            za = self.profiles.mix(zeta[a], ustar[a], depth[a], dts[a], self.rng)
+            if w != 0.0:
+                za -= w * dts[a] * inv_depth[a]
+            if check_bed:
+                # contact: the shifted position, before reflection, is in the layer [0, zeta_min) or below
+                contact = np.nonzero(za < zmin)[0]
+                if contact.size:
+                    b = a[contact]
+                    deposited = b[self.rng.uniform(size=b.size) < p_dep[b]]
+                    alive[deposited] = False
+            if w != 0.0:
+                za = reflect_interval(za, 0.0, 1.0)
+            zeta[a] = za
             live = a[alive[a]]
             fsum[live] += self.profiles.velocity_factor(zeta[live], ustar[live], v[live])
+        zeta[~alive] = 0.0  # on the bed
         self._state["zeta"][idx] = zeta
         factor = np.ones(self.n)
         factor[idx[alive]] = fsum[alive] / n_sub
@@ -272,12 +293,25 @@ class DriftParticles(NetworkSolver):
         v = np.asarray(h["velocity"], dtype=np.float64)
         wet = np.asarray(h["flow_out"], dtype=np.float64) > 0.0
         cap = self.params["max_substeps"]
-        counts = substep_counts(self.dt, self.profiles.kz_max(ustar, depth), depth)[wet]
+        counts = substep_counts(self.dt, self.profiles.kz_max(ustar, depth), depth, c=self.params["substep_fraction"])[
+            wet
+        ]
         n_cap = int((counts > cap).sum())
         lines = [
             f"  vertical walk: sub-steps per step median {int(np.median(counts)) if counts.size else 0}, "
             f"max {int(counts.max()) if counts.size else 0} (cap {cap}); {n_cap} wet reaches at the cap"
         ]
+        k_d = self.params["deposition_velocity"]
+        if k_d > 0.0 and counts.size:
+            n_sub = min(int(counts.max()), cap)
+            p = deposition_probability(
+                self._deposition_velocity(ustar[wet]),
+                self.dt / n_sub,
+                self.params["zeta_min"] * depth[wet],
+                settling=self._vertical_velocity(0.5 * self.dt),
+            )
+            note = "; clipped at 1 on some reaches: raise zeta_min or lower substep_fraction" if p.max() >= 1.0 else ""
+            lines.append(f"  deposition: per-contact probability median {np.median(p):.3g}, max {p.max():.3g}{note}")
         if self._shear_table is None:
             lines.append("  shear correction: not active")
         else:

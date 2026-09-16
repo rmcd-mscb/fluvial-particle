@@ -205,3 +205,220 @@ def test_first_passage_bias_bounded_at_default_dt(tmp_path):
         sample_std = et.std()
         ig_std = np.sqrt(mean**3 / shape)
         assert abs(sample_std - ig_std) / ig_std < 0.10
+
+
+# ---- behavioral particles: the drift model against the vertical physics -------------------------
+#
+# All runs build DriftParticles directly on an in-memory uniform reach (ustar 0.1 m/s, depth 1 m,
+# velocity 0.7 m/s: the DRB export medians) with 20,000 particles released as a slug at s = 0 of one
+# long reach, dt = 60 s, seed 12345. The vertical kernel keeps a uniform column exactly uniform at any
+# sub-step; the default sub-step fraction 0.03 resolves the within-step shear dispersion to about 2
+# percent (12 percent at the spec's original 0.1).
+
+from fluvial_particle.network.config import DispersionConfig, VerticalDispersionConfig  # noqa: E402
+from fluvial_particle.network.network import Network  # noqa: E402
+from fluvial_particle.network.particles import DriftParticles  # noqa: E402
+from fluvial_particle.network.solver import ACTIVE, SETTLED  # noqa: E402
+from fluvial_particle.network.sources import ParticleSchedule  # noqa: E402
+from fluvial_particle.network.vertical import VerticalProfiles  # noqa: E402
+from tests.network.support import ArrayHydraulicsProvider, uniform_reach_dataset  # noqa: E402
+
+
+USTAR, DEPTH, VEL = 0.1, 1.0, 0.7
+T0 = np.datetime64("1979-01-01", "ns")
+NO_LONGITUDINAL = DispersionConfig(model="none")
+
+
+def _drift(n=N, *, dispersion=NO_LONGITUDINAL, params=None, dt=60.0, width=10.0, seed=12345, length=200000.0):
+    ds = uniform_reach_dataset(length=length, velocity=VEL, depth=DEPTH, ustar=USTAR, width=width)
+    prov = ArrayHydraulicsProvider.from_dataset(ds)
+    net = Network(prov.static)
+    sch = ParticleSchedule(
+        np.zeros(n, dtype=np.int32), np.zeros(n), np.zeros(n), np.ones(n), np.zeros(n, dtype=np.int32)
+    )
+    return DriftParticles(
+        net, prov, sch, start_time=T0, dt=dt, dispersion=dispersion, rng=np.random.RandomState(seed), params=params
+    )
+
+
+def _advance(sol, seconds):
+    for _ in range(round(seconds / sol.dt)):
+        sol.step()
+    return sol
+
+
+def _uniform_pvalue(zeta, bins=20):
+    counts, _ = np.histogram(zeta, bins=bins, range=(0.0, 1.0))
+    return stats.chisquare(counts).pvalue
+
+
+def test_drift_uniform_column_stays_uniform(monkeypatch):
+    """Test 1: a passive drift particle column that starts well mixed stays well mixed.
+
+    The negative control replaces the mixing kernel with the Euler-Ito walk of the original design
+    (gradient drift term, reflection at zeta_min) at the same sub-steps: the walls of a diffusivity
+    that vanishes at the boundary throw particles to mid-column and the column is not uniform.
+    """
+    sol = _advance(_drift(), 3600.0)
+    p = _uniform_pvalue(sol.state["zeta"])
+    assert p > 0.01, f"chi-square p = {p:.3g}"
+    assert (sol.status == ACTIVE).all()
+
+    from fluvial_particle.random_walk import reflect_interval
+
+    def euler_ito(self, zeta, ustar, h, dt, rng):
+        a = self.cfg.kappa * ustar / h
+        drift = a * (1.0 - 2.0 * zeta)
+        noise = np.sqrt(2.0 * a * zeta * (1.0 - zeta) * dt) * rng.standard_normal(zeta.size)
+        return reflect_interval(zeta + drift * dt + noise, 0.001, 0.999)
+
+    monkeypatch.setattr(VerticalProfiles, "mix", euler_ito)
+    sol = _advance(_drift(), 3600.0)
+    assert _uniform_pvalue(sol.state["zeta"]) < 1e-6
+
+
+def _rouse_cdf(p_rouse, a, n=200001):
+    """CDF of the Rouse profile ((1 - z) / z * a / (1 - a))^P on [a, 1 - a]."""
+    z = np.linspace(a, 1.0 - a, n)
+    pdf = ((1.0 - z) / z * a / (1.0 - a)) ** p_rouse
+    cdf = np.concatenate([[0.0], np.cumsum(0.5 * (pdf[1:] + pdf[:-1]) * np.diff(z))])
+    cdf /= cdf[-1]
+    return z, cdf
+
+
+def test_drift_rouse_profile():
+    """Test 2: a settling particle column equilibrates to the Rouse profile (P = 0.5).
+
+    ``settling_velocity = P kappa ustar`` with a reflecting bed. The settling step is a first-order
+    operator split, so the achieved accuracy is a Kolmogorov-Smirnov distance rather than a p-value
+    (at 20,000 particles a p-value of 0.01 would demand the CDF within 1.2 points everywhere): D is
+    0.049 at the default sub-step fraction 0.03 and 0.022 at 0.01, where it has converged (0.023 at
+    0.003). Rouse numbers of 1 and above are out of reach: their profile is not integrable at the
+    bed, so a third of the truncated reference mass sits below zeta 0.01 (D is 0.14 at 0.003). The
+    reference is the profile truncated to [zeta_min, 1 - zeta_min]; the sample is clipped the same way.
+    """
+    p_rouse = 0.5
+    w = p_rouse * 0.41 * USTAR
+    sol = _advance(_drift(params={"settling_velocity": w, "substep_fraction": 0.01}), 3 * 3600.0)
+    a = 0.001
+    zeta = np.clip(sol.state["zeta"], a, 1.0 - a)
+    z, cdf = _rouse_cdf(p_rouse, a)
+    ks = stats.kstest(zeta, lambda x: np.interp(x, z, cdf))
+    assert ks.statistic < 0.03, f"P = {p_rouse}: KS D = {ks.statistic:.4f} (p = {ks.pvalue:.3g})"
+
+
+def test_drift_mean_advection_is_the_reach_velocity():
+    """Test 3: a well-mixed passive drift column advects at the reach velocity (within 3 SE)."""
+    t_end = 6 * 3600.0
+    sol = _advance(_drift(), t_end)
+    s = sol.s
+    assert (sol.status == ACTIVE).all()
+    se = s.std() / np.sqrt(s.size)
+    assert abs(s.mean() - VEL * t_end) < 3.0 * se, f"mean {s.mean():.2f} vs {VEL * t_end:.2f}, SE {se:.2f}"
+
+
+@pytest.mark.parametrize("profile", ["parabolic", "constant"])
+def test_drift_shear_dispersion_emerges(profile):
+    """Test 4: the resolved vertical shear produces Taylor's longitudinal dispersion 2 c ustar h t."""
+    t_end = 6 * 3600.0
+    vert = VerticalDispersionConfig(profile=profile)
+    sol = _advance(_drift(dispersion=DispersionConfig(model="none", vertical=vert)), t_end)
+    c = sol.profiles.shear_coefficient(np.array([USTAR]), np.array([VEL]), np.array([DEPTH]))[0]
+    expected = 2.0 * c * USTAR * DEPTH * t_end
+    ratio = sol.s.var() / expected
+    assert abs(ratio - 1.0) < 0.10, f"{profile}: variance / (2 c ustar h t) = {ratio:.3f} with c = {c:.2f}"
+
+
+def test_drift_shear_correction_restores_fischer():
+    """Test 4b: with Fischer on and the correction active, the total variance is 2 K_fischer t.
+
+    The width is chosen so the Fischer coefficient is about 2 m^2/s, of which the resolved shear
+    (c ustar h, about 0.5 m^2/s) is a quarter: the correction has to remove a visible share.
+    """
+    t_end = 6 * 3600.0
+    k_target = 2.0
+    width = float(np.sqrt(k_target * DEPTH * USTAR / (0.011 * VEL**2)))
+    sol = _advance(_drift(dispersion=DispersionConfig(model="fischer", shear_correction="auto"), width=width), t_end)
+    h = sol.provider.hydraulics(T0)
+    k_fischer = 0.011 * VEL**2 * float(h["width"][0]) ** 2 / (DEPTH * USTAR)
+    ratio = sol.s.var() / (2.0 * k_fischer * t_end)
+    assert abs(ratio - 1.0) < 0.10, f"variance / (2 K t) = {ratio:.3f}, K = {k_fischer:.2f}"
+    off = _advance(_drift(dispersion=DispersionConfig(model="fischer", shear_correction="off"), width=width), t_end)
+    assert off.s.var() > sol.s.var() * 1.1  # without the correction the shear part is counted twice
+
+
+def _robin_reference(k_d, w, kz, h, times, *, n_cells=200, dt=0.5):
+    """Deposited fraction from a finite-volume solution of dC/dt = d/dz (Kz dC/dz + w C) on [0, h].
+
+    Cells of width ``dz`` with faces between them; the upward flux at an interior face is
+    ``-Kz (C_above - C_below) / dz - w C_above`` (central diffusion, upwind settling), 0 at the
+    surface, and ``-k_d C_0`` at the bed: the Robin condition, deposition at ``k_d`` times the bed
+    concentration. Backward Euler in time from a uniform column of unit mass.
+    """
+    from scipy.linalg import solve_banded
+
+    dz = h / n_cells
+    d = kz / dz**2
+    c = np.full(n_cells, 1.0 / h)
+    # dC/dt = L C: interior L[i,i] = -2 d - w/dz, L[i,i+1] = d + w/dz, L[i,i-1] = d;
+    # bed cell: L[0,0] = -d - k_d/dz, L[0,1] = d + w/dz; surface cell: L[n-1,n-1] = -d - w/dz
+    diag = np.full(n_cells, -2.0 * d - w / dz)
+    diag[0] = -d - k_d / dz
+    diag[-1] = -d - w / dz
+    sup = np.full(n_cells - 1, d + w / dz)  # L[i, i+1]
+    sub = np.full(n_cells - 1, d)  # L[i+1, i]
+    # backward Euler: (I - dt L) c_new = c_old, in solve_banded's (upper, diagonal, lower) layout
+    ab = np.zeros((3, n_cells))
+    ab[0, 1:] = -dt * sup
+    ab[1, :] = 1.0 - dt * diag
+    ab[2, :-1] = -dt * sub
+    deposited = []
+    t = 0.0
+    lost = 0.0
+    for t_out in times:
+        while t < t_out - 1e-9:
+            c = solve_banded((1, 1), ab, c)
+            lost += k_d * c[0] * dt
+            t += dt
+        deposited.append(lost)  # k_d C_0 dt is the mass deposited per unit area; the column holds unit mass
+    return np.array(deposited)
+
+
+def test_drift_deposition_against_the_robin_condition():
+    """Test 7: the deposited fraction follows the Robin bed condition with the deposition velocity.
+
+    Run on the constant mixing profile, where the Robin condition is a regular boundary condition
+    (with the parabolic profile Kz vanishes at the bed and the continuum condition degenerates to
+    the settling flux). The reference is a finite-volume solution with 200 cells and 0.5 s steps.
+
+    The per-contact probability applies to the particles within ``zeta_min h + w dt_sub`` of the
+    bed, so it samples the mean density over that width rather than the bed density: the rate is
+    low by about ``w (zeta_min h + w dt_sub) / (2 K)`` relative, the sub-step bias bound stated in
+    the docs (3 percent at the default fraction 0.03 for this case, converging as the sub-step
+    shrinks: 0.024, 0.014, 0.007 absolute at 30 min for fractions 0.03, 0.01, 0.003). The test runs
+    at 0.003 after the initial transient; doubling the sub-step moves the answer by less than
+    0.01, which shows the derived probability, not the sub-step count, sets the rate. A huge
+    deposition velocity is the absorbing bed, where the particle rate carries the sqrt(dt) bias of
+    absorbing random walks.
+    """
+    w, k_d = 0.01, 1e-3
+    vert = VerticalDispersionConfig(profile="constant")
+    kz = 0.067 * USTAR * DEPTH
+    times = np.array([1200.0, 1800.0])
+    reference = _robin_reference(k_d, w, kz, DEPTH, times)
+
+    def deposited_fraction(params):
+        sol = _drift(dispersion=DispersionConfig(model="none", vertical=vert), params=params)
+        out = []
+        for t_out in times:
+            _advance(sol, t_out - sol.time)
+            out.append(float((sol.status == SETTLED).mean()))
+        return np.array(out)
+
+    got = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": 0.003})
+    assert np.all(np.abs(got - reference) < 0.02), f"particles {got} vs Robin reference {reference}"
+    coarse = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": 0.006})
+    assert np.all(np.abs(coarse - got) < 0.01), f"sub-step doubled: {coarse} vs {got}"
+    absorbing = deposited_fraction({"settling_velocity": w, "deposition_velocity": 1e6, "substep_fraction": 0.003})
+    reference = _robin_reference(1e6, w, kz, DEPTH, times)
+    assert np.all(np.abs(absorbing - reference) < 0.05), f"absorbing bed: {absorbing} vs {reference}"

@@ -171,10 +171,13 @@ def test_drift_validate_params_defaults_and_errors():
         "deposition_velocity": 0.0,
         "critical_ustar": None,
         "zeta_min": 0.001,
-        "max_substeps": 500,
+        "substep_fraction": 0.03,
+        "max_substeps": 1000,
         "initial_zeta": "uniform",
     }
     assert DriftParticles.validate_params({"initial_zeta": 0.3})["initial_zeta"] == 0.3
+    with pytest.raises(ValueError, match="substep_fraction"):
+        DriftParticles.validate_params({"substep_fraction": 0.0})
     diel = DriftParticles.validate_params({"diel": {"amplitude": 0.01, "period": 86400.0}})["diel"]
     assert diel == {"amplitude": 0.01, "period": 86400.0, "phase": 0.0}
     with pytest.raises(ValueError, match="unknown"):
@@ -207,7 +210,7 @@ def test_drift_on_release_initializes_zeta():
     assert np.isnan(sol.state["zeta"]).all()
     sol.step()
     z = sol.state["zeta"]
-    assert (z >= 0.01).all() and (z <= 0.99).all() and z.std() > 0.1
+    assert (z >= 0.0).all() and (z <= 1.0).all() and z.std() > 0.1
     fixed = make(DriftParticles, ds, slug(3), dt=10.0, dispersion=NO_MIXING, params={"initial_zeta": 0.3})
     fixed.step()
     np.testing.assert_allclose(fixed.state["zeta"], 0.3)
@@ -241,7 +244,7 @@ def test_drift_settles_with_an_absorbing_bed_and_not_above_critical_shear():
     sol.step()  # settling 5 m in a 1 m column: every particle touches the bed and sticks
     assert (sol.status == SETTLED).all()
     assert np.isfinite(sol.s).all() and (sol.exit_reach == sol.reach).all() and (sol.exit_time == 100.0).all()
-    np.testing.assert_allclose(sol.state["zeta"], 0.001)
+    np.testing.assert_allclose(sol.state["zeta"], 0.0)  # on the bed
     s_before = sol.s.copy()
     sol.step()
     np.testing.assert_array_equal(sol.s, s_before)  # a settled particle no longer moves
@@ -249,17 +252,17 @@ def test_drift_settles_with_an_absorbing_bed_and_not_above_critical_shear():
     held = make(DriftParticles, ds, slug(20), dt=100.0, params={**params, "critical_ustar": 0.05})
     held.step()
     assert (held.status == ACTIVE).all()  # Krone: no deposition above the critical shear
-    assert (held.state["zeta"] >= 0.001).all()
+    assert (held.state["zeta"] >= 0.0).all()
 
 
 def test_drift_deposition_is_partial_for_a_finite_deposition_velocity():
     ds = three_reach_dataset()
-    # k_d = 1e-5 m/s at Kz(zeta_min) ~ 4e-5 m2/s and 10 s sub-steps is a per-contact probability of
-    # about 1 percent; every particle reaches the bed within the step but few stick.
-    sol = make(DriftParticles, ds, slug(400), dt=100.0, params={"deposition_velocity": 1e-5, "settling_velocity": 0.05})
+    # settling 0.05 m/s: every particle reaches the bed within the 100 s step and makes contact on
+    # most sub-steps after that; k_d = 1e-3 m/s is p = k_d / w = 2 percent per contact, so some stick.
+    sol = make(DriftParticles, ds, slug(400), dt=100.0, params={"deposition_velocity": 1e-3, "settling_velocity": 0.05})
     sol.step()
     settled = int((sol.status == SETTLED).sum())
-    assert 0 < settled < 200
+    assert 0 < settled < 300
     assert ((sol.status == ACTIVE) | (sol.status == SETTLED)).all()
 
 
@@ -331,4 +334,7 @@ def test_drift_diagnostics_report_substeps_and_shear():
     lines = sol.diagnostics(sol.provider.hydraulics(sol.start_time))
     text = "\n".join(lines)
     assert "sub-steps" in text and "shear correction" in text and "active" in text
+    assert sol.last_substeps == 0
+    sol.step()
+    assert 150 <= sol.last_substeps <= 1000
     assert make(NetworkSolver, three_reach_dataset(), slug(1), dt=900.0).diagnostics({}) == []
