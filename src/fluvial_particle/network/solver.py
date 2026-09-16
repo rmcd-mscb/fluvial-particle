@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from enum import IntEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -20,6 +20,14 @@ if TYPE_CHECKING:
     # Type-only: config.py imports particles.py (for the registry), which imports this module.
     from .config import DispersionConfig
     from .particles import StateVar
+
+
+class ShearTable(Protocol):
+    """What the shear correction needs from a model: Taylor's coefficient per reach."""
+
+    def shear_coefficient(self, ustar: FloatArray, v: FloatArray) -> FloatArray:
+        """Dimensionless shear-dispersion coefficient ``c`` per reach (``K_shear = c ustar h``)."""
+        ...
 
 
 class Status(IntEnum):
@@ -162,6 +170,35 @@ class NetworkSolver:
         self._state_views: Mapping[str, npt.NDArray[Any]] = MappingProxyType({
             name: _readonly(arr) for name, arr in self._state.items()
         })
+        # Set by models that resolve the vertical to the object whose shear_coefficient(ustar, v)
+        # gives Taylor's coefficient per reach; None leaves the longitudinal K uncorrected.
+        self._shear_table: ShearTable | None = None
+        self._shear_correction_active()  # "on" with a model that cannot honour it is a config error
+
+    def _shear_correction_active(self) -> bool:
+        """Resolve ``dispersion.shear_correction`` for this model (see DispersionConfig).
+
+        Raises:
+            ValueError: ``"on"`` with a model that does not resolve the vertical.
+        """
+        mode = self.dispersion.shear_correction
+        if mode == "off":
+            return False
+        if mode == "on":
+            if not self.resolves_vertical:
+                raise ValueError(
+                    "dispersion.shear_correction = 'on' requires a particle model that resolves the vertical"
+                )
+            return True
+        return self.resolves_vertical and self.dispersion.vertical.velocity_profile != "uniform"
+
+    def _correct_shear(self, k: FloatArray, h: Hydraulics) -> FloatArray:
+        """Remove the shear-dispersion part ``c ustar h`` from ``k`` when a model resolves the vertical."""
+        if self._shear_table is None:
+            return k
+        ustar = np.asarray(h["ustar"], dtype=np.float64)
+        c = self._shear_table.shear_coefficient(ustar, np.asarray(h["velocity"], dtype=np.float64))
+        return np.maximum(k - c * ustar * np.asarray(h["depth"], dtype=np.float64), 0.0)
 
     @classmethod
     def validate_params(cls, params: Mapping[str, Any]) -> dict[str, Any]:
@@ -266,7 +303,8 @@ class NetworkSolver:
         factor = self.behave(h, tau, t, dt)
         v = np.asarray(h["velocity"], dtype=np.float64)
         d = self.dispersion
-        k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value)
+        k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value, background=d.background)
+        k = self._correct_shear(k, h)
         self._advect(v, tau, t, dt, factor)
         self._disperse(k, tau, t, dt, np.asarray(h["flow_out"], dtype=np.float64))
         self.time = t + dt

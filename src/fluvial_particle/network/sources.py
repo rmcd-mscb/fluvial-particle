@@ -347,7 +347,11 @@ def estimate_particles(
             h = provider.hydraulics(start + np.timedelta64(round(tj * 1e9), "ns"))
             vel.append(float(h["velocity"][idx]))
             kk.append(
-                float(dispersion_coefficient(h, disp.model, scale=disp.scale, cap=disp.cap, value=disp.value)[idx])
+                float(
+                    dispersion_coefficient(
+                        h, disp.model, scale=disp.scale, cap=disp.cap, value=disp.value, background=disp.background
+                    )[idx]
+                )
             )
         v_mean = float(np.mean(vel))
         k_mean = float(np.mean(kk))

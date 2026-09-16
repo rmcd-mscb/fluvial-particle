@@ -276,7 +276,9 @@ class NetworkResults:
                 raise ValueError("smoothing must be None, a bandwidth in meters, or 'auto'")
             d = json.loads(self._ds.attrs["dispersion"])
             h = self.provider.hydraulics(self.times[i])
-            k = dispersion_coefficient(h, d["model"], scale=d["scale"], cap=d["cap"], value=d["value"])
+            k = dispersion_coefficient(
+                h, d["model"], scale=d["scale"], cap=d["cap"], value=d["value"], background=d.get("background", 0.0)
+            )
             return np.sqrt(2.0 * k * float(self._ds.attrs["dt"]))
         return np.full(self.n_reach, float(smoothing))
 

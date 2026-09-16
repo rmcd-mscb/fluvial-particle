@@ -478,3 +478,61 @@ def test_behave_returning_none_equals_ones():
     np.testing.assert_array_equal(a.status, b.status)
     np.testing.assert_array_equal(a.s, b.s)
     np.testing.assert_array_equal(a.exit_time, b.exit_time)
+
+
+class Vertical(NetworkSolver):
+    """Test model flagged as resolving the vertical (no state, no walk)."""
+
+    resolves_vertical = True
+
+
+@pytest.mark.parametrize(
+    ("mode", "cls", "velocity_profile", "expected"),
+    [
+        ("auto", NetworkSolver, "log", False),
+        ("auto", NetworkSolver, "uniform", False),
+        ("auto", Vertical, "log", True),
+        ("auto", Vertical, "uniform", False),
+        ("off", Vertical, "log", False),
+        ("off", NetworkSolver, "log", False),
+        ("on", Vertical, "log", True),
+        ("on", Vertical, "uniform", True),
+    ],
+)
+def test_shear_correction_resolution(mode, cls, velocity_profile, expected):
+    from fluvial_particle.network.config import VerticalDispersionConfig
+
+    disp = DispersionConfig(shear_correction=mode, vertical=VerticalDispersionConfig(velocity_profile=velocity_profile))
+    sol = make_model(cls, three_reach_dataset(), ParticleSchedule.simple(0, 0.0, 0.0), dt=100.0, dispersion=disp)
+    assert sol._shear_correction_active() is expected
+
+
+def test_shear_correction_on_requires_a_vertical_model():
+    disp = DispersionConfig(shear_correction="on")
+    with pytest.raises(ValueError, match="shear_correction"):
+        make_model(
+            NetworkSolver, three_reach_dataset(), ParticleSchedule.simple(0, 0.0, 0.0), dt=100.0, dispersion=disp
+        )
+
+
+def test_correct_shear_is_identity_without_a_table():
+    sol = make_model(Vertical, three_reach_dataset(), ParticleSchedule.simple(0, 0.0, 0.0), dt=100.0)
+    assert sol._shear_table is None
+    h = sol.provider.hydraulics(sol.midpoint_time())
+    k = np.array([1.0, 2.0, 3.0])
+    out = sol._correct_shear(k, h)
+    np.testing.assert_array_equal(out, k)
+
+
+def test_background_dispersion_reaches_the_kick():
+    # model = "none" with a background K: the kick is sqrt(2 * 0.5 * 100) = 10 m per unit normal
+    disp = DispersionConfig(model="none", background=0.5)
+    sol = make_solver(
+        three_reach_dataset(**STILL),
+        ParticleSchedule.simple(0, 500.0, 0.0),
+        dt=100.0,
+        dispersion=disp,
+        rng=FixedNormals([1.0]),
+    )
+    sol.step()
+    assert sol.s[0] == pytest.approx(510.0)

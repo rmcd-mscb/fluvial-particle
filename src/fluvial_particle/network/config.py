@@ -25,6 +25,9 @@ else:  # pragma: no cover
 
 SOURCE_FORMS = ("slug", "loading", "concentration")
 DTYPES = ("float32", "float64")
+VERTICAL_PROFILES = ("parabolic", "constant", "value")
+VELOCITY_PROFILES = ("log", "uniform")
+SHEAR_CORRECTIONS = ("auto", "on", "off")
 
 
 def parse_datetime(value: str | dtm.datetime | np.datetime64) -> np.datetime64:
@@ -44,27 +47,101 @@ def parse_datetime(value: str | dtm.datetime | np.datetime64) -> np.datetime64:
 
 
 @dataclasses.dataclass(frozen=True)
+class VerticalDispersionConfig:
+    """The ``[network.dispersion.vertical]`` table: mixing and velocity profiles over the depth.
+
+    Read only by particle models that resolve the vertical. It mirrors the 2D/3D solver's
+    ``lev + beta * ustar * depth`` parameterization: ``beta`` for the constant profile, ``background``
+    for ``lev``; the parabolic profile's depth mean at ``kappa = 0.41`` equals ``beta = 0.067``.
+
+    Args:
+        profile: ``"parabolic"`` (``Kz = kappa ustar h zeta (1 - zeta)``), ``"constant"``
+            (``Kz = beta ustar h``), or ``"value"`` (a fixed ``Kz`` in m^2/s).
+        kappa: von Karman constant for the parabolic profile and the log law.
+        beta: coefficient of the constant profile.
+        value: ``Kz`` (m^2/s) for the ``"value"`` profile.
+        background: m^2/s added to ``Kz`` everywhere.
+        scale: multiplier on the profile's ``Kz``.
+        velocity_profile: ``"log"`` (the log law) or ``"uniform"`` (every particle at the reach velocity).
+    """
+
+    profile: str = "parabolic"
+    kappa: float = 0.41
+    beta: float = 0.067
+    value: float | None = None
+    background: float = 0.0
+    scale: float = 1.0
+    velocity_profile: str = "log"
+
+    def __post_init__(self) -> None:
+        """Validate the vertical settings.
+
+        Raises:
+            ValueError: an unknown profile, non-positive kappa, beta or scale, a negative
+                background, or the ``"value"`` profile without a non-negative value.
+        """
+        if self.profile not in VERTICAL_PROFILES:
+            raise ValueError(f"vertical profile must be one of {VERTICAL_PROFILES}, got {self.profile!r}")
+        if self.velocity_profile not in VELOCITY_PROFILES:
+            raise ValueError(
+                f"vertical velocity_profile must be one of {VELOCITY_PROFILES}, got {self.velocity_profile!r}"
+            )
+        for name in ("kappa", "beta", "scale"):
+            if getattr(self, name) <= 0.0:
+                raise ValueError(f"vertical {name} must be positive")
+        if self.background < 0.0:
+            raise ValueError("vertical background must be non-negative")
+        if self.profile == "value" and (self.value is None or self.value < 0.0):
+            raise ValueError("vertical profile 'value' requires a non-negative value")
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> VerticalDispersionConfig:
+        """Build from a mapping; unknown keys raise.
+
+        Raises:
+            ValueError: `d` contains a key that is not a field.
+        """
+        unknown = set(d) - {f.name for f in dataclasses.fields(cls)}
+        if unknown:
+            raise ValueError(f"unknown dispersion.vertical keys: {sorted(unknown)}")
+        return cls(**d)
+
+    def to_dict(self) -> dict[str, Any]:
+        """A JSON-safe dict of the fields."""
+        return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass(frozen=True)
 class DispersionConfig:
-    """Longitudinal dispersion settings.
+    """Longitudinal dispersion settings, plus the vertical sub-table for models that resolve the vertical.
 
     Args:
         model: "fischer", "constant", or "none".
         scale: multiplier on the Fischer coefficient.
         cap: upper bound on K (m^2/s).
         value: K (m^2/s) for the constant model.
+        background: m^2/s added to the longitudinal K on every wet reach, for every model.
+        shear_correction: ``"auto"`` removes the shear-dispersion part of K (which a model that
+            resolves the vertical generates itself) whenever such a model runs with a non-uniform
+            velocity profile; ``"on"`` and ``"off"`` override; ``"on"`` with a model that does not
+            resolve the vertical is a config error.
+        vertical: the ``[network.dispersion.vertical]`` table.
     """
 
     model: str = "fischer"
     scale: float = 1.0
     cap: float | None = None
     value: float | None = None
+    background: float = 0.0
+    shear_correction: str = "auto"
+    vertical: VerticalDispersionConfig = dataclasses.field(default_factory=VerticalDispersionConfig)
 
     def __post_init__(self) -> None:
         """Validate the dispersion settings.
 
         Raises:
-            ValueError: an unknown model, a non-positive scale or cap, or the
-                "constant" model without a non-negative value.
+            ValueError: an unknown model, a non-positive scale or cap, a negative background, an
+                unknown shear_correction, or the "constant" model without a non-negative value.
         """
         if self.model not in DISPERSION_MODELS:
             raise ValueError(f"dispersion model must be one of {DISPERSION_MODELS}, got {self.model!r}")
@@ -74,10 +151,16 @@ class DispersionConfig:
             raise ValueError("dispersion cap must be positive")
         if self.model == "constant" and (self.value is None or self.value < 0.0):
             raise ValueError("dispersion model 'constant' requires a non-negative value")
+        if self.background < 0.0:
+            raise ValueError("dispersion background must be non-negative")
+        if self.shear_correction not in SHEAR_CORRECTIONS:
+            raise ValueError(
+                f"dispersion shear_correction must be one of {SHEAR_CORRECTIONS}, got {self.shear_correction!r}"
+            )
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DispersionConfig:
-        """Build from a mapping; unknown keys raise.
+        """Build from a mapping (``vertical`` may be a nested mapping); unknown keys raise.
 
         Args:
             d: mapping of dispersion config fields.
@@ -91,10 +174,15 @@ class DispersionConfig:
         unknown = set(d) - {f.name for f in dataclasses.fields(cls)}
         if unknown:
             raise ValueError(f"unknown dispersion keys: {sorted(unknown)}")
-        return cls(**d)
+        data = dict(d)
+        vert = data.get("vertical", {})
+        data["vertical"] = (
+            vert if isinstance(vert, VerticalDispersionConfig) else VerticalDispersionConfig.from_dict(vert)
+        )
+        return cls(**data)
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a plain dict of the dispersion settings.
+        """Return a plain dict of the dispersion settings, with ``vertical`` nested.
 
         Returns:
             A JSON-safe dict of the dispersion fields.
@@ -430,6 +518,19 @@ model = "fischer"             # "fischer", "constant", or "none"
 scale = 1.0                   # multiplier on the Fischer coefficient
 # cap = 1000.0                # optional upper bound (m2/s)
 # value = 10.0                # K for model = "constant"
+# background = 0.0            # m2/s added to K on every wet reach (the 2D/3D "lev")
+# shear_correction = "auto"   # "auto", "on", "off": remove the shear-dispersion part of K for models
+#                             # that resolve the vertical (they generate it themselves)
+
+# Vertical mixing and velocity profiles, used only by models that resolve the vertical (model = "drift").
+# [network.dispersion.vertical]
+# profile = "parabolic"       # "parabolic": Kz = kappa u* h z(1-z); "constant": Kz = beta u* h; "value"
+# kappa = 0.41                # parabolic profile and log law
+# beta = 0.067                # constant profile (the 2D/3D default; the parabolic depth mean)
+# value = 0.01                # m2/s, required for profile = "value"
+# background = 0.0            # m2/s added to Kz
+# scale = 1.0                 # multiplier on Kz
+# velocity_profile = "log"    # "log" or "uniform"
 
 # Particle model: absent means "passive", the transport kernel alone.
 # [network.particles]

@@ -95,7 +95,7 @@ def diagnostics_report(
     for t in sample:
         h = provider.hydraulics(t)
         wet = np.asarray(h["flow_out"]) > 0.0
-        k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value)
+        k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value, background=d.background)
         kicks.append(np.sqrt(2.0 * k[wet] * config.dt))
         crossed.append(np.asarray(h["velocity"])[wet] * config.dt > network.length[wet])
     kick = np.concatenate(kicks) if kicks else np.zeros(0)
