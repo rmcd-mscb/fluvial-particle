@@ -297,14 +297,13 @@ class RiverGrid:
         self.pt2d_vtk = numpy_support.numpy_to_vtk(self.pt2d_np)
         self.pt2d = vtk.vtkPoints()
         self.ptset2d = vtk.vtkPointSet()  # vtkPointSet() REQUIRES vtk>=9.1
-        self.strategy2d = vtk.vtkCellLocatorStrategy()  # requires vtk>=9.0
         self.pt2d.SetData(self.pt2d_vtk)
         self.ptset2d.SetPoints(self.pt2d)
         # Build the probe
         self.probe2d = vtk.vtkProbeFilter()
         self.probe2d.SetInputData(self.ptset2d)
         self.probe2d.SetSourceData(self.vtksgrid2d)
-        self.probe2d.SetFindCellStrategy(self.strategy2d)
+        self._configure_probe(self.probe2d)
         # Objects for 3d grid interpolation
         if self.track3d:
             self.pt3d_np = np.zeros((nparts, 3))
@@ -315,12 +314,46 @@ class RiverGrid:
                 self.probe3d = vtk.vtkProbeFilter()
             else:
                 self.probe3d = vtk.vtkPProbeFilter()
-            strategy3d = vtk.vtkCellLocatorStrategy()
             self.pt3d.SetData(self.pt3d_vtk)
             self.pts3d.SetPoints(self.pt3d)
             self.probe3d.SetInputData(self.pts3d)
             self.probe3d.SetSourceData(self.vtksgrid3d)
-            self.probe3d.SetFindCellStrategy(strategy3d)
+            self._configure_probe(self.probe3d)
+
+    @staticmethod
+    def _configure_probe(probe):
+        """Make the probe locate cells exactly, with no tolerance band at cell faces.
+
+        vtkProbeFilter defaults to an auto-computed tolerance (0.1% of the largest cell diagonal,
+        millimetres on metre-scale cells) and hands it to the cell locator. Before
+        VTK 9.7 the locator's FindCell ignored it, so cell location was exact. VTK 9.7's locators
+        honour it, so a point within the tolerance of a cell face can be assigned to the
+        neighbouring cell: wet/dry checks flip at the bank and velocities near cell faces are
+        extrapolated from the neighbouring cell (issue #41). A zero tolerance restores exact
+        location on 9.7.
+
+        Below 9.7 a vtkCellLocatorStrategy is required as well: the probe's default closest-point
+        strategy misclassifies bank points regardless of tolerance. The strategy classes are
+        deprecated in 9.7, where the probe's default locator is exact with a zero tolerance, so
+        the strategy is only built and attached below 9.7; a future VTK that removes the classes
+        changes nothing here.
+
+        Args:
+            probe (vtkProbeFilter): the probe to configure; vtkPProbeFilter inherits the same API
+
+        Raises:
+            RuntimeError: if the installed VTK ignores or clamps the zero tolerance
+        """
+        probe.ComputeToleranceOff()
+        probe.SetTolerance(0.0)
+        if probe.GetComputeTolerance() or probe.GetTolerance() > 0.0:
+            raise RuntimeError(
+                f"VTK {vtk.vtkVersion.GetVTKVersion()} did not accept a zero probe tolerance "
+                f"(ComputeTolerance={probe.GetComputeTolerance()}, Tolerance={probe.GetTolerance()}); "
+                "cell location would not be exact at cell faces"
+            )
+        if (vtk.vtkVersion.GetVTKMajorVersion(), vtk.vtkVersion.GetVTKMinorVersion()) < (9, 7):
+            probe.SetFindCellStrategy(vtk.vtkCellLocatorStrategy())
 
     def create_hdf5(self, nprints, time, fname="cells.h5", **dset_kwargs):
         """Create HDF5 file for cell-centered results.

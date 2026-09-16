@@ -125,10 +125,16 @@ def mypy(session: nox.Session) -> None:
         session.run("mypy", f"--python-executable={sys.executable}", "noxfile.py")
 
 
+# The 2D/3D solver's probe configuration has a branch per VTK version (RiverGrid._configure_probe);
+# run the suite on both sides of the 9.7 gate.
+vtk_versions = ["9.6.2", "9.7.0"]
+
+
 @nox.session(python=python_versions)
-def tests(session: nox.Session) -> None:
-    """Run the test suite."""
-    session.install("-e", ".[ci,dev]")
+@nox.parametrize("vtk", vtk_versions, ids=["vtk" + "".join(v.split(".")[:2]) for v in vtk_versions])
+def tests(session: nox.Session, vtk: str) -> None:
+    """Run the test suite against one VTK version."""
+    session.install("-e", ".[ci,dev]", f"vtk=={vtk}")
     session.install("coverage[toml]", "pytest", "pygments")
     try:
         session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)

@@ -25,9 +25,10 @@ jobs:
           - { python-version: "3.13", os: ubuntu-latest, session: "safety" }
           - { python-version: "3.13", os: macos-latest, session: "safety" }
           # - { python-version: "3.13", os: ubuntu-latest, session: "mypy" }
-          - { python-version: "3.13", os: ubuntu-latest, session: "tests" }
-          - { python-version: "3.13", os: macos-latest, session: "tests" }
-          # - { python-version: "3.13", os: windows-latest, session: "tests" }  # Disabled: Windows HDF5 file locking issues
+          - { python-version: "3.13", os: ubuntu-latest, session: "tests-3.13(vtk96)" }
+          - { python-version: "3.13", os: ubuntu-latest, session: "tests-3.13(vtk97)" }
+          - { python-version: "3.13", os: macos-latest, session: "tests-3.13(vtk97)" }
+          # - { python-version: "3.13", os: windows-latest, session: "tests-3.13(vtk97)" }  # Disabled: Windows HDF5 file locking issues
           # - { python-version: "3.13", os: ubuntu-latest, session: "typeguard" }
           # - { python-version: "3.13", os: ubuntu-latest, session: "xdoctest" }
           - { python-version: "3.13", os: ubuntu-latest, session: "docs-build" }
@@ -86,10 +87,10 @@ jobs:
           nox --force-color --python=${{ matrix.python-version }}
 
       - name: Upload coverage data
-        if: always() && matrix.session == 'tests'
+        if: always() && startsWith(matrix.session, 'tests')
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-data-${{ matrix.python-version }}-${{ matrix.os }}
+          name: coverage-data-${{ matrix.python-version }}-${{ matrix.os }}-${{ matrix.session }}
           path: ".coverage.*"
           include-hidden-files: true
 
