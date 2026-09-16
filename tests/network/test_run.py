@@ -1,5 +1,7 @@
 """End-to-end tests for run_network_simulation."""
 
+import json
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -148,3 +150,15 @@ def test_run_window_with_no_hydraulics_timestamp_inside(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "dt check" in out
     res.close()
+
+
+def test_run_uses_the_configured_particle_model(tmp_path):
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    cfg = config_for(path, particles={"model": "tests.network.support:HalfSpeed"})
+    with run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=True) as res:
+        assert res.attrs["particle_model"] == "tests.network.support:HalfSpeed"
+        assert json.loads(res.attrs["particles"]) == {"model": "tests.network.support:HalfSpeed"}
+        # half speed: the reach 101 slug is at 300 m after 600 s instead of 600 m
+        assert res.positions(1).loc[0, "s"] == pytest.approx(300.0)
+    with run_network_simulation(config_for(path), tmp_path / "out2", seed=1, quiet=True) as res:
+        assert res.attrs["particle_model"] == "passive"

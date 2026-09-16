@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 import numpy as np
 import numpy.typing as npt
 
-from .config import DispersionConfig
 from .dispersion import dispersion_coefficient
 from .network import Network
 from .provider import HydraulicsProvider
@@ -18,6 +17,8 @@ from .sources import ParticleSchedule
 
 
 if TYPE_CHECKING:
+    # Type-only: config.py imports particles.py (for the registry), which imports this module.
+    from .config import DispersionConfig
     from .particles import StateVar
 
 
@@ -87,9 +88,14 @@ class NetworkSolver:
         dispersion: dispersion settings.
         rng: random state supplying standard normals.
         max_hops: cap on reach hops per particle per step; exceeding it raises RuntimeError.
+        params: the model's parameters from ``[network.particles]`` (everything but ``model``);
+            validated and completed with defaults by ``validate_params``.
     """
 
     STATE: ClassVar[tuple[StateVar, ...]] = ()
+    # True for models that track a vertical position; drives the shear correction of the
+    # longitudinal dispersion coefficient (see DispersionConfig.shear_correction).
+    resolves_vertical: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -102,6 +108,7 @@ class NetworkSolver:
         dispersion: DispersionConfig,
         rng: np.random.RandomState,
         max_hops: int = 1000,
+        params: Mapping[str, Any] | None = None,
     ) -> None:
         """Allocate particle state arrays from the schedule and prepare the solver clock.
 
@@ -114,7 +121,9 @@ class NetworkSolver:
             dispersion: dispersion settings.
             rng: random state supplying standard normals.
             max_hops: cap on reach hops per particle per step; exceeding it raises RuntimeError.
+            params: model parameters (see ``validate_params``).
         """
+        self.params: dict[str, Any] = self.validate_params(params or {})
         self.network = network
         self.provider = provider
         self.start_time: np.datetime64 = cast("np.datetime64", start_time.astype("datetime64[ns]"))
@@ -153,6 +162,26 @@ class NetworkSolver:
         self._state_views: Mapping[str, npt.NDArray[Any]] = MappingProxyType({
             name: _readonly(arr) for name, arr in self._state.items()
         })
+
+    @classmethod
+    def validate_params(cls, params: Mapping[str, Any]) -> dict[str, Any]:
+        """Validate the model's parameters and fill in defaults.
+
+        The passive model takes none. Subclasses override this to declare theirs; an unknown key
+        always raises, as everywhere in the config.
+
+        Args:
+            params: the ``[network.particles]`` table without ``model``.
+
+        Returns:
+            The validated parameters with defaults filled in.
+
+        Raises:
+            ValueError: a key the model does not know.
+        """
+        if params:
+            raise ValueError(f"{cls.__name__} takes no parameters, got {sorted(params)}")
+        return {}
 
     # ---- declared model state ---------------------------------------------------
     @property

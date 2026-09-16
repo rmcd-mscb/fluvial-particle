@@ -9,6 +9,8 @@ import numpy as np
 import numpy.typing as npt
 import xarray as xr
 
+from fluvial_particle.network.solver import NetworkSolver
+
 
 G = 9.80665
 FIELD_NAMES = ("flow_in", "flow_out", "velocity", "depth", "width", "ustar")
@@ -247,3 +249,23 @@ class ArrayHydraulicsProvider:
 
     def close(self) -> None:
         """Nothing to release."""
+
+
+class HalfSpeed(NetworkSolver):
+    """Test model: records releases and advects at half the reach velocity (no parameters)."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        self.released: list[npt.NDArray[np.int64]] = []
+        self.behave_calls: list[tuple[float, float, float]] = []
+
+    def on_release(self, idx: npt.NDArray[np.int64], h: object) -> None:  # noqa: ARG002
+        self.released.append(idx.copy())
+
+    def behave(self, h: object, tau: npt.NDArray[np.float64], t: float, dt: float) -> npt.NDArray[np.float64]:  # noqa: ARG002
+        self.behave_calls.append((t, dt, float(tau[0])))
+        return np.full(self.n, 0.5)
+
+
+class NotASolver:
+    """Registry test: a class that does not subclass NetworkSolver."""

@@ -6,7 +6,13 @@ import sys
 import numpy as np
 import pytest
 
-from fluvial_particle.network.config import DispersionConfig, NetworkConfig, get_network_config_template, parse_datetime
+from fluvial_particle.network.config import (
+    DispersionConfig,
+    NetworkConfig,
+    ParticlesConfig,
+    get_network_config_template,
+    parse_datetime,
+)
 
 
 if sys.version_info >= (3, 11):
@@ -180,3 +186,33 @@ def test_guard_rails_on_scalars():
         DispersionConfig(scale=0.0)
     with pytest.raises(ValueError, match="dispersion cap must be positive"):
         DispersionConfig(cap=-1.0)
+
+
+def test_particles_config_defaults_and_flattening():
+    assert ParticlesConfig() == ParticlesConfig(model="passive")
+    assert ParticlesConfig.from_dict({}).model == "passive"
+    pc = ParticlesConfig.from_dict({"model": "tests.network.support:HalfSpeed"})
+    assert pc.params == {} and pc.to_dict() == {"model": "tests.network.support:HalfSpeed"}
+    with pytest.raises(ValueError, match="x"):  # the passive model takes no parameters
+        ParticlesConfig.from_dict({"model": "passive", "x": 1})
+    with pytest.raises(KeyError, match="passive"):
+        ParticlesConfig(model="bogus")
+    with pytest.raises(TypeError):
+        pc.params["y"] = 2
+
+
+def test_network_config_particles_table():
+    cfg = NetworkConfig.from_dict(MINIMAL)
+    assert cfg.particles == ParticlesConfig()
+    assert cfg.to_dict()["particles"] == {"model": "passive"}
+    cfg = NetworkConfig.from_dict({**MINIMAL, "particles": {"model": "tests.network.support:HalfSpeed"}})
+    assert cfg.particles.model == "tests.network.support:HalfSpeed"
+    assert NetworkConfig.from_dict(cfg.to_dict()) == cfg
+    json.dumps(cfg.to_dict())
+    with pytest.raises(ValueError, match="x"):
+        NetworkConfig.from_dict({**MINIMAL, "particles": {"x": 1}})
+
+
+def test_template_mentions_particles_table():
+    text = get_network_config_template()
+    assert "[network.particles]" in text and "drift" in text

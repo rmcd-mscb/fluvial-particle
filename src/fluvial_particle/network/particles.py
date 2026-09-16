@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
+import importlib
 
 import numpy as np
+
+from .solver import NetworkSolver
 
 
 STATE_KINDS = ("extensive", "intensive")
@@ -58,3 +61,37 @@ class StateVar:
             raise ValueError(f"StateVar {self.name!r}: a vector state needs a dim name")
         if self.labels is not None and (not self.shape or len(self.labels) != self.shape[0]):
             raise ValueError(f"StateVar {self.name!r}: labels must have one entry per component ({self.shape})")
+
+
+# ---- registry ------------------------------------------------------------------
+PARTICLE_MODELS: dict[str, type[NetworkSolver]] = {"passive": NetworkSolver}
+
+
+def resolve_model(name: str) -> type[NetworkSolver]:
+    """The particle model class for a registry name or a ``"package.module:ClassName"`` path.
+
+    Args:
+        name: a key of ``PARTICLE_MODELS`` or a dotted import path with a colon before the class.
+
+    Returns:
+        The model class, a subclass of ``NetworkSolver``.
+
+    Raises:
+        KeyError: an unknown registry name (the message lists the known ones).
+        ImportError: the module or the attribute of a dotted path cannot be imported.
+        TypeError: the named object is not a subclass of ``NetworkSolver``.
+    """
+    if ":" in name:
+        module_name, _, attr = name.partition(":")
+        module = importlib.import_module(module_name)
+        try:
+            obj = getattr(module, attr)
+        except AttributeError as e:
+            raise ImportError(f"module {module_name!r} has no attribute {attr!r}") from e
+    elif name in PARTICLE_MODELS:
+        obj = PARTICLE_MODELS[name]
+    else:
+        raise KeyError(f"unknown particle model {name!r}; known models: {sorted(PARTICLE_MODELS)}")
+    if not (isinstance(obj, type) and issubclass(obj, NetworkSolver)):
+        raise TypeError(f"particle model {name!r} must be a subclass of NetworkSolver, got {obj!r}")
+    return obj

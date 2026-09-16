@@ -16,7 +16,7 @@ from fluvial_particle.network.solver import (
     Status,
 )
 from fluvial_particle.network.sources import ParticleSchedule
-from tests.network.support import ArrayHydraulicsProvider, chain_dataset, three_reach_dataset
+from tests.network.support import ArrayHydraulicsProvider, HalfSpeed, chain_dataset, three_reach_dataset
 
 
 T0 = np.datetime64("1979-01-01", "ns")
@@ -400,22 +400,6 @@ def test_conservation_over_all_statuses():
         counts = np.bincount(sol.status, minlength=5)
         assert counts.sum() == n
     assert counts[SETTLED] == 2 and counts[REMOVED] == 1 and counts[EXITED] > 0
-
-
-class HalfSpeed(NetworkSolver):
-    """Test model: records releases and advects at half the reach velocity."""
-
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
-        self.released = []
-        self.behave_calls = []
-
-    def on_release(self, idx, h):  # noqa: ARG002
-        self.released.append(idx.copy())
-
-    def behave(self, h, tau, t, dt):  # noqa: ARG002
-        self.behave_calls.append((t, dt, float(tau[0])))
-        return np.full(self.n, 0.5)
 
 
 def make_model(cls, ds, schedule, dt, dispersion=NONE, seed=0):

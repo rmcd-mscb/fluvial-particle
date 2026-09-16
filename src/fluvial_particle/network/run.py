@@ -16,9 +16,9 @@ from .. import __version__
 from .config import NetworkConfig
 from .dispersion import dispersion_coefficient
 from .network import Network
+from .particles import resolve_model
 from .provider import FileHydraulicsProvider
 from .results import NetworkResults
-from .solver import NetworkSolver
 from .sources import ParticleSchedule, expand_sources
 from .writer import OUTPUT_FILENAME, NetworkWriter
 
@@ -161,7 +161,8 @@ def run_network_simulation(
         )
         n = schedule.n
         lo, hi = rank * n // size, (rank + 1) * n // size
-        solver = NetworkSolver(
+        model_cls = resolve_model(cfg.particles.model)
+        solver = model_cls(
             network,
             provider,
             schedule.slice(lo, hi),
@@ -170,6 +171,7 @@ def run_network_simulation(
             dispersion=cfg.dispersion,
             rng=np.random.RandomState(base_seed + 1 + rank),
             max_hops=cfg.max_hops,
+            params=cfg.particles.params,
         )
         if rank == 0 and not quiet:
             print(diagnostics_report(network, provider, schedule, cfg, start, end), flush=True)
@@ -197,6 +199,8 @@ def run_network_simulation(
             "seed": base_seed,
             "mass_units": cfg.mass_units,
             "dispersion": json.dumps(cfg.dispersion.to_dict()),
+            "particle_model": cfg.particles.model,
+            "particles": json.dumps(cfg.particles.to_dict()),
             "sources": json.dumps(cfg.to_dict()["sources"]),
             "fluvial_particle_version": __version__,
             "created": str(np.datetime64("now", "s")),

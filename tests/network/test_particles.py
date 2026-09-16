@@ -5,10 +5,10 @@ import pytest
 
 from fluvial_particle.network.config import DispersionConfig
 from fluvial_particle.network.network import Network
-from fluvial_particle.network.particles import StateVar
+from fluvial_particle.network.particles import PARTICLE_MODELS, StateVar, resolve_model
 from fluvial_particle.network.solver import NetworkSolver
 from fluvial_particle.network.sources import ParticleSchedule
-from tests.network.support import ArrayHydraulicsProvider, three_reach_dataset
+from tests.network.support import ArrayHydraulicsProvider, HalfSpeed, three_reach_dataset
 
 
 T0 = np.datetime64("1979-01-01", "ns")
@@ -108,3 +108,34 @@ def test_duplicate_state_name_raises():
 
     with pytest.raises(ValueError, match="duplicate"):
         make(Dup, three_reach_dataset(), slug(1))
+
+
+# ---- registry and params -------------------------------------------------------
+def test_registry_names_and_lookup():
+    assert PARTICLE_MODELS["passive"] is NetworkSolver
+    assert resolve_model("passive") is NetworkSolver
+    assert resolve_model("tests.network.support:HalfSpeed") is HalfSpeed
+
+
+def test_registry_unknown_name_lists_known_models():
+    with pytest.raises(KeyError, match="passive"):
+        resolve_model("bogus")
+
+
+def test_registry_rejects_non_subclass_and_bad_paths():
+    with pytest.raises(TypeError, match="NetworkSolver"):
+        resolve_model("tests.network.support:NotASolver")
+    with pytest.raises(ImportError):
+        resolve_model("tests.network.support:Missing")
+    with pytest.raises(ImportError):
+        resolve_model("no.such.module:Thing")
+
+
+def test_base_validate_params_rejects_every_key():
+    assert NetworkSolver.validate_params({}) == {}
+    with pytest.raises(ValueError, match="x"):
+        NetworkSolver.validate_params({"x": 1})
+    with pytest.raises(ValueError, match="x"):
+        make(NetworkSolver, three_reach_dataset(), slug(1), params={"x": 1})
+    sol = make(NetworkSolver, three_reach_dataset(), slug(1))
+    assert sol.params == {} and NetworkSolver.resolves_vertical is False and sol.resolves_vertical is False

@@ -102,6 +102,54 @@ class DispersionConfig:
         return dataclasses.asdict(self)
 
 
+@dataclasses.dataclass(frozen=True)
+class ParticlesConfig:
+    """The ``[network.particles]`` table: which particle model runs and its parameters.
+
+    Args:
+        model: a registry name (``"passive"``, ``"drift"``) or ``"package.module:ClassName"`` for a
+            user class subclassing ``NetworkSolver``.
+        params: every other key of the table; validated by the model's ``validate_params``.
+    """
+
+    model: str = "passive"
+    params: Mapping[str, Any] = dataclasses.field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Resolve the model and validate its parameters (unknown keys raise); freeze ``params``.
+
+        ``resolve_model`` raises KeyError for an unknown registry name and TypeError for a dotted
+        path that is not a ``NetworkSolver`` subclass; the model's ``validate_params`` raises
+        ValueError for a parameter it rejects.
+        """
+        # Imported here: config -> particles -> solver, and solver imports config for types only.
+        from .particles import resolve_model
+
+        cleaned = {k: _jsonify_nested(v) for k, v in self.params.items()}
+        resolve_model(self.model).validate_params(cleaned)
+        object.__setattr__(self, "params", types.MappingProxyType(cleaned))
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> ParticlesConfig:
+        """Build from the table: ``model`` plus the model's parameters."""
+        data = dict(d)
+        model = str(data.pop("model", "passive"))
+        return cls(model=model, params=data)
+
+    def to_dict(self) -> dict[str, Any]:
+        """The flat, JSON-safe table that ``from_dict`` accepts."""
+        return {"model": self.model, **{k: copy.deepcopy(v) for k, v in self.params.items()}}
+
+
+def _jsonify_nested(value: Any) -> Any:
+    """`_jsonify` applied through nested mappings and sequences (a model's ``diel`` table, say)."""
+    if isinstance(value, Mapping):
+        return {str(k): _jsonify_nested(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_jsonify_nested(v) for v in value]
+    return _jsonify(value)
+
+
 def _jsonify(value: Any) -> Any:
     """Normalize a datetime or a numpy scalar to a JSON-serializable value; pass through otherwise.
 
@@ -184,6 +232,7 @@ class NetworkConfig:
     mass_units: str = "kg"
     max_hops: int = 1000
     seed: int | None = None
+    particles: ParticlesConfig = dataclasses.field(default_factory=ParticlesConfig)
 
     def __post_init__(self) -> None:
         """Validate and normalize the config's fields.
@@ -273,6 +322,8 @@ class NetworkConfig:
             raise ValueError(f"unknown network config keys: {sorted(unknown)}")
         disp = data.get("dispersion", {})
         data["dispersion"] = disp if isinstance(disp, DispersionConfig) else DispersionConfig.from_dict(disp)
+        part = data.get("particles", {})
+        data["particles"] = part if isinstance(part, ParticlesConfig) else ParticlesConfig.from_dict(part)
         data["sources"] = tuple(dict(r) for r in data.get("sources", ()))
         return cls(**data)
 
@@ -346,6 +397,7 @@ class NetworkConfig:
         # Deep copy: a caller editing an emitted row's nested curve must not reach the frozen config.
         d["sources"] = [copy.deepcopy(dict(r)) for r in self.sources]
         d["dispersion"] = self.dispersion.to_dict()
+        d["particles"] = self.particles.to_dict()
         for name in ("start_time", "end_time"):
             if d[name] is not None:
                 d[name] = str(np.datetime64(d[name], "s"))
@@ -378,6 +430,22 @@ model = "fischer"             # "fischer", "constant", or "none"
 scale = 1.0                   # multiplier on the Fischer coefficient
 # cap = 1000.0                # optional upper bound (m2/s)
 # value = 10.0                # K for model = "constant"
+
+# Particle model: absent means "passive", the transport kernel alone.
+# [network.particles]
+# model = "passive"            # or "drift"; or "package.module:Class" subclassing NetworkSolver
+# Drift model parameters (model = "drift"):
+# settling_velocity = 0.0      # m/s, positive down
+# swim_velocity = 0.0          # m/s, positive up
+# deposition_velocity = 0.0    # m/s; 0 is a reflecting bed
+# critical_ustar = 0.2         # m/s; no deposition where the reach ustar exceeds it
+# zeta_min = 0.001             # walk domain [zeta_min, 1 - zeta_min]
+# max_substeps = 500
+# initial_zeta = "uniform"     # or a number
+# [network.particles.diel]    # optional sinusoidal vertical velocity
+# amplitude = 0.005            # m/s
+# period = 86400.0             # s
+# phase = 0.0                  # radians
 
 # Sources: a slug (instantaneous mass), a loading (mass rate), or a concentration at the release point.
 [[network.sources]]
