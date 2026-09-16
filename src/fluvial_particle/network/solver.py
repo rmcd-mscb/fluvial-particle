@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import IntEnum
 from typing import Any, cast
 
@@ -36,6 +37,8 @@ TERMINAL_STATUSES = (EXITED, SETTLED, REMOVED)
 
 FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
+# A step's hydraulics dict as the provider returns it (export names; float64 or float32 arrays).
+Hydraulics = Mapping[str, npt.NDArray[np.floating[Any]]]
 
 
 def _readonly(arr: npt.NDArray[Any]) -> npt.NDArray[Any]:
@@ -172,19 +175,53 @@ class NetworkSolver:
         return out
 
     def step(self) -> None:
-        """Advance the clock by dt: release, advect with time carry, disperse with displacement carry."""
+        """Advance the clock by dt: release, behave, advect with time carry, disperse with displacement carry.
+
+        The transport kernel is a template method. Models override ``on_release`` and ``behave``; the
+        base versions are no-ops, so the passive model is exactly the kernel.
+        """
         t = self.time
         dt = self.dt
-        tau = self._release(t, dt)
         h = self.provider.hydraulics(self.midpoint_time())
+        tau = self._release(t, dt, h)
+        factor = self.behave(h, tau, t, dt)
         v = np.asarray(h["velocity"], dtype=np.float64)
         d = self.dispersion
         k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value)
-        self._advect(v, tau, t, dt)
+        self._advect(v, tau, t, dt, factor)
         self._disperse(k, tau, t, dt, np.asarray(h["flow_out"], dtype=np.float64))
         self.time = t + dt
 
-    def _release(self, t: float, dt: float) -> FloatArray:
+    # ---- model hooks (no-ops in the base; the passive model draws nothing here) ----
+    def on_release(self, idx: IntArray, h: Hydraulics) -> None:
+        """Hook: initialize model state for the particles released this step.
+
+        Called from ``_release`` after the particles are activated, only when ``idx`` is non-empty.
+
+        Args:
+            idx: indices of the particles released this step.
+            h: the step's hydraulics dict (export names).
+        """
+
+    def behave(self, h: Hydraulics, tau: FloatArray, t: float, dt: float) -> FloatArray | None:  # noqa: ARG002
+        """Hook: update model state before advection and return a per-particle velocity factor.
+
+        Called after release and before advection. A model may change its declared state, ``mass``
+        and ``status`` (through ``terminate``). The returned array multiplies the reach velocity in
+        this step's advection, including the time carry across a hop; ``None`` means 1 everywhere.
+
+        Args:
+            h: the step's hydraulics dict (export names).
+            tau: per-particle time budget for this step (s).
+            t: solver clock at the start of the step (s).
+            dt: step size (s).
+
+        Returns:
+            A length-``n`` array of velocity factors, or None.
+        """
+        return None
+
+    def _release(self, t: float, dt: float, h: Hydraulics) -> FloatArray:
         """Activate particles due in (t, t + dt] (and any still pending at t); return per-particle time budgets."""
         tau = np.full(self.n, dt)
         new = (self._status == UNRELEASED) & (self.release_time <= t + dt)
@@ -194,20 +231,24 @@ class NetworkSolver:
             self._s[new] = self.release_s[new]
             self._prev_reach[new] = -1
             tau[new] = t + dt - np.maximum(self.release_time[new], t)
+            self.on_release(np.nonzero(new)[0], h)
         return tau
 
-    def _advect(self, v: FloatArray, tau: FloatArray, t: float, dt: float) -> None:
+    def _advect(self, v: FloatArray, tau: FloatArray, t: float, dt: float, factor: FloatArray | None = None) -> None:
+        """Move active particles at ``factor * v[reach]`` for ``tau``, carrying leftover time across hops."""
         idx = np.nonzero(self._status == ACTIVE)[0]
         if idx.size == 0:
             return
-        self._s[idx] += v[self._reach[idx]] * tau[idx]
+        f = np.ones(self.n) if factor is None else np.asarray(factor, dtype=np.float64)
+        self._s[idx] += f[idx] * v[self._reach[idx]] * tau[idx]
         for _ in range(self.max_hops):
             over = self._s[idx] > self._length[self._reach[idx]]
             if not over.any():
                 return
             j = idx[over]
             rj = self._reach[j].astype(np.int64)
-            time_left = (self._s[j] - self._length[rj]) / v[rj]
+            uj = f[j] * v[rj]  # > 0: s only grew past length because the particle moved
+            time_left = (self._s[j] - self._length[rj]) / uj
             self._prev_reach[j] = rj
             nxt = self._to_index[rj]
             exiting = nxt < 0
@@ -219,7 +260,7 @@ class NetworkSolver:
             self._s[e] = np.nan
             m = j[~exiting]
             self._reach[m] = nxt[~exiting]
-            self._s[m] = v[nxt[~exiting]] * time_left[~exiting]
+            self._s[m] = f[m] * v[nxt[~exiting]] * time_left[~exiting]
             idx = m
         raise RuntimeError(f"a particle hopped more than max_hops={self.max_hops} reaches in one advection step")
 

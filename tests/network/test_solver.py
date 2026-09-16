@@ -400,3 +400,97 @@ def test_conservation_over_all_statuses():
         counts = np.bincount(sol.status, minlength=5)
         assert counts.sum() == n
     assert counts[SETTLED] == 2 and counts[REMOVED] == 1 and counts[EXITED] > 0
+
+
+class HalfSpeed(NetworkSolver):
+    """Test model: records releases and advects at half the reach velocity."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.released = []
+        self.behave_calls = []
+
+    def on_release(self, idx, h):  # noqa: ARG002
+        self.released.append(idx.copy())
+
+    def behave(self, h, tau, t, dt):  # noqa: ARG002
+        self.behave_calls.append((t, dt, float(tau[0])))
+        return np.full(self.n, 0.5)
+
+
+def make_model(cls, ds, schedule, dt, dispersion=NONE, seed=0):
+    prov = ArrayHydraulicsProvider.from_dataset(ds)
+    net = Network(prov.static)
+    return cls(net, prov, schedule, start_time=T0, dt=dt, dispersion=dispersion, rng=np.random.RandomState(seed))
+
+
+def test_hooks_called_and_factor_halves_the_landing():
+    # Two reaches of 100 m at 1 m/s, dt = 150 s, one particle released at s = 0 of reach 0.
+    # Base: 150 m -> reach 1 at s = 50. Half speed: 75 m -> reach 0 at s = 75.
+    ds = chain_dataset(n_reach=2, length=100.0, velocity=1.0)
+    base = make_model(NetworkSolver, ds, ParticleSchedule.simple(0, 0.0, 0.0), dt=150.0)
+    half = make_model(HalfSpeed, ds, ParticleSchedule.simple(0, 0.0, 0.0), dt=150.0)
+    base.step()
+    half.step()
+    assert base.reach[0] == 1 and base.s[0] == pytest.approx(50.0)
+    assert half.reach[0] == 0 and half.s[0] == pytest.approx(75.0)
+    assert len(half.released) == 1 and list(half.released[0]) == [0]
+    assert half.behave_calls == [(0.0, 150.0, 150.0)]
+    half.step()
+    assert len(half.released) == 1  # nothing new to release; the hook is not called with an empty index
+
+
+def test_on_release_sees_only_the_particles_released_this_step():
+    ds = chain_dataset(n_reach=2, length=100.0, velocity=1.0)
+    sch = ParticleSchedule(
+        np.zeros(3, dtype=np.int32),
+        np.zeros(3),
+        np.array([0.0, 50.0, 250.0]),
+        np.ones(3),
+        np.zeros(3, dtype=np.int32),
+    )
+    half = make_model(HalfSpeed, ds, sch, dt=100.0)
+    half.step()
+    half.step()
+    half.step()
+    assert [list(r) for r in half.released] == [[0, 1], [2]]
+
+
+def test_factor_applies_across_a_hop():
+    # Reach 0 at 1 m/s, reach 1 at 0.5 m/s, both 100 m; dt = 300 s at half speed: 150 m of travel in
+    # reach 0 crosses at 200 s, and the 100 s left run at 0.5 * 0.5 m/s in reach 1: s = 25.
+    ds = chain_dataset(n_reach=2, length=100.0, velocity=[1.0, 0.5])
+    half = make_model(HalfSpeed, ds, ParticleSchedule.simple(0, 0.0, 0.0), dt=300.0)
+    half.step()
+    assert half.reach[0] == 1 and half.s[0] == pytest.approx(25.0) and half.prev_reach[0] == 0
+    base = make_model(NetworkSolver, ds, ParticleSchedule.simple(0, 0.0, 0.0), dt=300.0)
+    base.step()
+    assert base.reach[0] == 1 and base.s[0] == pytest.approx(100.0)
+
+
+def test_factor_applies_to_the_exit_time():
+    # Reach 1 is the outlet: 100 m at 0.5 m/s * 0.5 = 400 s to exit from s = 0.
+    ds = chain_dataset(n_reach=2, length=100.0, velocity=[1.0, 0.5])
+    half = make_model(HalfSpeed, ds, ParticleSchedule.simple(1, 0.0, 0.0), dt=500.0)
+    half.step()
+    assert half.status[0] == EXITED and half.exit_time[0] == pytest.approx(400.0)
+
+
+def test_behave_returning_none_equals_ones():
+    class Ones(NetworkSolver):
+        def behave(self, h, tau, t, dt):  # noqa: ARG002
+            return np.ones(self.n)
+
+    n = 200
+    sch = ParticleSchedule(
+        np.zeros(n, dtype=np.int32), np.zeros(n), np.zeros(n), np.ones(n), np.zeros(n, dtype=np.int32)
+    )
+    a = make_model(NetworkSolver, three_reach_dataset(), sch, dt=300.0, dispersion=DispersionConfig(), seed=7)
+    b = make_model(Ones, three_reach_dataset(), sch, dt=300.0, dispersion=DispersionConfig(), seed=7)
+    for _ in range(30):
+        a.step()
+        b.step()
+    np.testing.assert_array_equal(a.reach, b.reach)
+    np.testing.assert_array_equal(a.status, b.status)
+    np.testing.assert_array_equal(a.s, b.s)
+    np.testing.assert_array_equal(a.exit_time, b.exit_time)
