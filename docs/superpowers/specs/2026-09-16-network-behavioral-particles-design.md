@@ -58,7 +58,8 @@ velocity 0.70 m/s, Fischer K 13 m^2/s).**
 - Column mixing time `h^2 / Kz_mean` with `Kz_mean = kappa ustar h / 6`
   is about 90 s. The run step is 900 s. A vertical walk that takes one
   step per `dt` fully mixes the column every step and resolves nothing;
-  the vertical model must sub-step.
+  the vertical model must sub-step (about 150 substeps at these medians
+  with the criterion of Decision 7).
 - Rouse number `P = w_s / (kappa ustar)` is 0.02 for a 1 mm/s settling
   velocity and 0.24 for 1 cm/s. The vertical model changes results when
   behaviors move at centimetres per second, or in shallow low-shear
@@ -156,8 +157,9 @@ drift term or it piles particles on the low-coefficient side.
    outside. See Decision 12.
 
 7. **Vertical model.** Relative elevation `zeta = z / h` in `[zeta_min,
-   1 - zeta_min]` per particle (`zeta_min` default 0.01, the analogue of
-   `vertbound`); it is preserved across a reach hop. Per reach and step,
+   1 - zeta_min]` per particle (`zeta_min` default 0.001, the analogue of
+   `vertbound`; see 7a for why it is ten times smaller than the 2D/3D
+   default); it is preserved across a reach hop. Per reach and step,
    from `ustar`, `depth`, `velocity` and the dispersion configuration of
    Decision 7a:
    - velocity factor `f(zeta)` from the configured velocity profile;
@@ -190,10 +192,13 @@ drift term or it piles particles on the low-coefficient side.
      and its `s` is kept (it is a position on the bed, not NaN).
    - **Sub-stepping.** The walk runs `n_sub = ceil(dt / (c h^2 / Kz_max))`
      substeps with `c = 0.1` and `Kz_max` the profile's maximum, capped by
-     `max_substeps` (default 500); the velocity factor returned to
-     advection is the mean of `f(zeta)` over the substeps. At the DRB
-     medians this is about 100 substeps of vectorized numpy over the
-     active particles, well below the cost of the hop loops.
+     `max_substeps` (default 500); one count for all active particles,
+     the maximum over their reaches, so the walk stays vectorized; the
+     velocity factor returned to advection is the mean of `f(zeta)` over
+     the substeps. At the DRB medians this is about 150 substeps of
+     vectorized numpy over the active particles, well below the cost of
+     the hop loops. The startup diagnostics report the count and the
+     reaches that hit the cap.
    `zeta` is declared state with `output=True`; `NetworkResults.profile
    (time, reach_or_bins, n_zeta=20)` histograms it.
 
@@ -234,13 +239,26 @@ drift term or it piles particles on the low-coefficient side.
    cause if it were resolved. With `shear_correction = "auto"` the
    correction is applied whenever the model resolves the vertical and
    the velocity profile is not uniform, and never otherwise; `"on"` and
-   `"off"` override. The corrected coefficient is `max(K - c ustar h, 0)`
-   where `c` is Taylor's dimensionless shear-dispersion integral for the
-   configured velocity and `Kz` profiles, evaluated once by quadrature at
-   configuration time (5.93 for the log law with the parabolic profile at
-   `kappa = 0.41`; a different number for the constant profile), so the
-   per-step cost is nil and the correction stays consistent with whatever
-   profiles the user chose.
+   `"off"` override; `"on"` with a model that does not resolve the
+   vertical is a config error. The corrected coefficient is
+   `max(K - c ustar h, 0)` where `c` is Taylor's dimensionless
+   shear-dispersion integral for the configured velocity and `Kz`
+   profiles, evaluated by quadrature **on the walk's own domain**: over
+   `[zeta_min, 1 - zeta_min]`, with the velocity factor floored at zero
+   and renormalized to unit mean, exactly as the walk applies it. That
+   is what the resolved motion generates, and it is what must be
+   removed from the kick. It is not Elder's textbook constant: on the
+   full column the quadrature gives 5.86 (Elder's `0.404 / kappa^3` at
+   `kappa = 0.41`), but truncating at `zeta_min = 0.01` removes the slow
+   near-bed layer and gives 4.53, a 23 percent loss of shear dispersion,
+   while `zeta_min = 0.001` gives 5.65, a 4 percent loss. That is why the
+   network default floor is 0.001. The floor on the velocity factor
+   costs another few percent at typical `ustar / v` (5.23 at the DRB
+   median ratio 0.14 on the full column). `c` depends on the reach only
+   through `ustar / v`, so it is tabulated once on a grid of that ratio
+   at solver construction and interpolated per reach per step; the
+   per-step cost is nil. The constant `Kz` profile at `beta = 0.067`
+   gives 6.58 on the full column.
 
 8. **Drift model parameters** (`[network.particles]`, `model = "drift"`):
    `settling_velocity` (m/s, positive down, default 0), `swim_velocity`
@@ -349,7 +367,7 @@ and the run is bit-identical to today for the same seed.
 | `diel` | none | `{amplitude, period, phase}` s and m/s |
 | `deposition_velocity` | 0.0 | m/s; 0 reflecting bed |
 | `critical_ustar` | none | m/s; Krone suppression of deposition above it |
-| `zeta_min` | 0.01 | |
+| `zeta_min` | 0.001 | see Decision 7a for the choice |
 | `max_substeps` | 500 | |
 | `initial_zeta` | `"uniform"` | or a number in (zeta_min, 1 - zeta_min) |
 | decay: `rate` | required | 1/s |
@@ -389,12 +407,14 @@ Unit (synthetic files from `tests/network/support.py`):
 - Vertical functions: `integral f(zeta) dzeta = 1` to 1e-6 by quadrature;
   `Kz` and `dKz/dz` for each profile against hand values, the constant
   profile's depth mean equal to the parabolic one at the defaults;
-  `shear_dispersion_coefficient` returns 5.93 within 1 percent for the log
-  law with the parabolic profile and 0 for the uniform velocity profile;
+  `shear_dispersion_coefficient` on the full column returns 5.86 within
+  0.5 percent for the log law with the parabolic profile (Elder), 4.53
+  within 1 percent at `zeta_min = 0.01`, 6.58 within 1 percent for the
+  constant profile, and 0 for the uniform velocity profile;
   `shear_correction = "auto"` resolves on and off correctly for each
-  model and profile combination; substep count at the DRB medians is about
-  100; `reflect_interval` folds multiple crossings and is shared with the
-  2D/3D tests.
+  model and profile combination and `"on"` raises for the passive model;
+  substep count at the DRB medians is about 150; `reflect_interval` folds
+  multiple crossings and is shared with the 2D/3D tests.
 - Status: settled particles keep `s`, get `exit_*`, are excluded from
   advection; `terminal(SETTLED)` returns them; mass conservation over all
   statuses.
@@ -413,10 +433,11 @@ Analytical acceptance (`@pytest.mark.slow`, uniform chain, seeded):
 3. **Mean advection preserved.** Well-mixed passive drift, `dispersion =
    none`: mean position after 6 h within 3 standard errors of `v t`.
 4. **Shear dispersion emerges.** Same run: position variance grows as
-   `2 (5.93 h ustar) t` within 10 percent for `t >> h^2 / Kz`; repeated
-   with the constant `Kz` profile against that profile's quadrature
-   coefficient; with the shear correction on and Fischer on, total
-   variance matches the Fischer value within 10 percent.
+   `2 c ustar h t` within 10 percent for `t >> h^2 / Kz`, with `c` the
+   quadrature value for the run's `zeta_min` and `ustar / v`; repeated
+   with the constant `Kz` profile; with the shear correction on and
+   Fischer on, total variance matches the Fischer value within 10
+   percent.
 5. **First-order loss.** Decay model: total mass at `t` within 1e-6
    relative of `M exp(-k t)` (exact per particle, so the test is a check
    on bookkeeping across hops and exits).
