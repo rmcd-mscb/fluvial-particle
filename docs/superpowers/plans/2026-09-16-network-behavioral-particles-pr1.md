@@ -20,7 +20,7 @@
 - Every quadrature and every walk uses the **same** floored, renormalized velocity factor and the **same** truncated domain, so the shear correction removes exactly what the walk generates.
 - Status codes: 0 unreleased, 1 active, 2 exited, 3 settled, 4 removed; every code above 1 is terminal.
 - Branch: `feature/network-behavioral-particles` cut from `spec/network-behavioral-particles` (PR #53, which holds the spec and this plan), rebased onto `main` once #53 merges.
-- New runtime dependency: none (`scipy` is already a dependency for the 2D/3D path; confirm with `grep scipy pyproject.toml` in Task 1 and add it to `dependencies` if it is only in an extra).
+- New runtime dependency: `scipy>=1.10` moves from the `dev` extra to `[project].dependencies` in Task 1 (checked 2026-09-16: it is only in `dev`). `vertical.py` uses `scipy.integrate.cumulative_trapezoid` at solver construction.
 
 ---
 
@@ -64,8 +64,9 @@
 ```bash
 git checkout spec/network-behavioral-particles && git pull
 git checkout -b feature/network-behavioral-particles
-grep -n scipy pyproject.toml   # must be in [project].dependencies; add it if only in an extra
 ```
+
+Move `"scipy>=1.10"` from `[project.optional-dependencies] dev` to `[project] dependencies` in `pyproject.toml` (keep the version floor; drop the "tests only" comment), then `conda run -n fluvial-particle uv pip install -e ".[dev]"`.
 
 - [ ] **Step 2: Failing tests** in `tests/test_random_walk.py`
 
