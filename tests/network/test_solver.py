@@ -5,7 +5,16 @@ import pytest
 
 from fluvial_particle.network.config import DispersionConfig
 from fluvial_particle.network.network import Network
-from fluvial_particle.network.solver import ACTIVE, EXITED, UNRELEASED, NetworkSolver, Status
+from fluvial_particle.network.solver import (
+    ACTIVE,
+    EXITED,
+    REMOVED,
+    SETTLED,
+    TERMINAL_STATUSES,
+    UNRELEASED,
+    NetworkSolver,
+    Status,
+)
 from fluvial_particle.network.sources import ParticleSchedule
 from tests.network.support import ArrayHydraulicsProvider, chain_dataset, three_reach_dataset
 
@@ -339,3 +348,55 @@ def test_status_enum_values_and_aliases():
     sol = make_solver(three_reach_dataset(), ParticleSchedule.simple(0, 100.0, 0.0), dt=200.0)
     assert sol.status.dtype == np.int8
     assert Status(int(sol.status[0])) is Status.UNRELEASED
+
+
+def test_terminal_status_codes_and_aliases():
+    assert (Status.SETTLED, Status.REMOVED) == (3, 4)
+    assert (SETTLED, REMOVED) == (Status.SETTLED, Status.REMOVED)
+    assert TERMINAL_STATUSES == (EXITED, SETTLED, REMOVED)
+    assert all(code > ACTIVE for code in TERMINAL_STATUSES)
+
+
+def test_terminate_marks_settled_and_keeps_position():
+    n = 3
+    sch = ParticleSchedule(
+        np.zeros(n, dtype=np.int32), np.zeros(n), np.zeros(n), np.ones(n), np.zeros(n, dtype=np.int32)
+    )
+    sol = make_solver(three_reach_dataset(), sch, dt=100.0)
+    sol.step()
+    sol.terminate(np.array([1]), SETTLED, sol.time)
+    assert sol.status[1] == 3
+    assert sol.exit_time[1] == sol.time
+    assert sol.exit_reach[1] == sol.reach[1] == 0
+    assert np.isfinite(sol.s[1]) and sol.s[1] == pytest.approx(100.0)
+    sol.step()
+    # a terminal particle no longer moves; the others do
+    assert sol.status[1] == 3 and sol.s[1] == pytest.approx(100.0) and sol.exit_time[1] == 100.0
+    assert sol.status[0] == ACTIVE and sol.s[0] == pytest.approx(200.0)
+
+
+def test_terminate_with_empty_index_is_a_no_op():
+    sol = make_solver(three_reach_dataset(), ParticleSchedule.simple(0, 100.0, 0.0), dt=200.0)
+    sol.step()
+    sol.terminate(np.array([], dtype=np.int64), REMOVED, sol.time)
+    assert sol.status[0] == ACTIVE and np.isnan(sol.exit_time[0])
+
+
+def test_conservation_over_all_statuses():
+    n = 50
+    sch = ParticleSchedule(
+        np.zeros(n, dtype=np.int32),
+        np.linspace(0.0, 1000.0, n),
+        np.linspace(0.0, 400.0, n),
+        np.ones(n),
+        np.zeros(n, dtype=np.int32),
+    )
+    sol = make_solver(three_reach_dataset(), sch, dt=300.0)
+    for k in range(20):
+        sol.step()
+        if k == 2:
+            sol.terminate(np.array([10, 11]), SETTLED, sol.time)
+            sol.terminate(np.array([12]), REMOVED, sol.time)
+        counts = np.bincount(sol.status, minlength=5)
+        assert counts.sum() == n
+    assert counts[SETTLED] == 2 and counts[REMOVED] == 1 and counts[EXITED] > 0

@@ -71,7 +71,9 @@ class NetworkWriter:
         v.attrs["units"] = "m"
         v.attrs["long_name"] = "distance from the reach's upstream end, NaN when not active"
         v = f.create_variable("status", ("time", "particle"), dtype="i1", chunks=chunk, fillvalue=0)
-        v.attrs["long_name"] = "0 unreleased, 1 active, 2 exited"
+        v.attrs["long_name"] = "particle status"
+        v.attrs["flag_values"] = np.array([0, 1, 2, 3, 4], dtype=np.int8)
+        v.attrs["flag_meanings"] = "unreleased active exited settled removed"
         # Same issue as reach_index: 0 ("unreleased") is a real status value, not a fill sentinel.
         del v.attrs["_FillValue"]
         for name, dt_, units, long_name, fill in (
@@ -80,8 +82,20 @@ class NetworkWriter:
             ("release_reach", "i4", None, "release reach index", None),
             ("release_s", "f8", "m", "release distance from the reach's upstream end", None),
             ("release_time", "f8", "s", "release time, seconds since start_time", None),
-            ("exit_time", "f8", "s", "exit time, seconds since start_time; NaN until exit", np.nan),
-            ("exit_reach", "i4", None, "outlet reach index at exit, -1 until exit", -1),
+            (
+                "exit_time",
+                "f8",
+                "s",
+                "time the particle reached a terminal status, seconds since start_time; NaN until then",
+                np.nan,
+            ),
+            (
+                "exit_reach",
+                "i4",
+                None,
+                "reach index at the terminal status: the outlet for exited, the bed reach for settled; -1 until then",
+                -1,
+            ),
         ):
             var_kwargs: dict[str, Any] = {} if fill is None else {"fillvalue": fill}
             v = f.create_variable(name, ("particle",), dtype=dt_, **var_kwargs)
@@ -139,7 +153,7 @@ class NetworkWriter:
             time_seconds: seconds since start_time for this output time.
             reach: reach index per particle, -1 when not active.
             s: distance from the reach's upstream end per particle, NaN when not active.
-            status: particle status per particle (0 unreleased, 1 active, 2 exited).
+            status: particle status per particle (0 unreleased, 1 active, 2 exited, 3 settled, 4 removed).
             lo: first particle index (inclusive).
             hi: last particle index (exclusive).
         """
@@ -160,11 +174,11 @@ class NetworkWriter:
     def write_exits(
         self, exit_time: npt.NDArray[np.floating[Any]], exit_reach: npt.NDArray[np.integer[Any]], lo: int, hi: int
     ) -> None:
-        """Write exit times and reaches for particles lo..hi-1 (called once at the end of the run).
+        """Write terminal times and reaches for particles lo..hi-1 (called once at the end of the run).
 
         Args:
-            exit_time: seconds since start_time at exit per particle, NaN if not yet exited.
-            exit_reach: outlet reach index at exit per particle, -1 if not yet exited.
+            exit_time: seconds since start_time at the terminal status per particle, NaN if still active.
+            exit_reach: reach index at the terminal status per particle, -1 if still active.
             lo: first particle index (inclusive).
             hi: last particle index (exclusive).
         """

@@ -178,15 +178,20 @@ class NetworkResults:
         """Per-reach (x, y) vertex arrays for plotting."""
         return self.network.polylines()
 
-    # ---- arrivals --------------------------------------------------------------
-    def arrival_times(self, outlet: int | None = None) -> pd.DataFrame:
-        """Exited particles with exit time, outlet, release reach, and mass; filtered to one outlet id if given."""
+    # ---- terminal statuses and arrivals -----------------------------------------
+    def terminal(self, status: int) -> pd.DataFrame:
+        """Particles whose final status equals ``status`` (2 exited, 3 settled, 4 removed).
+
+        Columns: ``particle``, ``exit_time`` and ``exit_datetime`` (when the status was reached),
+        ``exit_reach`` and ``exit_reach_id`` (the outlet for exited, the bed reach for settled),
+        ``release_reach``, ``release_reach_id``, ``release_time``, ``source_index``, ``mass``.
+        """
         ds = self._ds
+        done = ds["status"].values[-1] == int(status)
         et = ds["exit_time"].values.astype(np.float64)
         er = ds["exit_reach"].values.astype(np.int64)
-        done = np.isfinite(et)
         rr = ds["release_reach"].values.astype(np.int64)
-        df = pd.DataFrame({
+        return pd.DataFrame({
             "particle": np.nonzero(done)[0],
             "exit_time": et[done],
             "exit_datetime": self.start_time + (et[done] * 1e9).astype("timedelta64[ns]"),
@@ -198,6 +203,10 @@ class NetworkResults:
             "source_index": ds["source_index"].values.astype(np.int64)[done],
             "mass": ds["mass"].values.astype(np.float64)[done],
         })
+
+    def arrival_times(self, outlet: int | None = None) -> pd.DataFrame:
+        """Exited particles with exit time, outlet, release reach, and mass; filtered to one outlet id if given."""
+        df = self.terminal(2)
         if outlet is not None:
             df = df[df["exit_reach_id"] == int(outlet)].reset_index(drop=True)
         return df

@@ -20,13 +20,19 @@ class Status(IntEnum):
 
     UNRELEASED = 0
     ACTIVE = 1
-    EXITED = 2
+    EXITED = 2  # left the network at an outlet
+    SETTLED = 3  # deposited on the bed (behavioral models)
+    REMOVED = 4  # taken out by a model (mass floor, mortality)
 
 
 # Module-level aliases: the codes read as bare names in the solver and in user code.
 UNRELEASED = Status.UNRELEASED
 ACTIVE = Status.ACTIVE
 EXITED = Status.EXITED
+SETTLED = Status.SETTLED
+REMOVED = Status.REMOVED
+# Every code above ACTIVE is terminal: the particle no longer moves and exit_time/exit_reach are set.
+TERMINAL_STATUSES = (EXITED, SETTLED, REMOVED)
 
 FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
@@ -109,12 +115,12 @@ class NetworkSolver:
     # ---- particle state (read-only views of the solver's own arrays) --------
     @property
     def reach(self) -> npt.NDArray[np.int32]:
-        """Reach index of each particle, -1 when unreleased or exited."""
+        """Reach index of each particle, -1 when unreleased or exited (settled particles keep theirs)."""
         return self._views["reach"]
 
     @property
     def s(self) -> npt.NDArray[Any]:
-        """Distance from the upstream end of ``reach`` (m), NaN when unreleased or exited."""
+        """Distance from the upstream end of ``reach`` (m), NaN when unreleased or exited (settled keep theirs)."""
         return self._views["s"]
 
     @property
@@ -129,13 +135,30 @@ class NetworkSolver:
 
     @property
     def exit_time(self) -> FloatArray:
-        """Seconds from the run start at which each particle left the network, NaN if it has not."""
+        """Seconds from the run start at which each particle reached a terminal status, NaN if it has not."""
         return self._views["exit_time"]
 
     @property
     def exit_reach(self) -> npt.NDArray[np.int32]:
-        """Outlet reach each particle left through, -1 if it has not left."""
+        """Reach at the terminal status (the outlet for exited, the bed reach for settled), -1 otherwise."""
         return self._views["exit_reach"]
+
+    def terminate(self, idx: IntArray, status: int, t_end: float) -> None:
+        """Give particles ``idx`` a terminal status at time ``t_end``; they keep their reach and ``s``.
+
+        Used by behavioral models (a settled particle has a position on the bed). The base solver's
+        exits keep their own inline bookkeeping in ``_advect`` and ``_disperse``.
+
+        Args:
+            idx: particle indices.
+            status: one of ``TERMINAL_STATUSES``.
+            t_end: solver time (s) at which the particles reached the status.
+        """
+        if idx.size == 0:
+            return
+        self._status[idx] = status
+        self._exit_time[idx] = t_end
+        self._exit_reach[idx] = self._reach[idx]
 
     def midpoint_time(self) -> np.datetime64:
         """Datetime at the middle of the step about to be taken."""
