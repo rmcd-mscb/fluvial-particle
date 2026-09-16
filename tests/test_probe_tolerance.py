@@ -3,10 +3,12 @@
 ``vtkProbeFilter`` hands its auto-computed tolerance (0.1% of the largest cell diagonal) to the
 cell locator. VTK 9.7's locators honour it where earlier ones ignored it, so points within a few
 millimetres of a cell face were assigned to the neighbouring cell. That flipped wet/dry checks at
-the bank and changed every 2D/3D regression fixture. ``RiverGrid._configure_probe`` sets a zero
+the bank and failed every 2D/3D regression case. ``RiverGrid._configure_probe`` sets a zero
 tolerance and keeps the find-cell strategy below 9.7; the bank and meander tests here fail on 9.7
 without the zero tolerance and pass on 9.6 and 9.7 with it.
 """
+
+import warnings
 
 import numpy as np
 import pytest
@@ -55,16 +57,29 @@ def point_array(probe, name):
 def test_configure_probe_sets_zero_tolerance_and_gates_the_strategy(cls):
     """Both probe classes get a zero tolerance; the deprecated strategy is attached only below 9.7."""
     probe = cls()
-    RiverGrid._configure_probe(probe)
+    # On 9.7 GetFindCellStrategy is deprecated and always returns None, so the only observable sign
+    # of the strategy being attached there is the DeprecationWarning its constructor emits.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        RiverGrid._configure_probe(probe)
     np.testing.assert_equal(probe.GetTolerance(), 0.0)
     assert not probe.GetComputeTolerance()
     if PRE_97:
         assert probe.GetFindCellStrategy() is not None
-    # On 9.7 the getter is deprecated and always returns None, so there is nothing to assert there.
 
 
-@pytest.mark.parametrize("comm", [None, object()], ids=["serial", "mpi"])
-def test_wet_dry_probe_is_exact_at_the_bank(tmp_path, comm):
+def test_configure_probe_raises_if_vtk_ignores_the_zero_tolerance():
+    """A VTK that clamps or ignores the zero tolerance fails at grid load rather than drifting results."""
+
+    class Stubborn(vtk.vtkProbeFilter):
+        def GetTolerance(self):  # noqa: N802  (overrides the VTK method)
+            return 1e-3
+
+    with pytest.raises(RuntimeError, match="did not accept a zero probe tolerance"):
+        RiverGrid._configure_probe(Stubborn())
+
+
+def test_wet_dry_probe_is_exact_at_the_bank(tmp_path):
     """Points 1 um to 1 cm either side of the last wet node line get the cell they are in, not a neighbour."""
     dy, half = 2.0, 20.0
     paths = write_straight_channel(tmp_path, length=100.0, width=100.0, dx=5.0, dy=dy, wet_halfwidth=half + 1e-6)
@@ -75,7 +90,7 @@ def test_wet_dry_probe_is_exact_at_the_bank(tmp_path, comm):
     y = np.concatenate([y_dry, y_wet])
     x = np.full(y.size, 52.5)
     river = RiverGrid(0, paths[0], None, FIELD_MAP_2D, FIELD_MAP_3D)
-    river.build_probe_filter(y.size, comm=comm)
+    river.build_probe_filter(y.size)
     river.update_2d_pipeline(x, y)
     wet = point_array(river.probe2d, "CellWetDry")
     expected = np.concatenate([np.zeros(y_dry.size), np.ones(y_wet.size)])
@@ -96,8 +111,9 @@ def _cell_contains(grid, cell_id, point, tol=1e-6):
 def test_3d_probe_assigns_the_containing_hex_near_bed_and_surface(comm):
     """On a curvilinear grid, points 5 mm off the bed or surface land in the hex that contains them.
 
-    An axis-aligned synthetic channel would not catch this: its hexes are located correctly even
-    with a tolerance band. The meander fixture's skewed hexes are where the neighbouring cell wins.
+    An axis-aligned synthetic channel barely exercises this (a handful of the 400 points on VTK 9.7
+    with the default tolerance); the meander fixture's skewed hexes put about a tenth of the near-bed
+    points in the neighbouring cell, so it is the sharper guard.
     """
     # build_probe_filter only tests comm for None; vtkPProbeFilter runs serially without a controller.
     river = RiverGrid(1, MEANDER_2D, MEANDER_3D, FIELD_MAP_2D_VTK, FIELD_MAP_3D_VTK)

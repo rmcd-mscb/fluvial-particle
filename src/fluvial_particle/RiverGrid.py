@@ -325,7 +325,7 @@ class RiverGrid:
         """Make the probe locate cells exactly, with no tolerance band at cell faces.
 
         vtkProbeFilter defaults to an auto-computed tolerance (0.1% of the largest cell diagonal,
-        a few millimetres on the 5 m x 2 m test cells) and hands it to the cell locator. Before
+        millimetres on metre-scale cells) and hands it to the cell locator. Before
         VTK 9.7 the locator's FindCell ignored it, so cell location was exact. VTK 9.7's locators
         honour it, so a point within the tolerance of a cell face can be assigned to the
         neighbouring cell: wet/dry checks flip at the bank and velocities near cell faces are
@@ -335,7 +335,8 @@ class RiverGrid:
         Below 9.7 a vtkCellLocatorStrategy is required as well: the probe's default closest-point
         strategy misclassifies bank points regardless of tolerance. The strategy classes are
         deprecated in 9.7, where the probe's default locator is exact with a zero tolerance, so
-        the strategy is only built and attached below 9.7.
+        the strategy is only built and attached below 9.7; a future VTK that removes the classes
+        changes nothing here.
 
         Args:
             probe (vtkProbeFilter): the probe to configure; vtkPProbeFilter inherits the same API

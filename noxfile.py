@@ -131,7 +131,7 @@ vtk_versions = ["9.6.2", "9.7.0"]
 
 
 @nox.session(python=python_versions)
-@nox.parametrize("vtk", vtk_versions, ids=[f"vtk{v.replace('.', '')[:2]}" for v in vtk_versions])
+@nox.parametrize("vtk", vtk_versions, ids=["vtk" + "".join(v.split(".")[:2]) for v in vtk_versions])
 def tests(session: nox.Session, vtk: str) -> None:
     """Run the test suite against one VTK version."""
     session.install("-e", ".[ci,dev]", f"vtk=={vtk}")

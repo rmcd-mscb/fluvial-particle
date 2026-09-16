@@ -28,7 +28,7 @@ jobs:
           - { python-version: "3.13", os: ubuntu-latest, session: "tests-3.13(vtk96)" }
           - { python-version: "3.13", os: ubuntu-latest, session: "tests-3.13(vtk97)" }
           - { python-version: "3.13", os: macos-latest, session: "tests-3.13(vtk97)" }
-          # - { python-version: "3.13", os: windows-latest, session: "tests" }  # Disabled: Windows HDF5 file locking issues
+          # - { python-version: "3.13", os: windows-latest, session: "tests-3.13(vtk97)" }  # Disabled: Windows HDF5 file locking issues
           # - { python-version: "3.13", os: ubuntu-latest, session: "typeguard" }
           # - { python-version: "3.13", os: ubuntu-latest, session: "xdoctest" }
           - { python-version: "3.13", os: ubuntu-latest, session: "docs-build" }
