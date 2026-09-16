@@ -6,6 +6,7 @@ import h5py
 import numpy as np
 from vtk.util import numpy_support  # type: ignore[import]
 
+from fluvial_particle.random_walk import reflect_interval
 from fluvial_particle.RiverGrid import CMU, GRAVITY
 
 
@@ -932,20 +933,12 @@ class Particles:
         # old clamp in the setup of tests/test_analytical.py::test_well_mixed_vertical_stays_uniform).
         # The fold handles a step that crosses the column more than once. Subclasses that should not
         # be bounced off a boundary (FallingParticles) override this with a clamp.
+        # A column with no usable width (2D runs force vertbound = 0.5, or a zero-depth cell) has
+        # nothing to reflect off; reflect_interval pins the particle to the single admissible
+        # elevation instead. Deactivated particles carry NaN positions and pass through untouched.
         lo = self.bedelev + self.vertbound * self.depth
         hi = self.wse - self.vertbound * self.depth
-        span = hi - lo
-        finite = np.isfinite(pz)
-        a = self.indices[finite & (span > 0.0) & ((pz < lo) | (pz > hi))]
-        if a.size > 0:
-            u = np.mod(pz[a] - lo[a], 2.0 * span[a])
-            pz[a] = lo[a] + np.where(u > span[a], 2.0 * span[a] - u, u)
-        # A column with no usable width (2D runs force vertbound = 0.5, or a zero-depth cell) has
-        # nothing to reflect off; pin the particle to the single admissible elevation instead.
-        b = self.indices[finite & np.isfinite(span) & (span <= 0.0) & (pz != lo)]
-        if b.size > 0:
-            pz[b] = lo[b]
-        # Deactivated particles carry NaN positions and are left untouched.
+        pz[:] = reflect_interval(pz, lo, hi)
 
     def write_hdf5(self, obj, tidx, start, end, time, rank):
         """Write particle positions and interpolated quantities to file.
