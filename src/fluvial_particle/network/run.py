@@ -210,14 +210,17 @@ def run_network_simulation(
             attrs=attrs,
             dtype=provider.dtype,
             comm=comm,
+            state_specs=solver.state_specs,
         ) as writer:
             writer.write_schedule(schedule.slice(lo, hi), lo, hi)
-            writer.write_step(0, 0.0, solver.reach, solver.s, solver.status, lo, hi)
+            writer.write_step(0, 0.0, solver.reach, solver.s, solver.status, lo, hi, state=solver.state)
             itime = 1
             for k in range(n_steps):
                 solver.step()
                 if (k + 1) % every == 0 or k == n_steps - 1:
-                    writer.write_step(itime, solver.time, solver.reach, solver.s, solver.status, lo, hi)
+                    writer.write_step(
+                        itime, solver.time, solver.reach, solver.s, solver.status, lo, hi, state=solver.state
+                    )
                     itime += 1
             writer.write_exits(solver.exit_time, solver.exit_reach, lo, hi)
         if rank == 0 and not quiet:

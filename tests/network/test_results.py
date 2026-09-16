@@ -296,3 +296,57 @@ def test_terminal_status_frames(tmp_path):
         ds = res.positions()
         assert ds["status"].attrs["flag_meanings"] == "unreleased active exited settled removed"
         assert list(ds["status"].attrs["flag_values"]) == [0, 1, 2, 3, 4]
+
+
+def test_positions_include_declared_state(tmp_path):
+    from fluvial_particle.network.particles import StateVar
+    from fluvial_particle.network.results import NetworkResults
+    from fluvial_particle.network.sources import ParticleSchedule
+    from fluvial_particle.network.writer import OUTPUT_FILENAME, NetworkWriter
+
+    specs = (
+        StateVar("zeta"),
+        StateVar("c", shape=(2,), dim="constituent", labels=("a", "b"), kind="extensive"),
+        StateVar("v3", shape=(3,), dim="component"),
+    )
+    state = {
+        "zeta": np.array([0.1, 0.2]),
+        "c": np.array([[1.0, 2.0], [3.0, 4.0]]),
+        "v3": np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+    }
+    sch = ParticleSchedule(
+        np.zeros(2, dtype=np.int32), np.zeros(2), np.zeros(2), np.ones(2), np.zeros(2, dtype=np.int32)
+    )
+    path = tmp_path / OUTPUT_FILENAME
+    attrs = {"dt": 60.0, "sources": "[]", "mass_units": "kg"}
+    with NetworkWriter(
+        path, n_particles=2, reach_id=np.array([101]), start_time=T0, attrs=attrs, state_specs=specs
+    ) as w:
+        w.write_schedule(sch, 0, 2)
+        w.write_step(0, 0.0, np.zeros(2, dtype=np.int32), np.zeros(2), np.ones(2, dtype=np.int8), 0, 2, state=state)
+    with NetworkResults(path) as res:
+        assert res.state_variables == ("zeta", "c", "v3")
+        df = res.positions(0)
+        assert list(df.columns) == [
+            "particle",
+            "reach_index",
+            "reach_id",
+            "s",
+            "status",
+            "mass",
+            "zeta",
+            "c_a",
+            "c_b",
+            "v3_0",
+            "v3_1",
+            "v3_2",
+        ]
+        assert list(df["zeta"]) == [0.1, 0.2] and list(df["c_b"]) == [2.0, 4.0] and list(df["v3_2"]) == [3.0, 6.0]
+        ds = res.positions()
+        assert {"zeta", "c", "v3"} <= set(ds.data_vars)
+        long = res.to_dataframe()
+        assert "c_a" in long.columns
+
+
+def test_state_variables_empty_for_the_passive_run(run):
+    assert run.state_variables == ()

@@ -144,10 +144,34 @@ class NetworkResults:
         return np.array([self.time_index(time)], dtype=np.int64)
 
     # ---- particles -----------------------------------------------------------
+    @property
+    def state_variables(self) -> tuple[str, ...]:
+        """Names of the particle model's declared state variables in the file (file order)."""
+        return tuple(str(v) for v in self._ds.data_vars if "fluvial_particle_state" in self._ds[v].attrs)
+
+    def _state_columns(self, i: int) -> dict[str, npt.NDArray[Any]]:
+        """Declared state at output time ``i`` as DataFrame columns: one per scalar, one per component."""
+        cols: dict[str, npt.NDArray[Any]] = {}
+        for name in self.state_variables:
+            da = self._ds[name]
+            values = da.values[i]
+            if values.ndim == 1:
+                cols[name] = values
+                continue
+            dim = da.dims[-1]
+            labels = self._ds[dim].values if dim in self._ds.coords else np.arange(values.shape[1])
+            for k, label in enumerate(labels):
+                cols[f"{name}_{label}"] = values[:, k]
+        return cols
+
     def positions(self, time: int | np.datetime64 | str | None = None) -> pd.DataFrame | xr.Dataset:
-        """Particle state at one output time as a DataFrame, or the whole file as a Dataset when time is None."""
+        """Particle state at one output time as a DataFrame, or the whole file as a Dataset when time is None.
+
+        Declared model state follows the base columns: a scalar state as one column, a vector state
+        as one column per component named ``<name>_<label>``.
+        """
         if time is None:
-            return self._ds[["reach_index", "s", "status", "mass"]]
+            return self._ds[["reach_index", "s", "status", "mass", *self.state_variables]]
         i = self.time_index(time)
         ri = self._ds["reach_index"].values[i].astype(np.int64)
         rid = np.where(ri >= 0, self.reach_id[np.clip(ri, 0, self.n_reach - 1)], -1)
@@ -158,6 +182,7 @@ class NetworkResults:
             "s": self._ds["s"].values[i].astype(np.float64),
             "status": self._ds["status"].values[i].astype(np.int8),
             "mass": self._ds["mass"].values.astype(np.float64),
+            **self._state_columns(i),
         })
 
     def map_positions(self, time: int | np.datetime64 | str) -> pd.DataFrame:

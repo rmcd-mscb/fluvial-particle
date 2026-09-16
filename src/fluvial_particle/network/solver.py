@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import IntEnum
-from typing import Any, cast
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -14,6 +15,10 @@ from .dispersion import dispersion_coefficient
 from .network import Network
 from .provider import HydraulicsProvider
 from .sources import ParticleSchedule
+
+
+if TYPE_CHECKING:
+    from .particles import StateVar
 
 
 class Status(IntEnum):
@@ -39,6 +44,25 @@ FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
 # A step's hydraulics dict as the provider returns it (export names; float64 or float32 arrays).
 Hydraulics = Mapping[str, npt.NDArray[np.floating[Any]]]
+# Names the base solver and the writer own; a model's declared state may not reuse them.
+RESERVED_NAMES = frozenset({
+    "reach",
+    "s",
+    "prev_reach",
+    "status",
+    "mass",
+    "exit_time",
+    "exit_reach",
+    "reach_index",
+    "reach_id",
+    "time",
+    "time_seconds",
+    "source_index",
+    "release_reach",
+    "release_s",
+    "release_time",
+    "particle",
+})
 
 
 def _readonly(arr: npt.NDArray[Any]) -> npt.NDArray[Any]:
@@ -49,7 +73,10 @@ def _readonly(arr: npt.NDArray[Any]) -> npt.NDArray[Any]:
 
 
 class NetworkSolver:
-    """Particle state arrays and the per-step update.
+    """Particle state arrays and the per-step update; the base class and the passive model.
+
+    Subclasses declare per-particle state in ``STATE`` and override the ``on_release`` and ``behave``
+    hooks; the transport kernel (release, advection with time carry, one dispersive kick) is shared.
 
     Args:
         network: static topology.
@@ -61,6 +88,8 @@ class NetworkSolver:
         rng: random state supplying standard normals.
         max_hops: cap on reach hops per particle per step; exceeding it raises RuntimeError.
     """
+
+    STATE: ClassVar[tuple[StateVar, ...]] = ()
 
     def __init__(
         self,
@@ -114,6 +143,27 @@ class NetworkSolver:
         }
         self._length = network.length
         self._to_index = network.to_index.astype(np.int64)
+        self._state: dict[str, npt.NDArray[Any]] = {}
+        for spec in self.STATE:
+            if spec.name in RESERVED_NAMES:
+                raise ValueError(f"state name {spec.name!r} is reserved by the solver or the output file")
+            if spec.name in self._state:
+                raise ValueError(f"duplicate state name {spec.name!r} in {type(self).__name__}.STATE")
+            self._state[spec.name] = np.full((n, *spec.shape), spec.fill, dtype=np.dtype(spec.dtype))
+        self._state_views: Mapping[str, npt.NDArray[Any]] = MappingProxyType({
+            name: _readonly(arr) for name, arr in self._state.items()
+        })
+
+    # ---- declared model state ---------------------------------------------------
+    @property
+    def state_specs(self) -> tuple[StateVar, ...]:
+        """The model's declared per-particle state, in declaration order."""
+        return self.STATE
+
+    @property
+    def state(self) -> Mapping[str, npt.NDArray[Any]]:
+        """Read-only views of the declared state arrays, keyed by name (shape ``(n, *spec.shape)``)."""
+        return self._state_views
 
     # ---- particle state (read-only views of the solver's own arrays) --------
     @property
