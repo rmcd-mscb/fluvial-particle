@@ -269,3 +269,32 @@ class HalfSpeed(NetworkSolver):
 
 class NotASolver:
     """Registry test: a class that does not subclass NetworkSolver."""
+
+
+def uniform_reach_dataset(
+    length: float = 50000.0,
+    velocity: float = 1.0,
+    depth: float = 1.0,
+    ustar: float = 0.1,
+    width: float = 10.0,
+    n_reach: int = 1,
+    n_time: int = 4,
+) -> xr.Dataset:
+    """A chain of identical reaches with ``depth`` and ``ustar`` set independently (slope = ustar^2 / (g depth)).
+
+    The Fischer coefficient follows from the choice of ``width``: K = 0.011 v^2 w^2 / (d ustar).
+    """
+    to_index = np.arange(1, n_reach + 1, dtype=np.int32)
+    to_index[-1] = -1
+    times = np.datetime64("1979-01-01", "ns") + np.arange(n_time) * np.timedelta64(1, "D")
+    return build_dataset(
+        reach_id=np.arange(1, n_reach + 1),
+        to_index=to_index,
+        length=np.full(n_reach, length),
+        slope=ustar**2 / (G * depth),
+        velocity=np.full(n_reach, velocity),
+        depth=np.full(n_reach, depth),
+        width=np.full(n_reach, width),
+        flow_out=np.full(n_reach, velocity * depth * width),
+        times=times,
+    )
