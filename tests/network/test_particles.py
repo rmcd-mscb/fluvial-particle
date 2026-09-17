@@ -106,14 +106,26 @@ def test_statevar_validates_dtype_fill_and_vector_fields():
         StateVar("x", shape=(0,), dim="k")
     sv = StateVar("c", shape=[2], dim="k", labels=["a", "b"])  # type: ignore[arg-type]
     assert sv.shape == (2,) and sv.labels == ("a", "b") and hash(sv)
+    # the dtype's own limits, not the minimum scalar type of the fill
+    assert StateVar("x", dtype="i2", fill=32767).fill == 32767
+    assert StateVar("x", dtype="i8", fill=2**40).fill == 2**40
+    assert StateVar("flag", dtype="b1", fill=1).fill == 1
+    with pytest.raises(ValueError, match="does not fit"):
+        StateVar("flag", dtype="b1", fill=2)
 
 
 def test_vector_state_dims_are_validated_at_construction():
     class BadDim(NetworkSolver):
         STATE = (StateVar("v", shape=(2,), dim="particle"),)
 
-    with pytest.raises(ValueError, match="dimension of the output file"):
+    with pytest.raises(ValueError, match="name the output file already uses"):
         make(BadDim, three_reach_dataset(), slug(1))
+
+    class VarDim(NetworkSolver):
+        STATE = (StateVar("v", shape=(2,), dim="mass"),)  # a per-particle variable of the file
+
+    with pytest.raises(ValueError, match="name the output file already uses"):
+        make(VarDim, three_reach_dataset(), slug(1))
 
     class Clash(NetworkSolver):
         STATE = (StateVar("a", shape=(2,), dim="k", labels=("x", "y")), StateVar("b", shape=(2,), dim="k"))

@@ -31,10 +31,6 @@ class ShearTable(Protocol):
         ...
 
 
-# Dimension names the output file owns; a vector state may not use them.
-RESERVED_DIMS = frozenset({"time", "particle", "reach"})
-
-
 class Status(IntEnum):
     """Particle status codes, stored as int8 in the state array and in the output file."""
 
@@ -173,8 +169,8 @@ class NetworkSolver:
             if spec.name in self._state:
                 raise ValueError(f"duplicate state name {spec.name!r} in {type(self).__name__}.STATE")
             if spec.dim is not None:
-                if spec.dim in RESERVED_DIMS:
-                    raise ValueError(f"state {spec.name!r}: dim {spec.dim!r} is a dimension of the output file")
+                if spec.dim in RESERVED_NAMES:
+                    raise ValueError(f"state {spec.name!r}: dim {spec.dim!r} is a name the output file already uses")
                 first = dims.setdefault(spec.dim, spec)
                 if (first.shape, first.labels) != (spec.shape, spec.labels):
                     raise ValueError(

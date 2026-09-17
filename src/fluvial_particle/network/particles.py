@@ -78,7 +78,8 @@ class StateVar:
             fill = float(self.fill)
             if not (np.isfinite(fill) and fill.is_integer()):
                 raise ValueError(f"StateVar {self.name!r}: dtype {self.dtype!r} needs an explicit integer fill")
-            if not np.can_cast(np.min_scalar_type(int(fill)), dtype):
+            lo, hi = (0, 1) if dtype.kind == "b" else (int(np.iinfo(dtype).min), int(np.iinfo(dtype).max))
+            if not lo <= int(fill) <= hi:
                 raise ValueError(f"StateVar {self.name!r}: fill {self.fill!r} does not fit dtype {self.dtype!r}")
         object.__setattr__(self, "shape", tuple(self.shape))
         if self.labels is not None:
