@@ -1,7 +1,10 @@
 # Behavioral particles for the 1D network solver
 
 Date: 2026-09-16
-Status: draft for review
+Status: draft for review; amended 2026-09-16 during the PR 1 implementation (Decision 7: mixing
+kernel, walk domain, deposition rule, sub-step rule; 7a: reference numbers on the full column;
+Decision 8 and the configuration table: `substep_fraction`, `max_substeps` 1000; Testing:
+tolerances measured)
 Branch: `spec/network-behavioral-particles` (off `main`)
 Extends: `2026-09-13-network-particle-solver-design.md` (the "base spec")
 
@@ -156,51 +159,98 @@ drift term or it piles particles on the low-coefficient side.
    `solver.state` mapping; positions and status are not writable from
    outside. See Decision 12.
 
-7. **Vertical model.** Relative elevation `zeta = z / h` in `[zeta_min,
-   1 - zeta_min]` per particle (`zeta_min` default 0.001, the analogue of
-   `vertbound`; see 7a for why it is ten times smaller than the 2D/3D
-   default); it is preserved across a reach hop. Per reach and step,
-   from `ustar`, `depth`, `velocity` and the dispersion configuration of
-   Decision 7a:
+7. **Vertical model.** Relative elevation `zeta = z / h` in `[0, 1]` per
+   particle, preserved across a reach hop. `zeta_min` (default 0.001, the
+   analogue of `vertbound`) is not a wall: the walk lives on the full
+   column, `zeta_min` is the clip below which the log-law velocity factor
+   is held at its `zeta_min` value (and above `1 - zeta_min` likewise), and
+   the thickness of the bed contact layer in which deposition acts. Per
+   reach and step, from `ustar`, `depth`, `velocity` and the dispersion
+   configuration of Decision 7a:
    - velocity factor `f(zeta)` from the configured velocity profile;
-     for the log law `f = 1 + (ustar / (kappa v)) (1 + ln zeta)`, floored
-     at 0 so no particle moves upstream; `integral_0^1 f = 1` exactly, so
-     a well-mixed column advects at the reach velocity;
-   - vertical dispersion `Kz(zeta)` from the configured vertical profile;
-   - the walk in `zeta`, Ito form with the gradient drift,
-     `d zeta = [dKz/dz - w] / h dt + sqrt(2 Kz / h^2) dW`, where `w` is the
-     model's vertical velocity, positive downward (settling) or negative
-     (swimming up), possibly time dependent; `dKz/dz` is analytic for
-     every profile offered (zero for the constant one);
-   - reflection at `zeta_min` and `1 - zeta_min` by the fold used in
-     `Particles.validate_z`, extracted to `fluvial_particle/random_walk.py`
-     as `reflect_interval(x, lo, hi)` and called by both solvers;
+     for the log law `f = 1 + (ustar / (kappa v)) (1 + ln zeta)` evaluated
+     at `clip(zeta, zeta_min, 1 - zeta_min)`, floored at 0 so no particle
+     moves upstream, and renormalized (closed form) so that
+     `integral_0^1 f = 1` exactly: a well-mixed column advects at the
+     reach velocity;
+   - vertical mixing `Kz(zeta)` from the configured vertical profile;
+   - **the mixing kernel leaves a uniform column exactly uniform at any
+     sub-step.** For the parabolic profile the Ito walk
+     `d zeta = a (1 - 2 zeta) dt + sqrt(2 a zeta (1 - zeta)) dW`,
+     `a = kappa ustar / h`, is a Jacobi (Wright-Fisher) diffusion, and with
+     `zeta = (1 - cos theta) / 2` it is the polar angle of Brownian motion
+     on the unit sphere with generator `a` times the spherical Laplacian
+     (Karlin and Taylor 1981). One sub-step is therefore a random rotation:
+     a von Mises-Fisher step about the current direction (Fisher 1953;
+     sampled by the closed-form inverse CDF of Ulrich 1984 and Wood 1994)
+     with the concentration calibrated so the first spherical mode decays
+     as the heat kernel does, `E[cos psi] = exp(-2 a dt)`. Isotropy makes
+     the uniform measure invariant for every step; higher modes are
+     approximated to first order in `a dt`, which is what the sub-step
+     rule controls. For the constant and `"value"` profiles the kernel is
+     a Gaussian displacement mirror-reflected at 0 and 1 (`reflect_interval`
+     from `fluvial_particle/random_walk.py`, shared with `Particles.validate_z`),
+     exact for a constant coefficient; a non-zero `background` on the
+     parabolic profile adds that step for its part.
+     *Measured and rejected:* the Euler-Ito walk with the gradient drift
+     `dKz/dz` and a reflecting wall at `zeta_min` (Visser 1997; Ross and
+     Sharples 2004), the form this decision first specified. Because `Kz`
+     vanishes linearly at the wall, the drift step `a dt` must be far
+     smaller than `zeta_min`, about a hundredth of `1 / |Kz''|`, to keep the
+     column uniform: at the sub-step rule below it piled particles into
+     mid-column (chi-square p ~ 1e-100), biased the mean advection by 1.5
+     percent and produced half of Taylor's shear dispersion; fixed-step
+     Euler or Visser schemes needed a hundred times more sub-steps and
+     per-particle adaptive steps did not converge monotonically.
+   - the vertical velocity `w` (positive downward: settling, or negative:
+     swimming up, possibly time dependent) is an operator-split
+     displacement `-w dt / h` after the mixing kernel, mirror-reflected at
+     the surface and the bed;
    - **Deposition at the bed** is a Robin boundary: the flux into the bed
      equals a deposition velocity `k_d` (m/s) times the near-bed
-     concentration. `k_d = 0` is a reflecting bed (a dissolved tracer,
-     or sediment above its critical shear); `k_d -> inf` is a perfectly
-     absorbing bed (attachment on first contact). In the walk, a particle
-     whose sub-step crosses `zeta_min` deposits with the per-contact
-     probability that reproduces `k_d` for that sub-step,
-     `p = k_d sqrt(pi dt_sub / Kz(zeta_min))` (Erban and Chapman 2007),
-     clipped to 1, else reflects. The probability is derived, never a
-     user parameter, so results do not depend on the sub-step count.
-     When `critical_ustar` is set, `k_d` is multiplied by Krone's factor
+     concentration. `k_d = 0` is a reflecting bed (a dissolved tracer, or
+     sediment above its critical shear); `k_d -> inf` is a perfectly
+     absorbing bed (attachment on first contact). A particle whose
+     settling-shifted position, before reflection, lies in the contact
+     layer `[0, zeta_min)` or below it has made contact and deposits with
+     the per-contact probability that reproduces `k_d` for that sub-step,
+     `p = k_d dt_sub / (zeta_min h + max(w, 0) dt_sub)`, clipped to 1, else
+     reflects. The particles making contact per sub-step are those within
+     `zeta_min h + w dt_sub` of the bed, so removing each with `p` gives the
+     Robin flux while `p < 1`: the layer rule `k_d dt_sub / (zeta_min h)`
+     when contact is by mixing, `k_d / w` when settling dominates. The
+     probability is derived, never a user parameter, so results do not
+     depend on the sub-step count while `p` is small. Two bias bounds are
+     stated in the docs: the rule samples the mean density over the contact
+     reach rather than the bed density, so the rate is low by about
+     `w (zeta_min h + w dt_sub) / (2 K)` relative (3 percent at the default
+     sub-step for `w = 1 cm/s`, `K = 0.0067 m^2/s`; it shrinks with the
+     sub-step and as `w^2`); and when `(k_d - w) dt_sub` exceeds
+     `zeta_min h` the probability clips at 1 and the rate depends on the
+     sub-step count (raise `zeta_min` or lower `substep_fraction`; the
+     startup diagnostics report the probability, and the solver warns once
+     and counts the clipped contacts when it happens). A dry reach (no
+     depth) has no contact layer and deposits nothing. When
+     `critical_ustar` is set, `k_d` is multiplied by Krone's factor
      `max(0, 1 - (ustar / critical_ustar)^2)`, so nothing deposits where
-     the reach shear exceeds the critical value. A deposited particle
-     gets `status = SETTLED`, `exit_time = t + dt`, `exit_reach = reach`,
-     and its `s` is kept (it is a position on the bed, not NaN).
+     the reach shear exceeds the critical value. A deposited particle gets
+     `status = SETTLED`, `exit_time = t + dt`, `exit_reach = reach`,
+     `zeta = 0`, and its `s` is kept (it is a position on the bed, not NaN).
    - **Sub-stepping.** The walk runs `n_sub = ceil(dt / (c h^2 / Kz_max))`
-     substeps with `c = 0.1` and `Kz_max` the profile's maximum, capped by
-     `max_substeps` (default 500); one count for all active particles,
-     the maximum over their reaches, so the walk stays vectorized; the
-     velocity factor returned to advection is the mean of `f(zeta)` over
-     the substeps. At the DRB medians this is about 150 substeps of
-     vectorized numpy over the active particles, well below the cost of
-     the hop loops. The startup diagnostics report the count and the
-     reaches that hit the cap.
+     substeps with `c = substep_fraction` (default 0.03) and `Kz_max` the
+     profile's maximum, capped by `max_substeps` (default 1000); one count
+     for all active particles, the maximum over their reaches, so the walk
+     stays vectorized; the velocity factor returned to advection is the
+     mean of `f(zeta)` over the substeps. Since the kernels keep the column
+     well mixed at any step, `c` only sets how well the within-step shear
+     dispersion is resolved: 2 percent at 0.03, 12 percent at 0.1. At the
+     DRB medians 0.03 is about 520 substeps of vectorized numpy over the
+     active particles (about 4 s per step for 100,000 particles); settling
+     equilibria need a finer fraction (0.01 for the Rouse profile at
+     `P = 0.5`). The startup diagnostics report the count and the reaches
+     that hit the cap, and the solver warns once when a step hits it.
    `zeta` is declared state with `output=True`; `NetworkResults.profile
-   (time, reach_or_bins, n_zeta=20)` histograms it.
+   (time, bin_length, n_zeta=20)` histograms it per bin.
 
 7a. **Dispersion is configurable, following the 2D/3D solver.** There,
    every coefficient is `lev + beta_i * ustar * depth` with `beta` a
@@ -237,36 +287,46 @@ drift term or it piles particles on the low-coefficient side.
    random walk; the solver has no lateral position, and what the kick
    represents is the longitudinal spreading that transverse shear would
    cause if it were resolved. With `shear_correction = "auto"` the
-   correction is applied whenever the model resolves the vertical and
-   the velocity profile is not uniform, and never otherwise; `"on"` and
-   `"off"` override; `"on"` with a model that does not resolve the
-   vertical is a config error. The corrected coefficient is
+   correction is applied whenever the model resolves the vertical, the
+   velocity profile is not uniform, and a longitudinal model other than
+   `"none"` is on (with `"none"` there is nothing to correct), and never
+   otherwise; `"on"` and `"off"` override; `"on"` with a model that does
+   not resolve the vertical is a config error. The corrected coefficient is
    `max(K - c ustar h, 0)` where `c` is Taylor's dimensionless
-   shear-dispersion integral for the configured velocity and `Kz`
-   profiles, evaluated by quadrature **on the walk's own domain**: over
-   `[zeta_min, 1 - zeta_min]`, with the velocity factor floored at zero
-   and renormalized to unit mean, exactly as the walk applies it. That
-   is what the resolved motion generates, and it is what must be
-   removed from the kick. It is not Elder's textbook constant: on the
-   full column the quadrature gives 5.86 (Elder's `0.404 / kappa^3` at
-   `kappa = 0.41`), but truncating at `zeta_min = 0.01` removes the slow
-   near-bed layer and gives 4.53, a 23 percent loss of shear dispersion,
-   while `zeta_min = 0.001` gives 5.65, a 4 percent loss. That is why the
-   network default floor is 0.001. The floor on the velocity factor
-   costs another few percent at typical `ustar / v` (5.23 at the DRB
-   median ratio 0.14 on the full column). `c` depends on the reach only
-   through `ustar / v`, so it is tabulated once on a grid of that ratio
-   at solver construction and interpolated per reach per step; the
-   per-step cost is nil. The constant `Kz` profile at `beta = 0.067`
-   gives 6.58 on the full column.
+   shear-dispersion integral (Taylor 1953) for the configured velocity
+   and `Kz` profiles, evaluated by quadrature **on the walk's own
+   domain**: the full column, with the velocity factor clipped at
+   `zeta_min`, floored at zero and renormalized to unit mean, exactly as
+   the walk applies it, and with the cross-sectional average (the
+   `1 / width` factor of Taylor's integral). That is what the resolved
+   motion generates, and it is what must be removed from the kick; the
+   correction is applied to the model's K before `background` is added,
+   so the background stays the floor it is documented as. On the full
+   column with the unclipped log law the quadrature gives 5.86 (Elder's
+   `0.404 / kappa^3` at `kappa = 0.41`); clipping at `zeta_min = 0.001`
+   holds the near-bed velocity at its `zeta_min` value and gives 5.83, at
+   0.01 it gives 5.58, a 5 percent loss. (The first draft of this
+   decision truncated the walk's domain instead, which removed the slow
+   near-bed layer altogether: 5.65 at 0.001 and 4.62 at 0.01, a 21
+   percent loss, and the reason the floor was set at 0.001; with the clip
+   the choice of `zeta_min` is no longer about shear dispersion but about
+   the deposition contact layer.) The floor on the velocity factor costs
+   another few percent at typical `ustar / v` (5.23 at the DRB median
+   ratio 0.143), and once it is active the clip no longer matters. `c`
+   depends on the reach only through `ustar / v`, so it is tabulated once
+   on a grid of that ratio at solver construction and interpolated per
+   reach per step; the per-step cost is nil. The `"value"` profile and a
+   non-zero vertical `background` also depend on `ustar h` and are
+   evaluated per reach per step by a coarser quadrature. The constant
+   `Kz` profile at `beta = 0.067` gives 6.58.
 
 8. **Drift model parameters** (`[network.particles]`, `model = "drift"`):
    `settling_velocity` (m/s, positive down, default 0), `swim_velocity`
    (m/s, positive up, default 0), `diel` (optional table `amplitude`,
    `period`, `phase` making `w` sinusoidal in time, the 1D form of the
    larval `amp`/`period`), `deposition_velocity` (m/s, default 0),
-   `critical_ustar` (m/s, optional), `zeta_min`, `max_substeps`,
-   `initial_zeta` (`"uniform"` or a number). For a larva, the deposition
+   `critical_ustar` (m/s, optional), `zeta_min`, `substep_fraction`,
+   `max_substeps`, `initial_zeta` (`"uniform"` or a number). For a larva, the deposition
    velocity is how readily a competent individual attaches on contact and
    the critical shear is the flow above which it cannot hold. The mixing
    and velocity profiles come from `[network.dispersion.vertical]`, not
@@ -367,8 +427,9 @@ and the run is bit-identical to today for the same seed.
 | `diel` | none | `{amplitude, period, phase}` s and m/s |
 | `deposition_velocity` | 0.0 | m/s; 0 reflecting bed |
 | `critical_ustar` | none | m/s; Krone suppression of deposition above it |
-| `zeta_min` | 0.001 | see Decision 7a for the choice |
-| `max_substeps` | 500 | |
+| `zeta_min` | 0.001 | velocity-factor clip and bed contact-layer thickness; see Decision 7 |
+| `substep_fraction` | 0.03 | fraction of the column mixing time `h^2 / Kz_max` per sub-step |
+| `max_substeps` | 1000 | |
 | `initial_zeta` | `"uniform"` | or a number in (zeta_min, 1 - zeta_min) |
 | decay: `rate` | required | 1/s |
 | `q10`, `reference_temperature` | none | both or neither |
@@ -405,16 +466,19 @@ Unit (synthetic files from `tests/network/support.py`):
 - `passive` with `[network.particles]` absent reproduces the base spec's
   solver tests bit for bit with the same seed.
 - Vertical functions: `integral f(zeta) dzeta = 1` to 1e-6 by quadrature;
-  `Kz` and `dKz/dz` for each profile against hand values, the constant
-  profile's depth mean equal to the parabolic one at the defaults;
+  `Kz` for each profile against hand values, the constant profile's depth
+  mean equal to the parabolic one at the defaults;
   `shear_dispersion_coefficient` on the full column returns 5.86 within
-  0.5 percent for the log law with the parabolic profile (Elder), 4.53
-  within 1 percent at `zeta_min = 0.01`, 6.58 within 1 percent for the
-  constant profile, and 0 for the uniform velocity profile;
-  `shear_correction = "auto"` resolves on and off correctly for each
-  model and profile combination and `"on"` raises for the passive model;
-  substep count at the DRB medians is about 150; `reflect_interval` folds
-  multiple crossings and is shared with the 2D/3D tests.
+  0.5 percent for the log law with the parabolic profile (Elder), 5.83 at
+  `zeta_min = 0.001` and 5.58 at 0.01 within 1 percent, 6.58 within 1
+  percent for the constant profile, and 0 for the uniform velocity
+  profile; the von Mises-Fisher calibration and cosine sampler against
+  their closed forms; the sphere step and every profile's `mix` leave a
+  uniform column uniform; `shear_correction = "auto"` resolves on and off
+  correctly for each model and profile combination and `"on"` raises for
+  the passive model; substep count at the DRB medians is about 150 at
+  `c = 0.1` and 520 at the default 0.03; `reflect_interval` folds multiple
+  crossings and is shared with the 2D/3D tests.
 - Status: settled particles keep `s`, get `exit_*`, are excluded from
   advection; `terminal(SETTLED)` returns them; mass conservation over all
   statuses.
@@ -426,10 +490,18 @@ Analytical acceptance (`@pytest.mark.slow`, uniform chain, seeded):
 
 1. **Uniform stays uniform.** Passive drift model, `w = 0`, a well-mixed
    column after 1 h of walk: `zeta` histogram against uniform by
-   chi-square (p > 0.01). This fails without the gradient drift term.
-2. **Rouse profile.** `settling_velocity` giving `P = 0.5` and `P = 2`,
-   fully reflecting bed, after equilibration: `zeta` distribution against
-   the Rouse profile by Kolmogorov-Smirnov (p > 0.01).
+   chi-square (p > 0.01). The negative control swaps the kernel for the
+   rejected Euler-Ito walk at the same sub-steps and fails (p < 1e-6).
+2. **Rouse profile.** `settling_velocity` giving `P = 0.5`, fully
+   reflecting bed, after equilibration: `zeta` distribution against the
+   Rouse profile truncated to `[zeta_min, 1 - zeta_min]` by
+   Kolmogorov-Smirnov distance `D < 0.03` at `substep_fraction = 0.01`
+   (measured: 0.049 at 0.03, 0.022 at 0.01, 0.023 at 0.003). The settling
+   step is a first-order split, so the criterion is a distance, not a
+   p-value (at 20,000 particles p > 0.01 would demand the CDF within 1.2
+   points everywhere). `P = 2`, as first specified, and any `P >= 1` are
+   out of reach: the profile is not integrable at the bed and a third of
+   the truncated reference mass sits below `zeta = 0.01`.
 3. **Mean advection preserved.** Well-mixed passive drift, `dispersion =
    none`: mean position after 6 h within 3 standard errors of `v t`.
 4. **Shear dispersion emerges.** Same run: position variance grows as
@@ -446,13 +518,18 @@ Analytical acceptance (`@pytest.mark.slow`, uniform chain, seeded):
    mass-weighted bin mean converges to the export within 0.1 degC where
    `exchange_rate t >> 1`.
 7. **Deposition against the Robin condition.** `w > 0` and a finite
-   `deposition_velocity`, uniform release: the deposited fraction in time
-   against the numerical solution of the 1D advection-diffusion equation
-   in `zeta` with the Robin bed condition (a fine finite-difference
-   reference in the test), within the sub-step bias bound stated in the
-   docs; repeated with `max_substeps` halved to show the result does not
-   move with the sub-step count; and with a very large deposition
-   velocity against the absorbing-bed solution.
+   `deposition_velocity`, uniform release, on the constant mixing profile
+   (where the Robin condition is a regular boundary condition; with the
+   parabolic profile `Kz` vanishes at the bed and the continuum condition
+   degenerates to the settling flux): the deposited fraction at 20 and 30
+   min against a finite-volume solution of the 1D advection-diffusion
+   equation with the Robin bed condition, within 0.02 at
+   `substep_fraction = 0.003`, after the initial transient; repeated with
+   the sub-step doubled to show the result moves by less than 0.01; and
+   with a very large deposition velocity against the absorbing-bed
+   solution within 0.05 (the sqrt(dt) bias of absorbing random walks).
+   At the default fraction the bias is the bound of Decision 7 (0.024
+   absolute at 30 min here).
 8. **Water age.** Water seeding on a chain with `dispersion = none`: the
    mass-weighted mean age at the outlet after the initial fill has
    flushed equals the sum of `length_i / v_i` within one `dt`.
@@ -484,6 +561,25 @@ Base spec tests keep passing untouched, which is the proof that Decision
 
 ## References
 
+- Taylor, G.I. (1953). Dispersion of soluble matter in solvent flowing
+  slowly through a tube. Proceedings of the Royal Society A 219, 186-203.
+  (The shear-dispersion integral.)
+- Karlin, S., Taylor, H.M. (1981). A Second Course in Stochastic
+  Processes. Academic Press, ch. 15. (The Jacobi / Wright-Fisher diffusion
+  and its identity with the polar angle of Brownian motion on the sphere.)
+- Fisher, R.A. (1953). Dispersion on a sphere. Proceedings of the Royal
+  Society A 217, 295-305. (The von Mises-Fisher distribution.)
+- Ulrich, G. (1984). Computer generation of distributions on the m-sphere.
+  Applied Statistics 33(2), 158-163; Wood, A.T.A. (1994). Simulation of
+  the von Mises Fisher distribution. Communications in Statistics,
+  Simulation and Computation 23(1), 157-164. (Sampling the step angle.)
+- Visser, A.W. (1997). Using random walk models to simulate the vertical
+  distribution of particles in a turbulent water column. Marine Ecology
+  Progress Series 158, 275-281. (The Euler-Ito walk with the gradient
+  drift; measured and rejected here.)
+- Ross, O.N., Sharples, J. (2004). Recipe for 1-D Lagrangian particle
+  tracking models in space-varying diffusivity. Limnology and
+  Oceanography: Methods 2, 289-302. (Sub-step criteria for that walk.)
 - Rouse, H. (1937). Modern conceptions of the mechanics of fluid
   turbulence. Transactions ASCE 102, 463-543. (Suspended-sediment
   profile.)
