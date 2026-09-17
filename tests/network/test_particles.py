@@ -223,6 +223,14 @@ NO_MIXING = DispersionConfig(
 NO_MIXING_LOG = DispersionConfig(model="none", vertical=VerticalDispersionConfig(profile="value", value=0.0))
 
 
+def test_public_exports_cover_the_behavioral_api():
+    import fluvial_particle.network as net
+
+    for name in ("StateVar", "PARTICLE_MODELS", "DriftParticles", "ParticlesConfig", "VerticalDispersionConfig"):
+        assert name in net.__all__ and getattr(net, name) is not None, name
+    assert net.DriftParticles is DriftParticles and net.VerticalDispersionConfig is VerticalDispersionConfig
+
+
 def test_drift_is_registered_and_resolves_the_vertical():
     assert PARTICLE_MODELS["drift"] is DriftParticles and resolve_model("drift") is DriftParticles
     assert DriftParticles.resolves_vertical is True
