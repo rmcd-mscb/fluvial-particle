@@ -34,3 +34,17 @@ def reflect_interval(x: npt.NDArray[np.float64], lo: npt.ArrayLike, hi: npt.Arra
     b = finite & np.isfinite(span) & (span <= 0.0)
     out[b] = lo_a[b]
     return out
+
+
+def reciprocal_or_zero(x: npt.ArrayLike) -> npt.NDArray[np.float64]:
+    """``1 / x`` where ``x`` is positive, 0 elsewhere: a reach without depth has nothing to divide by.
+
+    Args:
+        x: values to invert (a depth, say).
+
+    Returns:
+        The reciprocal, a new array, with 0 wherever ``x`` is not positive (division is never
+        attempted there, so no warning is raised).
+    """
+    a = np.asarray(x, dtype=np.float64)
+    return np.divide(1.0, a, out=np.zeros_like(a), where=a > 0.0)

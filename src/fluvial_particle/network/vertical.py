@@ -39,7 +39,7 @@ import numpy.typing as npt
 from scipy import optimize
 from scipy.integrate import cumulative_trapezoid
 
-from ..random_walk import reflect_interval
+from ..random_walk import reciprocal_or_zero, reflect_interval
 
 
 if TYPE_CHECKING:
@@ -225,8 +225,8 @@ def vmf_cosine(kappa: FloatArray, u: FloatArray) -> FloatArray:
 
     ``w = 1 + ln(1 - u (1 - exp(-2 kappa))) / kappa``: the tangent-normal decomposition of Ulrich (1984)
     with the closed-form inversion of the S^2 marginal (Fisher, Lewis and Embleton 1987; Jakob 2012),
-    written with ``expm1``
-    and ``log1p`` so it is exact as ``kappa -> 0`` (uniform ``w``) and ``kappa -> inf`` (``w = 1``).
+    written with ``expm1`` and ``log1p`` so it is exact as ``kappa -> 0`` (uniform ``w``) and
+    ``kappa -> inf`` (``w = 1``).
     """
     kappa = np.asarray(kappa, dtype=np.float64)
     u = np.asarray(u, dtype=np.float64)
@@ -270,9 +270,8 @@ class VerticalProfiles:
     Taylor's coefficient ``c(ratio)`` is tabulated at construction on a uniform grid of
     ``x = ratio / (1 + ratio)`` in ``[0, 1]`` (``ratio = ustar / v``; ``x = 1`` is a still reach where
     ``c = 0``) and interpolated per reach and step, so the per-step cost is nil and no ratio is out of
-    range; the
-    normalization of the floored log-law factor is exact (closed form). The ``"value"`` profile and
-    a non-zero ``background`` make ``c`` depend on ``ustar * h`` as well; for those
+    range; the normalization of the floored log-law factor is exact (closed form). The ``"value"``
+    profile and a non-zero ``background`` make ``c`` depend on ``ustar * h`` as well; for those
     ``shear_coefficient`` runs the quadrature per reach on a coarser grid (``n_reach`` x
     ``n_reach_quad`` points per step).
 
@@ -394,8 +393,7 @@ class VerticalProfiles:
         ustar = np.asarray(ustar, dtype=np.float64)
         h = np.asarray(h, dtype=np.float64)
         dt = np.asarray(dt, dtype=np.float64)
-        wet = h > 0.0
-        inv_h = np.where(wet, 1.0 / np.where(wet, h, 1.0), 0.0)
+        inv_h = reciprocal_or_zero(h)  # a reach without depth leaves its particles where they are
         if cfg.profile == "parabolic":
             zeta = sphere_step(zeta, cfg.scale * cfg.kappa * ustar * dt * inv_h, rng)
             extra = np.full_like(zeta, cfg.background)
@@ -483,9 +481,9 @@ def substep_count(
     Returns:
         The sub-step count.
     """
-    counts = substep_counts(dt, kz_max, h, c=c)
+    counts = substep_counts(dt, kz_max, h, c=c)  # at least 1 per reach
     n = int(counts.max()) if counts.size else 1
-    return int(min(max(n, 1), max_substeps))
+    return min(n, max_substeps)
 
 
 def deposition_probability(

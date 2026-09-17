@@ -15,6 +15,7 @@ from ..io import PVDWriter, VTPWriter
 from .dispersion import dispersion_coefficient
 from .network import Network, NetworkBins
 from .provider import FileHydraulicsProvider
+from .solver import ACTIVE, EXITED
 from .writer import OUTPUT_FILENAME
 
 
@@ -201,7 +202,7 @@ class NetworkResults:
         ri = self._ds["reach_index"].values[i].astype(np.int64)
         si = self._ds["s"].values[i].astype(np.float64)
         zi = self._ds["zeta"].values[i].astype(np.float64)
-        act = self._ds["status"].values[i] == 1
+        act = self._ds["status"].values[i] == ACTIVE
         b = bins.bin_of(ri[act], si[act])
         zc = np.clip((zi[act] * n_zeta).astype(np.int64), 0, n_zeta - 1)
         counts = np.zeros((bins.n_bins, n_zeta), dtype=np.int64)
@@ -262,7 +263,7 @@ class NetworkResults:
 
     def arrival_times(self, outlet: int | None = None) -> pd.DataFrame:
         """Exited particles with exit time, outlet, release reach, and mass; filtered to one outlet id if given."""
-        df = self.terminal(2)
+        df = self.terminal(EXITED)
         if outlet is not None:
             df = df[df["exit_reach_id"] == int(outlet)].reset_index(drop=True)
         return df
@@ -320,7 +321,7 @@ class NetworkResults:
     ) -> npt.NDArray[np.float64]:
         ri = self._ds["reach_index"].values[i].astype(np.int64)
         si = self._ds["s"].values[i].astype(np.float64)
-        act = self._ds["status"].values[i] == 1
+        act = self._ds["status"].values[i] == ACTIVE
         r, s, w = ri[act], si[act], weights[act]
         bw = self._bandwidth(i, bins, smoothing)
         if bw is None:
@@ -452,7 +453,7 @@ class NetworkResults:
     def summary(self) -> str:
         """One-paragraph description of the run."""
         status = self._ds["status"].values[-1]
-        exited = int((status == 2).sum())
+        exited = int((status == EXITED).sum())
         return (
             f"NetworkResults: {self.n_particles} particles, {self.n_reach} reaches, {self.times.size} output times "
             f"({self.times[0]} .. {self.times[-1]}), {exited} exited by the end; "

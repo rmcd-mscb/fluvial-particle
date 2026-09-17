@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
-import warnings
 from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
-from ..random_walk import reflect_interval
+from ..random_walk import reciprocal_or_zero, reflect_interval
 from .solver import ACTIVE, SETTLED, FloatArray, Hydraulics, IntArray, NetworkSolver
 from .vertical import SUBSTEP_FRACTION, VerticalProfiles, deposition_probability, substep_counts
 
@@ -224,8 +224,6 @@ class DriftParticles(NetworkSolver):
         self.last_substeps = 0
         self.steps_at_cap = 0  # steps whose sub-step count hit max_substeps
         self.clipped_contacts = 0  # bed contacts whose deposition probability was clipped at 1
-        self._warned_cap = False
-        self._warned_clip = False
 
     # ---- parameters as functions ----------------------------------------------
     def _vertical_velocity(self, t_mid: float) -> float:
@@ -243,6 +241,58 @@ class DriftParticles(NetworkSolver):
         if crit is not None:
             k_d *= np.maximum(0.0, 1.0 - (ustar / crit) ** 2)
         return k_d
+
+    # ---- the vertical walk's pieces ----------------------------------------------
+    def _capped_substeps(self, dt: float, ustar: FloatArray, depth: FloatArray, t: float) -> int:
+        """Sub-steps for this step: the most any reach holding a particle asks for, capped.
+
+        Counts a step the cap bites in ``steps_at_cap`` and warns once (the within-step shear
+        dispersion is under-resolved there).
+
+        Args:
+            dt: step size (s).
+            ustar: shear velocity of each active particle's reach (m/s).
+            depth: depth of each active particle's reach (m).
+            t: solver clock at the start of the step (s), for the warning.
+
+        Returns:
+            The sub-step count, at least 1.
+        """
+        counts = substep_counts(dt, self.profiles.kz_max(ustar, depth), depth, c=self.params["substep_fraction"])
+        cap = int(self.params["max_substeps"])
+        uncapped = int(counts.max())  # substep_counts is at least 1, and behave has at least one particle
+        if uncapped > cap:
+            self.steps_at_cap += 1
+            self._warn_once(
+                "substep_cap",
+                f"the vertical walk hit max_substeps = {cap} at t = {t:.0f} s (a shallow, high-shear reach "
+                "holds active particles); the within-step shear dispersion is under-resolved there",
+            )
+        return min(uncapped, cap)
+
+    def _deposit_contacts(self, contacts: IntArray, p_dep: FloatArray, t: float) -> IntArray:
+        """Which of the particles touching the bed this sub-step deposit: one uniform draw each.
+
+        Counts contacts whose probability clipped at 1 in ``clipped_contacts`` and warns once.
+
+        Args:
+            contacts: indices, into this step's active block, of the particles making contact.
+            p_dep: per-contact deposition probability of every particle in the active block.
+            t: solver clock at the start of the step (s), for the warning.
+
+        Returns:
+            The indices, into the active block, of the particles that deposited.
+        """
+        n_clip = int((p_dep[contacts] >= 1.0).sum())
+        if n_clip:
+            self.clipped_contacts += n_clip
+            self._warn_once(
+                "deposition_clip",
+                f"the per-contact deposition probability clipped at 1 at t = {t:.0f} s: every contact deposits, "
+                "a Robin bed with k_eff = w + zeta_min h / dt_sub rather than the requested deposition velocity "
+                "(raise zeta_min or lower substep_fraction)",
+            )
+        return contacts[self.rng.uniform(size=contacts.size) < p_dep[contacts]]
 
     # ---- hooks -------------------------------------------------------------------
     def on_release(self, idx: IntArray, h: Hydraulics) -> None:  # noqa: ARG002
@@ -267,25 +317,12 @@ class DriftParticles(NetworkSolver):
         ustar = np.asarray(h["ustar"], dtype=np.float64)[r]
         depth = np.asarray(h["depth"], dtype=np.float64)[r]
         v = np.asarray(h["velocity"], dtype=np.float64)[r]
-        counts = substep_counts(dt, self.profiles.kz_max(ustar, depth), depth, c=self.params["substep_fraction"])
-        n_uncapped = int(counts.max()) if counts.size else 1
-        n_sub = int(min(max(n_uncapped, 1), self.params["max_substeps"]))
+        n_sub = self._capped_substeps(dt, ustar, depth, t)
         self.last_substeps = n_sub
-        if n_uncapped > self.params["max_substeps"]:
-            self.steps_at_cap += 1
-            if not self._warned_cap:
-                self._warned_cap = True
-                warnings.warn(
-                    f"the vertical walk hit max_substeps = {n_sub} at t = {t:.0f} s (a shallow, high-shear reach "
-                    "holds active particles); the within-step shear dispersion is under-resolved there",
-                    UserWarning,
-                    stacklevel=2,
-                )
         w = self._vertical_velocity(t + 0.5 * dt)
         k_d = self._deposition_velocity(ustar)
         # A dry reach (depth 0) has nothing to walk in: its particles keep their zeta.
-        wet = depth > 0.0
-        inv_depth = np.where(wet, 1.0 / np.where(wet, depth, 1.0), 0.0)
+        inv_depth = reciprocal_or_zero(depth)
         zeta = self._state["zeta"][idx].copy()
         fsum = np.zeros(idx.size)
         alive = np.ones(idx.size, dtype=bool)
@@ -305,20 +342,7 @@ class DriftParticles(NetworkSolver):
                 # layer [0, zeta_min) or below; an upward velocity does not remove contacts made by mixing
                 contact = np.nonzero(za - np.maximum(shift, 0.0) < zmin)[0]
                 if contact.size:
-                    b = a[contact]
-                    n_clip = int((p_dep[b] >= 1.0).sum())
-                    if n_clip:
-                        self.clipped_contacts += n_clip
-                        if not self._warned_clip:
-                            self._warned_clip = True
-                            warnings.warn(
-                                f"the per-contact deposition probability clipped at 1 at t = {t:.0f} s: every "
-                                "contact deposits, a Robin bed with k_eff = w + zeta_min h / dt_sub rather than the "
-                                "requested deposition velocity (raise zeta_min or lower substep_fraction)",
-                                UserWarning,
-                                stacklevel=2,
-                            )
-                    deposited = b[self.rng.uniform(size=b.size) < p_dep[b]]
+                    deposited = self._deposit_contacts(a[contact], p_dep, t)
                     alive[deposited] = False
                     t_dep[deposited] = t + dt - tau[idx[deposited]] + (k + 1) * dts[deposited]
             if w != 0.0:
@@ -339,46 +363,71 @@ class DriftParticles(NetworkSolver):
         return factor
 
     def diagnostics(self, h: Hydraulics) -> list[str]:
-        """Sub-step count and shear correction for one hydraulics slice (the startup report)."""
+        """Sub-step count, deposition probability and shear correction for one slice (the startup report)."""
         ustar = np.asarray(h["ustar"], dtype=np.float64)
         depth = np.asarray(h["depth"], dtype=np.float64)
         v = np.asarray(h["velocity"], dtype=np.float64)
         wet = np.asarray(h["flow_out"], dtype=np.float64) > 0.0
-        cap = self.params["max_substeps"]
-        counts = substep_counts(self.dt, self.profiles.kz_max(ustar, depth), depth, c=self.params["substep_fraction"])[
-            wet
-        ]
-        n_cap = int((counts > cap).sum())
+        cap = int(self.params["max_substeps"])
+        counts = substep_counts(self.dt, self.profiles.kz_max(ustar, depth), depth, c=self.params["substep_fraction"])
+        counts = counts[wet]
+        median = int(np.median(counts)) if counts.size else 0
+        most = int(counts.max()) if counts.size else 0
         lines = [
-            f"  vertical walk: sub-steps per step (first slice, over wet reaches) median "
-            f"{int(np.median(counts)) if counts.size else 0}, max {int(counts.max()) if counts.size else 0} "
-            f"(cap {cap}); {n_cap} wet reaches at the cap; the run uses the max over reaches holding particles"
+            f"  vertical walk: sub-steps per step (first slice, over wet reaches) median {median}, max {most} "
+            f"(cap {cap}); {int((counts > cap).sum())} wet reaches at the cap; the run uses the max over reaches "
+            "holding particles"
         ]
-        k_d = self.params["deposition_velocity"]
-        if k_d > 0.0 and counts.size:
-            n_sub = min(int(counts.max()), cap)
-            p = deposition_probability(
-                self._deposition_velocity(ustar[wet]),
-                self.dt / n_sub,
-                self.params["zeta_min"] * depth[wet],
-                settling=self._vertical_velocity(0.5 * self.dt),
-            )
-            note = "; clipped at 1 on some reaches: raise zeta_min or lower substep_fraction" if p.max() >= 1.0 else ""
-            lines.append(
-                f"  deposition: per-contact probability (at that sub-step) median {np.median(p):.3g}, "
-                f"max {p.max():.3g}{note}"
-            )
-        if self._shear_table is None:
-            lines.append("  shear correction: not active")
-        else:
-            c = self._shear_table.shear_coefficient(ustar, v, depth)[wet]
-            lines.append(
-                f"  shear correction: active, coefficient c in [{c.min():.2f}, {c.max():.2f}] "
-                f"(K_shear = c ustar h removed from the longitudinal K)"
-                if c.size
-                else "  shear correction: active"
-            )
+        lines += self._deposition_diagnostics(ustar[wet], depth[wet], min(most, cap))
+        lines.append(self._shear_diagnostic(ustar, v, depth, wet))
         return lines
+
+    def _deposition_diagnostics(self, ustar: FloatArray, depth: FloatArray, n_sub: int) -> list[str]:
+        """The report's deposition line: the per-contact probability over the wet reaches, if any deposit.
+
+        Args:
+            ustar: shear velocity of the wet reaches (m/s).
+            depth: depth of the wet reaches (m).
+            n_sub: the sub-step count those reaches imply, 0 when there are none.
+
+        Returns:
+            The line, or nothing with a reflecting bed or no wet reach.
+        """
+        if self.params["deposition_velocity"] <= 0.0 or n_sub == 0:
+            return []
+        p = deposition_probability(
+            self._deposition_velocity(ustar),
+            self.dt / n_sub,
+            self.params["zeta_min"] * depth,
+            settling=self._vertical_velocity(0.5 * self.dt),
+        )
+        note = "; clipped at 1 on some reaches: raise zeta_min or lower substep_fraction" if p.max() >= 1.0 else ""
+        return [
+            f"  deposition: per-contact probability (at that sub-step) median {np.median(p):.3g}, "
+            f"max {p.max():.3g}{note}"
+        ]
+
+    def _shear_diagnostic(self, ustar: FloatArray, v: FloatArray, depth: FloatArray, wet: npt.NDArray[np.bool_]) -> str:
+        """The report's shear-correction line: whether it is active and the range of ``c`` over wet reaches.
+
+        Args:
+            ustar: shear velocity per reach (m/s).
+            v: velocity per reach (m/s).
+            depth: depth per reach (m).
+            wet: which reaches carry flow.
+
+        Returns:
+            The line.
+        """
+        if self._shear_table is None:
+            return "  shear correction: not active"
+        c = self._shear_table.shear_coefficient(ustar, v, depth)[wet]
+        if not c.size:
+            return "  shear correction: active"
+        return (
+            f"  shear correction: active, coefficient c in [{c.min():.2f}, {c.max():.2f}] "
+            "(K_shear = c ustar h removed from the longitudinal K)"
+        )
 
 
 # ---- registry ------------------------------------------------------------------

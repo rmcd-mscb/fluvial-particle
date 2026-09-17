@@ -107,8 +107,8 @@ class NetworkWriter:
             if units:
                 v.attrs["units"] = units
             v.attrs["long_name"] = long_name
-            if name == "exit_reach":
-                # -1 ("not yet exited") is a real value here too; see reach_index above.
+            if fill is not None and np.dtype(dt_).kind != "f":
+                # An integer fill is a real value (-1 = "not yet exited"); see reach_index above.
                 del v.attrs["_FillValue"]
         v = f.create_variable("reach_id", ("reach",), dtype="i8", data=np.asarray(reach_id, dtype=np.int64))
         v.attrs["long_name"] = "reach ids in the run's reach order"

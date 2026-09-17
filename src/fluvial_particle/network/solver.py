@@ -161,12 +161,36 @@ class NetworkSolver:
         }
         self._length = network.length
         self._to_index = network.to_index.astype(np.int64)
-        self._state: dict[str, npt.NDArray[Any]] = {}
+        self._state: dict[str, npt.NDArray[Any]] = self._allocate_state(n)
+        self._state_views: Mapping[str, npt.NDArray[Any]] = MappingProxyType({
+            name: _readonly(arr) for name, arr in self._state.items()
+        })
+        # Set by models that resolve the vertical to the object whose shear_coefficient(ustar, v, h)
+        # gives Taylor's coefficient per reach; None leaves the longitudinal K uncorrected.
+        self._shear_table: ShearTable | None = None
+        self.last_shear_zeroed = 0  # reaches whose longitudinal K the correction took to 0 in the last step
+        self._warned: set[str] = set()  # conditions already reported by _warn_once
+        self._shear_correction_active()  # "on" with a model that cannot honour it is a config error
+
+    def _allocate_state(self, n: int) -> dict[str, npt.NDArray[Any]]:
+        """Allocate one array per declared ``STATE`` entry, validating the declarations.
+
+        Args:
+            n: particle count.
+
+        Returns:
+            The state arrays keyed by name, in declaration order.
+
+        Raises:
+            ValueError: a name (or vector dim) the solver and the output file reserve, a duplicate
+                name, or two states sharing a dim with a different shape or labels.
+        """
+        state: dict[str, npt.NDArray[Any]] = {}
         dims: dict[str, StateVar] = {}
         for spec in self.STATE:
             if spec.name in RESERVED_NAMES:
                 raise ValueError(f"state name {spec.name!r} is reserved by the solver or the output file")
-            if spec.name in self._state:
+            if spec.name in state:
                 raise ValueError(f"duplicate state name {spec.name!r} in {type(self).__name__}.STATE")
             if spec.dim is not None:
                 if spec.dim in RESERVED_NAMES:
@@ -176,16 +200,21 @@ class NetworkSolver:
                     raise ValueError(
                         f"states {first.name!r} and {spec.name!r} share dim {spec.dim!r} with different shape or labels"
                     )
-            self._state[spec.name] = np.full((n, *spec.shape), spec.fill, dtype=np.dtype(spec.dtype))
-        self._state_views: Mapping[str, npt.NDArray[Any]] = MappingProxyType({
-            name: _readonly(arr) for name, arr in self._state.items()
-        })
-        # Set by models that resolve the vertical to the object whose shear_coefficient(ustar, v, h)
-        # gives Taylor's coefficient per reach; None leaves the longitudinal K uncorrected.
-        self._shear_table: ShearTable | None = None
-        self.last_shear_zeroed = 0  # reaches whose longitudinal K the correction took to 0 in the last step
-        self._warned_shear_zeroed = False
-        self._shear_correction_active()  # "on" with a model that cannot honour it is a config error
+            state[spec.name] = np.full((n, *spec.shape), spec.fill, dtype=np.dtype(spec.dtype))
+        return state
+
+    def _warn_once(self, key: str, message: str) -> None:
+        """Report ``message`` as a UserWarning the first time ``key`` comes up in this run.
+
+        Args:
+            key: names the condition; later reports of the same key are silent.
+            message: the warning text. ``stacklevel`` points at the caller of the method reporting it
+                (``step`` for a condition a model or the kernel meets during a step).
+        """
+        if key in self._warned:
+            return
+        self._warned.add(key)
+        warnings.warn(message, UserWarning, stacklevel=3)
 
     def _shear_correction_active(self) -> bool:
         """Resolve ``dispersion.shear_correction`` for this model (see DispersionConfig).
@@ -221,14 +250,12 @@ class NetworkSolver:
         shear = c * ustar * depth
         zeroed = (shear > 0.0) & (k < shear)
         self.last_shear_zeroed = int(zeroed.sum())
-        if self.last_shear_zeroed and not self._warned_shear_zeroed:
-            self._warned_shear_zeroed = True
-            warnings.warn(
+        if self.last_shear_zeroed:
+            self._warn_once(
+                "shear_zeroed",
                 f"the resolved vertical shear exceeds the longitudinal K on {self.last_shear_zeroed} reaches "
                 f"(first: index {int(np.nonzero(zeroed)[0][0])}); their K is set to 0 there. The vertical walk "
                 "generates more shear dispersion than the longitudinal model claims exists.",
-                UserWarning,
-                stacklevel=2,
             )
         return np.maximum(k - shear, 0.0)
 
@@ -323,6 +350,23 @@ class NetworkSolver:
         self._exit_time[idx] = t_end
         self._exit_reach[idx] = self._reach[idx]
 
+    def _exit_at_outlet(self, e: IntArray, reach: IntArray, t_end: float | FloatArray) -> None:
+        """Mark particles ``e`` EXITED from ``reach`` at ``t_end`` and clear their position.
+
+        The kernel's own exits, as opposed to a model's ``terminate``: an exited particle keeps no
+        reach or ``s``, having left the network.
+
+        Args:
+            e: indices of the particles leaving the network.
+            reach: the outlet reach each of them left from.
+            t_end: solver time (s) of the exit, a scalar or one per particle.
+        """
+        self._status[e] = EXITED
+        self._exit_time[e] = t_end
+        self._exit_reach[e] = reach
+        self._reach[e] = -1
+        self._s[e] = np.nan
+
     def midpoint_time(self) -> np.datetime64:
         """Datetime at the middle of the step about to be taken."""
         return self.start_time + np.timedelta64(round((self.time + 0.5 * self.dt) * 1e9), "ns")
@@ -348,18 +392,29 @@ class NetworkSolver:
         if factor is not None:
             self._check_factor(factor)
         v = np.asarray(h["velocity"], dtype=np.float64)
-        d = self.dispersion
-        if self._shear_table is None:
-            k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value, background=d.background)
-        else:
-            # Correct the model's K, then add the background so it stays the floor it is documented as.
-            k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value)
-            k = self._correct_shear(k, h)
-            if d.background > 0.0:
-                k += np.where(np.asarray(h["flow_out"], dtype=np.float64) > 0.0, d.background, 0.0)
+        k = self._dispersion_k(h)
         self._advect(v, tau, t, dt, factor)
         self._disperse(k, tau, t, dt, np.asarray(h["flow_out"], dtype=np.float64))
         self.time = t + dt
+
+    def _dispersion_k(self, h: Hydraulics) -> FloatArray:
+        """This step's longitudinal K per reach, shear-corrected when the model resolves the vertical.
+
+        Args:
+            h: the step's hydraulics dict (export names).
+
+        Returns:
+            K per reach (m^2/s).
+        """
+        d = self.dispersion
+        if self._shear_table is None:
+            return dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value, background=d.background)
+        # Correct the model's K, then add the background so it stays the floor it is documented as.
+        k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value)
+        k = self._correct_shear(k, h)
+        if d.background > 0.0:
+            k += np.where(np.asarray(h["flow_out"], dtype=np.float64) > 0.0, d.background, 0.0)
+        return k
 
     def _check_factor(self, factor: FloatArray) -> None:
         """Reject a velocity factor of the wrong length or with a non-finite entry on an active particle.
@@ -440,12 +495,7 @@ class NetworkSolver:
             self._prev_reach[j] = rj
             nxt = self._to_index[rj]
             exiting = nxt < 0
-            e = j[exiting]
-            self._status[e] = EXITED
-            self._exit_time[e] = t + dt - time_left[exiting]
-            self._exit_reach[e] = rj[exiting]
-            self._reach[e] = -1
-            self._s[e] = np.nan
+            self._exit_at_outlet(j[exiting], rj[exiting], t + dt - time_left[exiting])
             m = j[~exiting]
             self._reach[m] = nxt[~exiting]
             self._s[m] = f[m] * v[nxt[~exiting]] * time_left[~exiting]
@@ -489,12 +539,7 @@ class NetworkSolver:
             self._prev_reach[j] = rj
             nxt = self._to_index[rj]
             exiting = nxt < 0
-            e = j[exiting]
-            self._status[e] = EXITED
-            self._exit_time[e] = t + dt
-            self._exit_reach[e] = rj[exiting]
-            self._reach[e] = -1
-            self._s[e] = np.nan
+            self._exit_at_outlet(j[exiting], rj[exiting], t + dt)
             m = j[~exiting]
             self._reach[m] = nxt[~exiting]
             self._s[m] = over[~exiting]

@@ -30,6 +30,19 @@ VELOCITY_PROFILES = ("log", "uniform")
 SHEAR_CORRECTIONS = ("auto", "on", "off")
 
 
+def _unknown_keys(cls: type[Any], d: Mapping[str, Any]) -> list[str]:
+    """The keys of ``d`` that are not fields of the dataclass ``cls``, sorted.
+
+    Args:
+        cls: a dataclass whose fields are the accepted keys.
+        d: the mapping to check.
+
+    Returns:
+        The unknown keys, empty when every key is a field.
+    """
+    return sorted(set(d) - {f.name for f in dataclasses.fields(cls)})
+
+
 def parse_datetime(value: str | dtm.datetime | np.datetime64) -> np.datetime64:
     """Parse an ISO string, datetime, or datetime64 into datetime64[ns].
 
@@ -113,9 +126,9 @@ class VerticalDispersionConfig:
         Raises:
             ValueError: `d` contains a key that is not a field.
         """
-        unknown = set(d) - {f.name for f in dataclasses.fields(cls)}
+        unknown = _unknown_keys(cls, d)
         if unknown:
-            raise ValueError(f"unknown dispersion.vertical keys: {sorted(unknown)}")
+            raise ValueError(f"unknown dispersion.vertical keys: {unknown}")
         return cls(**d)
 
     def to_dict(self) -> dict[str, Any]:
@@ -183,9 +196,9 @@ class DispersionConfig:
         Raises:
             ValueError: `d` contains a key that is not a `DispersionConfig` field.
         """
-        unknown = set(d) - {f.name for f in dataclasses.fields(cls)}
+        unknown = _unknown_keys(cls, d)
         if unknown:
-            raise ValueError(f"unknown dispersion keys: {sorted(unknown)}")
+            raise ValueError(f"unknown dispersion keys: {unknown}")
         data = dict(d)
         vert = data.get("vertical", {})
         data["vertical"] = (
@@ -436,10 +449,9 @@ class NetworkConfig:
             ValueError: `d` contains a key that is not a `NetworkConfig` field.
         """
         data = dict(d)
-        names = {f.name for f in dataclasses.fields(cls)}
-        unknown = set(data) - names
+        unknown = _unknown_keys(cls, data)
         if unknown:
-            raise ValueError(f"unknown network config keys: {sorted(unknown)}")
+            raise ValueError(f"unknown network config keys: {unknown}")
         disp = data.get("dispersion", {})
         data["dispersion"] = disp if isinstance(disp, DispersionConfig) else DispersionConfig.from_dict(disp)
         part = data.get("particles", {})

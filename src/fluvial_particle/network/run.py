@@ -19,6 +19,7 @@ from .network import Network
 from .particles import resolve_model
 from .provider import FileHydraulicsProvider
 from .results import NetworkResults
+from .solver import EXITED
 from .sources import ParticleSchedule, expand_sources
 from .writer import OUTPUT_FILENAME, NetworkWriter
 
@@ -114,6 +115,40 @@ def diagnostics_report(
     return "\n".join(lines)
 
 
+def _output_attrs(
+    cfg: NetworkConfig, provider: FileHydraulicsProvider, *, base_seed: int, stop: np.datetime64
+) -> dict[str, Any]:
+    """The particle file's global attributes: the effective settings the run used.
+
+    Args:
+        cfg: the run's configuration.
+        provider: the hydraulics provider.
+        base_seed: the resolved base seed.
+        stop: the time the run actually stops at (an integer number of steps from the start).
+
+    Returns:
+        The attributes, JSON-encoded where the value is a table.
+    """
+    return {
+        "hydraulics_file": str(pathlib.Path(cfg.hydraulics_file).resolve()),
+        "reach_subset": json.dumps(cfg.to_dict()["reach_subset"]),
+        "interpolation": cfg.interpolation,
+        "dtype": cfg.dtype,
+        "dt": cfg.dt,
+        "output_interval": cfg.output_interval,
+        "end_time": str(stop.astype("datetime64[s]")),
+        "seed": base_seed,
+        "mass_units": cfg.mass_units,
+        "dispersion": json.dumps(cfg.dispersion.to_dict()),
+        "particle_model": cfg.particles.model,
+        "particles": json.dumps(cfg.particles.to_dict()),
+        "sources": json.dumps(cfg.to_dict()["sources"]),
+        "fluvial_particle_version": __version__,
+        "created": str(np.datetime64("now", "s")),
+        "conventions_note": provider.conventions_note,
+    }
+
+
 def run_network_simulation(
     config: NetworkConfig | Mapping[str, Any] | str | pathlib.Path,
     output_dir: str | pathlib.Path,
@@ -174,11 +209,11 @@ def run_network_simulation(
             params=cfg.particles.params,
         )
         if rank == 0 and not quiet:
-            report = diagnostics_report(network, provider, schedule, cfg, start, end)
+            lines = [diagnostics_report(network, provider, schedule, cfg, start, end)]
             model_lines = solver.diagnostics(provider.hydraulics(start))
             if model_lines:
-                report += "\n" + "\n".join([f"  particle model: {cfg.particles.model}", *model_lines])
-            print(report, flush=True)
+                lines += [f"  particle model: {cfg.particles.model}", *model_lines]
+            print("\n".join(lines), flush=True)
 
         total = float((end - start) / np.timedelta64(1, "s"))
         n_steps = int(np.floor(total / cfg.dt + 1e-9))
@@ -192,24 +227,7 @@ def run_network_simulation(
                 stacklevel=2,
             )
 
-        attrs: dict[str, Any] = {
-            "hydraulics_file": str(pathlib.Path(cfg.hydraulics_file).resolve()),
-            "reach_subset": json.dumps(cfg.to_dict()["reach_subset"]),
-            "interpolation": cfg.interpolation,
-            "dtype": cfg.dtype,
-            "dt": cfg.dt,
-            "output_interval": cfg.output_interval,
-            "end_time": str(stop.astype("datetime64[s]")),
-            "seed": base_seed,
-            "mass_units": cfg.mass_units,
-            "dispersion": json.dumps(cfg.dispersion.to_dict()),
-            "particle_model": cfg.particles.model,
-            "particles": json.dumps(cfg.particles.to_dict()),
-            "sources": json.dumps(cfg.to_dict()["sources"]),
-            "fluvial_particle_version": __version__,
-            "created": str(np.datetime64("now", "s")),
-            "conventions_note": provider.conventions_note,
-        }
+        attrs = _output_attrs(cfg, provider, base_seed=base_seed, stop=stop)
         with NetworkWriter(
             out / OUTPUT_FILENAME,
             n_particles=n,
@@ -232,7 +250,7 @@ def run_network_simulation(
                     itime += 1
             writer.write_exits(solver.exit_time, solver.exit_reach, lo, hi)
         if rank == 0 and not quiet:
-            exited = int((solver.status == 2).sum())
+            exited = int((solver.status == EXITED).sum())
             print(
                 f"Done: {n_steps} steps, {itime} output times, {exited} of {solver.n} local particles exited",
                 flush=True,
