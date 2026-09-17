@@ -16,9 +16,10 @@ from .. import __version__
 from .config import NetworkConfig
 from .dispersion import dispersion_coefficient
 from .network import Network
+from .particles import resolve_model
 from .provider import FileHydraulicsProvider
 from .results import NetworkResults
-from .solver import NetworkSolver
+from .solver import EXITED
 from .sources import ParticleSchedule, expand_sources
 from .writer import OUTPUT_FILENAME, NetworkWriter
 
@@ -95,7 +96,7 @@ def diagnostics_report(
     for t in sample:
         h = provider.hydraulics(t)
         wet = np.asarray(h["flow_out"]) > 0.0
-        k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value)
+        k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value, background=d.background)
         kicks.append(np.sqrt(2.0 * k[wet] * config.dt))
         crossed.append(np.asarray(h["velocity"])[wet] * config.dt > network.length[wet])
     kick = np.concatenate(kicks) if kicks else np.zeros(0)
@@ -112,6 +113,40 @@ def diagnostics_report(
         f"particles {est['particle_bytes'] / 1e6:.1f} MB, per output time {est['output_time_bytes'] / 1e6:.1f} MB"
     )
     return "\n".join(lines)
+
+
+def _output_attrs(
+    cfg: NetworkConfig, provider: FileHydraulicsProvider, *, base_seed: int, stop: np.datetime64
+) -> dict[str, Any]:
+    """The particle file's global attributes: the effective settings the run used.
+
+    Args:
+        cfg: the run's configuration.
+        provider: the hydraulics provider.
+        base_seed: the resolved base seed.
+        stop: the time the run actually stops at (an integer number of steps from the start).
+
+    Returns:
+        The attributes, JSON-encoded where the value is a table.
+    """
+    return {
+        "hydraulics_file": str(pathlib.Path(cfg.hydraulics_file).resolve()),
+        "reach_subset": json.dumps(cfg.to_dict()["reach_subset"]),
+        "interpolation": cfg.interpolation,
+        "dtype": cfg.dtype,
+        "dt": cfg.dt,
+        "output_interval": cfg.output_interval,
+        "end_time": str(stop.astype("datetime64[s]")),
+        "seed": base_seed,
+        "mass_units": cfg.mass_units,
+        "dispersion": json.dumps(cfg.dispersion.to_dict()),
+        "particle_model": cfg.particles.model,
+        "particles": json.dumps(cfg.particles.to_dict()),
+        "sources": json.dumps(cfg.to_dict()["sources"]),
+        "fluvial_particle_version": __version__,
+        "created": str(np.datetime64("now", "s")),
+        "conventions_note": provider.conventions_note,
+    }
 
 
 def run_network_simulation(
@@ -161,7 +196,8 @@ def run_network_simulation(
         )
         n = schedule.n
         lo, hi = rank * n // size, (rank + 1) * n // size
-        solver = NetworkSolver(
+        model_cls = resolve_model(cfg.particles.model)
+        solver = model_cls(
             network,
             provider,
             schedule.slice(lo, hi),
@@ -170,9 +206,14 @@ def run_network_simulation(
             dispersion=cfg.dispersion,
             rng=np.random.RandomState(base_seed + 1 + rank),
             max_hops=cfg.max_hops,
+            params=cfg.particles.params,
         )
         if rank == 0 and not quiet:
-            print(diagnostics_report(network, provider, schedule, cfg, start, end), flush=True)
+            lines = [diagnostics_report(network, provider, schedule, cfg, start, end)]
+            model_lines = solver.diagnostics(provider.hydraulics(start))
+            if model_lines:
+                lines += [f"  particle model: {cfg.particles.model}", *model_lines]
+            print("\n".join(lines), flush=True)
 
         total = float((end - start) / np.timedelta64(1, "s"))
         n_steps = int(np.floor(total / cfg.dt + 1e-9))
@@ -186,22 +227,7 @@ def run_network_simulation(
                 stacklevel=2,
             )
 
-        attrs: dict[str, Any] = {
-            "hydraulics_file": str(pathlib.Path(cfg.hydraulics_file).resolve()),
-            "reach_subset": json.dumps(cfg.to_dict()["reach_subset"]),
-            "interpolation": cfg.interpolation,
-            "dtype": cfg.dtype,
-            "dt": cfg.dt,
-            "output_interval": cfg.output_interval,
-            "end_time": str(stop.astype("datetime64[s]")),
-            "seed": base_seed,
-            "mass_units": cfg.mass_units,
-            "dispersion": json.dumps(cfg.dispersion.to_dict()),
-            "sources": json.dumps(cfg.to_dict()["sources"]),
-            "fluvial_particle_version": __version__,
-            "created": str(np.datetime64("now", "s")),
-            "conventions_note": provider.conventions_note,
-        }
+        attrs = _output_attrs(cfg, provider, base_seed=base_seed, stop=stop)
         with NetworkWriter(
             out / OUTPUT_FILENAME,
             n_particles=n,
@@ -210,18 +236,21 @@ def run_network_simulation(
             attrs=attrs,
             dtype=provider.dtype,
             comm=comm,
+            state_specs=solver.state_specs,
         ) as writer:
             writer.write_schedule(schedule.slice(lo, hi), lo, hi)
-            writer.write_step(0, 0.0, solver.reach, solver.s, solver.status, lo, hi)
+            writer.write_step(0, 0.0, solver.reach, solver.s, solver.status, lo, hi, state=solver.state)
             itime = 1
             for k in range(n_steps):
                 solver.step()
                 if (k + 1) % every == 0 or k == n_steps - 1:
-                    writer.write_step(itime, solver.time, solver.reach, solver.s, solver.status, lo, hi)
+                    writer.write_step(
+                        itime, solver.time, solver.reach, solver.s, solver.status, lo, hi, state=solver.state
+                    )
                     itime += 1
             writer.write_exits(solver.exit_time, solver.exit_reach, lo, hi)
         if rank == 0 and not quiet:
-            exited = int((solver.status == 2).sum())
+            exited = int((solver.status == EXITED).sum())
             print(
                 f"Done: {n_steps} steps, {itime} output times, {exited} of {solver.n} local particles exited",
                 flush=True,

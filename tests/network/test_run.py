@@ -1,5 +1,7 @@
 """End-to-end tests for run_network_simulation."""
 
+import json
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -148,3 +150,53 @@ def test_run_window_with_no_hydraulics_timestamp_inside(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "dt check" in out
     res.close()
+
+
+def test_run_uses_the_configured_particle_model(tmp_path):
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    cfg = config_for(path, particles={"model": "tests.network.support:HalfSpeed"})
+    with run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=True) as res:
+        assert res.attrs["particle_model"] == "tests.network.support:HalfSpeed"
+        assert json.loads(res.attrs["particles"]) == {"model": "tests.network.support:HalfSpeed"}
+        # half speed: the reach 101 slug is at 300 m after 600 s instead of 600 m
+        assert res.positions(1).loc[0, "s"] == pytest.approx(300.0)
+    with run_network_simulation(config_for(path), tmp_path / "out2", seed=1, quiet=True) as res:
+        assert res.attrs["particle_model"] == "passive"
+
+
+def test_run_drift_model_writes_zeta_and_reports_substeps(tmp_path, capsys):
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    cfg = config_for(path, particles={"model": "drift", "settling_velocity": 0.001})
+    with run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=False) as res:
+        assert res.attrs["particle_model"] == "drift"
+        assert res.state_variables == ("zeta",)
+        df = res.positions(1)
+        active = df[df["status"] == 1]
+        assert ((active["zeta"] >= 0.0) & (active["zeta"] <= 1.0)).all()
+        assert res.positions()["zeta"].attrs["fluvial_particle_state"] == 1
+        prof = res.profile(1, bin_length=np.inf, n_zeta=10)
+        assert prof.dims == ("bin", "zeta") and prof.sizes == {"bin": 3, "zeta": 10}
+        assert int(prof.sum()) == int((df["status"] == 1).sum())
+        assert json.loads(res.attrs["particles"])["zeta_min"] == 0.001  # the effective parameters are recorded
+    out = capsys.readouterr().out
+    assert "sub-steps" in out and "shear correction" in out
+
+
+def test_run_settled_particles_leave_the_water_column(tmp_path):
+    path = write_network_file(tmp_path / "net.nc", three_reach_dataset())
+    cfg = config_for(path, particles={"model": "drift", "settling_velocity": 0.05, "deposition_velocity": 1e9})
+    with (
+        pytest.warns(UserWarning, match="clipped at 1"),
+        run_network_simulation(cfg, tmp_path / "out", seed=1, quiet=True) as res,
+    ):
+        settled = res.terminal(3)
+        assert len(settled) == res.n_particles and (settled["exit_reach_id"] > 0).all()
+        assert res.arrival_times().empty
+        assert int(res.counts(-1, np.inf).sum()) == 0  # settled mass is not in the water column
+        assert np.isfinite(res.positions(-1)["s"]).all() and (res.positions(-1)["zeta"] == 0.0).all()
+        passive_cfg = config_for(path)
+        with (
+            pytest.raises(ValueError, match="zeta"),
+            run_network_simulation(passive_cfg, tmp_path / "passive", seed=1, quiet=True) as passive,
+        ):
+            passive.profile(1)

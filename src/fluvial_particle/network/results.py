@@ -15,6 +15,7 @@ from ..io import PVDWriter, VTPWriter
 from .dispersion import dispersion_coefficient
 from .network import Network, NetworkBins
 from .provider import FileHydraulicsProvider
+from .solver import ACTIVE, EXITED
 from .writer import OUTPUT_FILENAME
 
 
@@ -144,10 +145,34 @@ class NetworkResults:
         return np.array([self.time_index(time)], dtype=np.int64)
 
     # ---- particles -----------------------------------------------------------
+    @property
+    def state_variables(self) -> tuple[str, ...]:
+        """Names of the particle model's declared state variables in the file (file order)."""
+        return tuple(str(v) for v in self._ds.data_vars if "fluvial_particle_state" in self._ds[v].attrs)
+
+    def _state_columns(self, i: int) -> dict[str, npt.NDArray[Any]]:
+        """Declared state at output time ``i`` as DataFrame columns: one per scalar, one per component."""
+        cols: dict[str, npt.NDArray[Any]] = {}
+        for name in self.state_variables:
+            da = self._ds[name]
+            values = da.values[i]
+            if values.ndim == 1:
+                cols[name] = values
+                continue
+            dim = da.dims[-1]
+            labels = self._ds[dim].values if dim in self._ds.coords else np.arange(values.shape[1])
+            for k, label in enumerate(labels):
+                cols[f"{name}_{label}"] = values[:, k]
+        return cols
+
     def positions(self, time: int | np.datetime64 | str | None = None) -> pd.DataFrame | xr.Dataset:
-        """Particle state at one output time as a DataFrame, or the whole file as a Dataset when time is None."""
+        """Particle state at one output time as a DataFrame, or the whole file as a Dataset when time is None.
+
+        Declared model state follows the base columns: a scalar state as one column, a vector state
+        as one column per component named ``<name>_<label>``.
+        """
         if time is None:
-            return self._ds[["reach_index", "s", "status", "mass"]]
+            return self._ds[["reach_index", "s", "status", "mass", *self.state_variables]]
         i = self.time_index(time)
         ri = self._ds["reach_index"].values[i].astype(np.int64)
         rid = np.where(ri >= 0, self.reach_id[np.clip(ri, 0, self.n_reach - 1)], -1)
@@ -158,7 +183,39 @@ class NetworkResults:
             "s": self._ds["s"].values[i].astype(np.float64),
             "status": self._ds["status"].values[i].astype(np.int8),
             "mass": self._ds["mass"].values.astype(np.float64),
+            **self._state_columns(i),
         })
+
+    def profile(self, time: int | np.datetime64 | str, bin_length: float = np.inf, n_zeta: int = 20) -> xr.DataArray:
+        """Histogram of the drift model's relative elevation per bin: counts on dims ``(bin, zeta)``.
+
+        Active particles only; ``zeta`` bins are ``n_zeta`` equal classes over ``[0, 1]`` with their
+        centres as the coordinate. ``bin_length = np.inf`` gives one bin per reach.
+
+        Raises:
+            ValueError: the run's particle model did not declare ``zeta``.
+        """
+        if "zeta" not in self.state_variables:
+            raise ValueError("profile() needs a particle model with a 'zeta' state (the drift model)")
+        i = self.time_index(time)
+        bins = self.bins(bin_length)
+        ri = self._ds["reach_index"].values[i].astype(np.int64)
+        si = self._ds["s"].values[i].astype(np.float64)
+        zi = self._ds["zeta"].values[i].astype(np.float64)
+        act = self._ds["status"].values[i] == ACTIVE
+        b = bins.bin_of(ri[act], si[act])
+        zc = np.clip((zi[act] * n_zeta).astype(np.int64), 0, n_zeta - 1)
+        counts = np.zeros((bins.n_bins, n_zeta), dtype=np.int64)
+        np.add.at(counts, (b, zc), 1)
+        coords = self._bin_coords(bins)
+        coords["zeta"] = (np.arange(n_zeta) + 0.5) / n_zeta
+        return xr.DataArray(
+            counts,
+            dims=("bin", "zeta"),
+            coords=coords,
+            name="profile",
+            attrs={"units": "-", "time": str(self.times[i])},
+        )
 
     def map_positions(self, time: int | np.datetime64 | str) -> pd.DataFrame:
         """positions(time) with x, y from the polylines.
@@ -178,15 +235,20 @@ class NetworkResults:
         """Per-reach (x, y) vertex arrays for plotting."""
         return self.network.polylines()
 
-    # ---- arrivals --------------------------------------------------------------
-    def arrival_times(self, outlet: int | None = None) -> pd.DataFrame:
-        """Exited particles with exit time, outlet, release reach, and mass; filtered to one outlet id if given."""
+    # ---- terminal statuses and arrivals -----------------------------------------
+    def terminal(self, status: int) -> pd.DataFrame:
+        """Particles whose final status equals ``status`` (2 exited, 3 settled, 4 removed).
+
+        Columns: ``particle``, ``exit_time`` and ``exit_datetime`` (when the status was reached),
+        ``exit_reach`` and ``exit_reach_id`` (the outlet for exited, the bed reach for settled),
+        ``release_reach``, ``release_reach_id``, ``release_time``, ``source_index``, ``mass``.
+        """
         ds = self._ds
+        done = ds["status"].values[-1] == int(status)
         et = ds["exit_time"].values.astype(np.float64)
         er = ds["exit_reach"].values.astype(np.int64)
-        done = np.isfinite(et)
         rr = ds["release_reach"].values.astype(np.int64)
-        df = pd.DataFrame({
+        return pd.DataFrame({
             "particle": np.nonzero(done)[0],
             "exit_time": et[done],
             "exit_datetime": self.start_time + (et[done] * 1e9).astype("timedelta64[ns]"),
@@ -198,6 +260,10 @@ class NetworkResults:
             "source_index": ds["source_index"].values.astype(np.int64)[done],
             "mass": ds["mass"].values.astype(np.float64)[done],
         })
+
+    def arrival_times(self, outlet: int | None = None) -> pd.DataFrame:
+        """Exited particles with exit time, outlet, release reach, and mass; filtered to one outlet id if given."""
+        df = self.terminal(EXITED)
         if outlet is not None:
             df = df[df["exit_reach_id"] == int(outlet)].reset_index(drop=True)
         return df
@@ -240,9 +306,13 @@ class NetworkResults:
         if isinstance(smoothing, str):
             if smoothing != "auto":
                 raise ValueError("smoothing must be None, a bandwidth in meters, or 'auto'")
+            # The smoothing bandwidth uses the configured K; the shear correction a drift run applied
+            # to it is not reproduced here (a smoothing heuristic, not the run's kick).
             d = json.loads(self._ds.attrs["dispersion"])
             h = self.provider.hydraulics(self.times[i])
-            k = dispersion_coefficient(h, d["model"], scale=d["scale"], cap=d["cap"], value=d["value"])
+            k = dispersion_coefficient(
+                h, d["model"], scale=d["scale"], cap=d["cap"], value=d["value"], background=d.get("background", 0.0)
+            )
             return np.sqrt(2.0 * k * float(self._ds.attrs["dt"]))
         return np.full(self.n_reach, float(smoothing))
 
@@ -251,7 +321,7 @@ class NetworkResults:
     ) -> npt.NDArray[np.float64]:
         ri = self._ds["reach_index"].values[i].astype(np.int64)
         si = self._ds["s"].values[i].astype(np.float64)
-        act = self._ds["status"].values[i] == 1
+        act = self._ds["status"].values[i] == ACTIVE
         r, s, w = ri[act], si[act], weights[act]
         bw = self._bandwidth(i, bins, smoothing)
         if bw is None:
@@ -383,7 +453,7 @@ class NetworkResults:
     def summary(self) -> str:
         """One-paragraph description of the run."""
         status = self._ds["status"].values[-1]
-        exited = int((status == 2).sum())
+        exited = int((status == EXITED).sum())
         return (
             f"NetworkResults: {self.n_particles} particles, {self.n_reach} reaches, {self.times.size} output times "
             f"({self.times[0]} .. {self.times[-1]}), {exited} exited by the end; "

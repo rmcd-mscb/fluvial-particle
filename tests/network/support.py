@@ -9,6 +9,8 @@ import numpy as np
 import numpy.typing as npt
 import xarray as xr
 
+from fluvial_particle.network.solver import NetworkSolver
+
 
 G = 9.80665
 FIELD_NAMES = ("flow_in", "flow_out", "velocity", "depth", "width", "ustar")
@@ -247,3 +249,52 @@ class ArrayHydraulicsProvider:
 
     def close(self) -> None:
         """Nothing to release."""
+
+
+class HalfSpeed(NetworkSolver):
+    """Test model: records releases and advects at half the reach velocity (no parameters)."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        self.released: list[npt.NDArray[np.int64]] = []
+        self.behave_calls: list[tuple[float, float, float]] = []
+
+    def on_release(self, idx: npt.NDArray[np.int64], h: object) -> None:  # noqa: ARG002
+        self.released.append(idx.copy())
+
+    def behave(self, h: object, tau: npt.NDArray[np.float64], t: float, dt: float) -> npt.NDArray[np.float64]:  # noqa: ARG002
+        self.behave_calls.append((t, dt, float(tau[0])))
+        return np.full(self.n, 0.5)
+
+
+class NotASolver:
+    """Registry test: a class that does not subclass NetworkSolver."""
+
+
+def uniform_reach_dataset(
+    length: float = 50000.0,
+    velocity: float = 1.0,
+    depth: float = 1.0,
+    ustar: float = 0.1,
+    width: float = 10.0,
+    n_reach: int = 1,
+    n_time: int = 4,
+) -> xr.Dataset:
+    """A chain of identical reaches with ``depth`` and ``ustar`` set independently (slope = ustar^2 / (g depth)).
+
+    The Fischer coefficient follows from the choice of ``width``: K = 0.011 v^2 w^2 / (d ustar).
+    """
+    to_index = np.arange(1, n_reach + 1, dtype=np.int32)
+    to_index[-1] = -1
+    times = np.datetime64("1979-01-01", "ns") + np.arange(n_time) * np.timedelta64(1, "D")
+    return build_dataset(
+        reach_id=np.arange(1, n_reach + 1),
+        to_index=to_index,
+        length=np.full(n_reach, length),
+        slope=ustar**2 / (G * depth),
+        velocity=np.full(n_reach, velocity),
+        depth=np.full(n_reach, depth),
+        width=np.full(n_reach, width),
+        flow_out=np.full(n_reach, velocity * depth * width),
+        times=times,
+    )

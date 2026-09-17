@@ -8,6 +8,17 @@
 
 **Tech Stack:** as the base plan (Python 3.10+, numpy, scipy for the quadrature, xarray, h5netcdf, pytest, ruff, mypy).
 
+> **Amended during execution (2026-09-16):** Tasks 7 to 9 were built against the amended Decision 7
+> of the spec, not the text below. The Euler-Ito walk with the gradient drift and a wall at
+> `zeta_min` failed acceptance tests 1 to 4 at any affordable sub-step (see the spec); the walk lives
+> on the full column with an exactly well-mixed kernel (a sphere rotation for the parabolic profile,
+> a reflected Gaussian step otherwise), `zeta_min` is the velocity clip and the deposition contact
+> layer, the per-contact probability is `k_d dt_sub / (zeta_min h + w dt_sub)`, the default sub-step
+> fraction is 0.03 (parameter `substep_fraction`) with `max_substeps` 1000, and the shear quadrature
+> divides by the column width (5.83 at 0.001, 5.58 at 0.01; the 5.65 / 4.53 below were the truncated
+> domain without the width factor). Test 2 runs at `P = 0.5` with a KS distance criterion and test 7
+> on the constant profile; see the spec's Testing section for the measured tolerances.
+
 **Spec:** `docs/superpowers/specs/2026-09-16-network-behavioral-particles-design.md`, Decisions 1 to 8 including 7a. **Base spec:** `docs/superpowers/specs/2026-09-13-network-particle-solver-design.md`. **Base plan:** `docs/superpowers/plans/2026-09-13-network-particle-solver.md` (conventions, file structure, test support).
 
 ## Global Constraints

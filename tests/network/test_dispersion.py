@@ -45,3 +45,19 @@ def test_dispersion_models():
         dispersion_coefficient(fields, "bogus")
     with pytest.raises(ValueError, match="value"):
         dispersion_coefficient(fields, "constant")
+
+
+def test_background_is_added_on_wet_reaches_for_every_model():
+    fields = {
+        "velocity": np.array([1.0, 1.0]),
+        "depth": np.array([2.0, 2.0]),
+        "width": np.array([10.0, 10.0]),
+        "ustar": np.array([0.1, 0.1]),
+        "flow_out": np.array([5.0, 0.0]),
+    }
+    assert list(dispersion_coefficient(fields, "none", background=0.3)) == [0.3, 0.0]
+    assert list(dispersion_coefficient(fields, "constant", value=3.0, background=0.3)) == [3.3, 0.0]
+    k = dispersion_coefficient(fields, "fischer", background=0.3)
+    assert k[0] == pytest.approx(5.8)
+    assert k[1] == pytest.approx(5.5)  # Fischer itself is not masked on flow_out; only the background is
+    assert list(dispersion_coefficient(fields, "none")) == [0.0, 0.0]  # default adds nothing

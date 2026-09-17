@@ -57,6 +57,7 @@ def dispersion_coefficient(
     scale: float = 1.0,
     cap: float | None = None,
     value: float | None = None,
+    background: float = 0.0,
 ) -> npt.NDArray[np.float64]:
     """Per-reach dispersion coefficient for the configured model.
 
@@ -66,25 +67,30 @@ def dispersion_coefficient(
         scale: Fischer multiplier.
         cap: Fischer upper bound (m^2/s).
         value: constant K (m^2/s) for the "constant" model.
+        background: K (m^2/s) added on every reach with flow_out > 0, for every model including
+            "none" (the analogue of the 2D/3D solver's ``lev``).
 
     Returns:
         K per reach (m^2/s); 0 where depth, ustar or velocity is 0 (and, for the constant
-        model, where flow_out is 0).
+        model, where flow_out is 0), plus ``background`` where flow_out > 0.
 
     Raises:
         ValueError: unknown model, or "constant" without a value.
     """
     n = np.asarray(fields["velocity"]).shape[0]
     if model == "none":
-        return np.zeros(n, dtype=np.float64)
-    if model == "constant":
+        k = np.zeros(n, dtype=np.float64)
+    elif model == "constant":
         if value is None:
             raise ValueError("dispersion model 'constant' requires a value")
         k = np.full(n, float(value), dtype=np.float64)
         k[np.asarray(fields["flow_out"]) <= 0.0] = 0.0
-        return k
-    if model == "fischer":
-        return fischer_coefficient(
+    elif model == "fischer":
+        k = fischer_coefficient(
             fields["velocity"], fields["depth"], fields["width"], fields["ustar"], scale=scale, cap=cap
         )
-    raise ValueError(f"unknown dispersion model {model!r}; expected one of {DISPERSION_MODELS}")
+    else:
+        raise ValueError(f"unknown dispersion model {model!r}; expected one of {DISPERSION_MODELS}")
+    if background != 0.0:
+        k += np.where(np.asarray(fields["flow_out"]) > 0.0, float(background), 0.0)
+    return k

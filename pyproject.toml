@@ -21,6 +21,7 @@ dependencies = [
     "tomli>=2.0.0; python_version < '3.11'",  # TOML parser backport for Python 3.10
     "xarray>=2023.1",   # network hydraulics input and results
     "h5netcdf>=1.1",    # NetCDF4 output on h5py (serial or mpio)
+    "scipy>=1.10",      # quadrature for the network vertical model
 ]
 
 [project.optional-dependencies]
@@ -52,7 +53,6 @@ dev = [
     "typeguard>=2.13.3",
     "xdoctest>=1.0.0",
     "pandas>=2.0.0",
-    "scipy>=1.10",        # analytical acceptance tests (inverse Gaussian, KS)
     "matplotlib>=3.7",    # demo notebook
 
     # Documentation

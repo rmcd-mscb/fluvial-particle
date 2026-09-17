@@ -25,6 +25,22 @@ else:  # pragma: no cover
 
 SOURCE_FORMS = ("slug", "loading", "concentration")
 DTYPES = ("float32", "float64")
+VERTICAL_PROFILES = ("parabolic", "constant", "value")
+VELOCITY_PROFILES = ("log", "uniform")
+SHEAR_CORRECTIONS = ("auto", "on", "off")
+
+
+def _unknown_keys(cls: type[Any], d: Mapping[str, Any]) -> list[str]:
+    """The keys of ``d`` that are not fields of the dataclass ``cls``, sorted.
+
+    Args:
+        cls: a dataclass whose fields are the accepted keys.
+        d: the mapping to check.
+
+    Returns:
+        The unknown keys, empty when every key is a field.
+    """
+    return sorted(set(d) - {f.name for f in dataclasses.fields(cls)})
 
 
 def parse_datetime(value: str | dtm.datetime | np.datetime64) -> np.datetime64:
@@ -44,27 +60,113 @@ def parse_datetime(value: str | dtm.datetime | np.datetime64) -> np.datetime64:
 
 
 @dataclasses.dataclass(frozen=True)
+class VerticalDispersionConfig:
+    """The ``[network.dispersion.vertical]`` table: mixing and velocity profiles over the depth.
+
+    Read only by particle models that resolve the vertical. It mirrors the 2D/3D solver's
+    ``lev + beta * ustar * depth`` parameterization: ``beta`` for the constant profile, ``background``
+    for ``lev``; the parabolic profile's depth mean at ``kappa = 0.41`` (``kappa / 6 = 0.068``) is within
+    2 percent of ``beta = 0.067``.
+
+    Args:
+        profile: ``"parabolic"`` (``Kz = kappa ustar h zeta (1 - zeta)``), ``"constant"``
+            (``Kz = beta ustar h``), or ``"value"`` (a fixed ``Kz`` in m^2/s).
+        kappa: von Karman constant for the parabolic profile and the log law.
+        beta: coefficient of the constant profile.
+        value: ``Kz`` (m^2/s) for the ``"value"`` profile.
+        background: m^2/s added to ``Kz`` everywhere.
+        scale: multiplier on the profile's ``Kz``.
+        velocity_profile: ``"log"`` (the log law) or ``"uniform"`` (every particle at the reach velocity).
+    """
+
+    profile: str = "parabolic"
+    kappa: float = 0.41
+    beta: float = 0.067
+    value: float | None = None
+    background: float = 0.0
+    scale: float = 1.0
+    velocity_profile: str = "log"
+
+    def __post_init__(self) -> None:
+        """Validate the vertical settings.
+
+        Raises:
+            ValueError: an unknown profile, non-positive kappa, beta or scale, a negative
+                background, a non-numeric field, ``value`` given with another profile, or the
+                ``"value"`` profile without a non-negative value.
+        """
+        for name in ("kappa", "beta", "scale", "background", "value"):
+            raw = getattr(self, name)
+            if raw is None:
+                continue
+            try:
+                object.__setattr__(self, name, float(raw))
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"vertical {name} must be a number, got {raw!r}") from e
+        if self.profile not in VERTICAL_PROFILES:
+            raise ValueError(f"vertical profile must be one of {VERTICAL_PROFILES}, got {self.profile!r}")
+        if self.velocity_profile not in VELOCITY_PROFILES:
+            raise ValueError(
+                f"vertical velocity_profile must be one of {VELOCITY_PROFILES}, got {self.velocity_profile!r}"
+            )
+        for name in ("kappa", "beta", "scale"):
+            if getattr(self, name) <= 0.0:
+                raise ValueError(f"vertical {name} must be positive")
+        if self.background < 0.0:
+            raise ValueError("vertical background must be non-negative")
+        if self.profile == "value" and (self.value is None or self.value < 0.0):
+            raise ValueError("vertical profile 'value' requires a non-negative value")
+        if self.profile != "value" and self.value is not None:
+            raise ValueError(f"vertical value is only used by profile 'value' (profile is {self.profile!r})")
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> VerticalDispersionConfig:
+        """Build from a mapping; unknown keys raise.
+
+        Raises:
+            ValueError: `d` contains a key that is not a field.
+        """
+        unknown = _unknown_keys(cls, d)
+        if unknown:
+            raise ValueError(f"unknown dispersion.vertical keys: {unknown}")
+        return cls(**d)
+
+    def to_dict(self) -> dict[str, Any]:
+        """A JSON-safe dict of the fields."""
+        return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass(frozen=True)
 class DispersionConfig:
-    """Longitudinal dispersion settings.
+    """Longitudinal dispersion settings, plus the vertical sub-table for models that resolve the vertical.
 
     Args:
         model: "fischer", "constant", or "none".
         scale: multiplier on the Fischer coefficient.
         cap: upper bound on K (m^2/s).
         value: K (m^2/s) for the constant model.
+        background: m^2/s added to the longitudinal K on every wet reach, for every model.
+        shear_correction: ``"auto"`` removes the shear-dispersion part of K (which a model that
+            resolves the vertical generates itself) whenever such a model runs with a non-uniform
+            velocity profile and a longitudinal model other than ``"none"``; ``"on"`` and ``"off"``
+            override; ``"on"`` with a model that does not resolve the vertical is a config error.
+        vertical: the ``[network.dispersion.vertical]`` table.
     """
 
     model: str = "fischer"
     scale: float = 1.0
     cap: float | None = None
     value: float | None = None
+    background: float = 0.0
+    shear_correction: str = "auto"
+    vertical: VerticalDispersionConfig = dataclasses.field(default_factory=VerticalDispersionConfig)
 
     def __post_init__(self) -> None:
         """Validate the dispersion settings.
 
         Raises:
-            ValueError: an unknown model, a non-positive scale or cap, or the
-                "constant" model without a non-negative value.
+            ValueError: an unknown model, a non-positive scale or cap, a negative background, an
+                unknown shear_correction, or the "constant" model without a non-negative value.
         """
         if self.model not in DISPERSION_MODELS:
             raise ValueError(f"dispersion model must be one of {DISPERSION_MODELS}, got {self.model!r}")
@@ -74,10 +176,16 @@ class DispersionConfig:
             raise ValueError("dispersion cap must be positive")
         if self.model == "constant" and (self.value is None or self.value < 0.0):
             raise ValueError("dispersion model 'constant' requires a non-negative value")
+        if self.background < 0.0:
+            raise ValueError("dispersion background must be non-negative")
+        if self.shear_correction not in SHEAR_CORRECTIONS:
+            raise ValueError(
+                f"dispersion shear_correction must be one of {SHEAR_CORRECTIONS}, got {self.shear_correction!r}"
+            )
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DispersionConfig:
-        """Build from a mapping; unknown keys raise.
+        """Build from a mapping (``vertical`` may be a nested mapping); unknown keys raise.
 
         Args:
             d: mapping of dispersion config fields.
@@ -88,18 +196,91 @@ class DispersionConfig:
         Raises:
             ValueError: `d` contains a key that is not a `DispersionConfig` field.
         """
-        unknown = set(d) - {f.name for f in dataclasses.fields(cls)}
+        unknown = _unknown_keys(cls, d)
         if unknown:
-            raise ValueError(f"unknown dispersion keys: {sorted(unknown)}")
-        return cls(**d)
+            raise ValueError(f"unknown dispersion keys: {unknown}")
+        data = dict(d)
+        vert = data.get("vertical", {})
+        data["vertical"] = (
+            vert if isinstance(vert, VerticalDispersionConfig) else VerticalDispersionConfig.from_dict(vert)
+        )
+        return cls(**data)
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a plain dict of the dispersion settings.
+        """Return a plain dict of the dispersion settings, with ``vertical`` nested.
 
         Returns:
             A JSON-safe dict of the dispersion fields.
         """
         return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass(frozen=True)
+class ParticlesConfig:
+    """The ``[network.particles]`` table: which particle model runs and its parameters.
+
+    Args:
+        model: a registry name (``"passive"``, ``"drift"``) or ``"package.module:ClassName"`` for a
+            user class subclassing ``NetworkSolver``.
+        params: every other key of the table; validated by the model's ``validate_params``.
+    """
+
+    model: str = "passive"
+    params: Mapping[str, Any] = dataclasses.field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Resolve the model and validate its parameters (unknown keys raise); store them complete and frozen.
+
+        ``params`` holds the validated table with the model's defaults filled in (so the output file
+        records the effective values), frozen through nested tables. ``resolve_model`` raises
+        KeyError for an unknown registry name, ImportError for a dotted path that cannot be
+        imported, and TypeError for one that is not a ``NetworkSolver`` subclass; the model's
+        ``validate_params`` raises ValueError for a parameter it rejects.
+        """
+        # Imported here: config -> particles -> solver, and solver imports config for types only.
+        from .particles import resolve_model
+
+        cleaned = {k: _jsonify_nested(v) for k, v in self.params.items()}
+        validated = resolve_model(self.model).validate_params(cleaned)
+        object.__setattr__(self, "params", _freeze(validated))
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> ParticlesConfig:
+        """Build from the table: ``model`` plus the model's parameters."""
+        data = dict(d)
+        model = str(data.pop("model", "passive"))
+        return cls(model=model, params=data)
+
+    def to_dict(self) -> dict[str, Any]:
+        """The flat, JSON-safe table that ``from_dict`` accepts (the effective, defaulted parameters)."""
+        return {"model": self.model, **{k: _thaw(v) for k, v in self.params.items()}}
+
+
+def _freeze(value: Any) -> Any:
+    """Recursively read-only: mappings become ``MappingProxyType``, lists become tuples."""
+    if isinstance(value, Mapping):
+        return types.MappingProxyType({str(k): _freeze(v) for k, v in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_freeze(v) for v in value)
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    """The plain, editable copy of a frozen value (mappings to dicts, tuples to lists)."""
+    if isinstance(value, Mapping):
+        return {str(k): _thaw(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_thaw(v) for v in value]
+    return value
+
+
+def _jsonify_nested(value: Any) -> Any:
+    """`_jsonify` applied through nested mappings and sequences (a model's ``diel`` table, say)."""
+    if isinstance(value, Mapping):
+        return {str(k): _jsonify_nested(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_jsonify_nested(v) for v in value]
+    return _jsonify(value)
 
 
 def _jsonify(value: Any) -> Any:
@@ -184,6 +365,7 @@ class NetworkConfig:
     mass_units: str = "kg"
     max_hops: int = 1000
     seed: int | None = None
+    particles: ParticlesConfig = dataclasses.field(default_factory=ParticlesConfig)
 
     def __post_init__(self) -> None:
         """Validate and normalize the config's fields.
@@ -267,12 +449,13 @@ class NetworkConfig:
             ValueError: `d` contains a key that is not a `NetworkConfig` field.
         """
         data = dict(d)
-        names = {f.name for f in dataclasses.fields(cls)}
-        unknown = set(data) - names
+        unknown = _unknown_keys(cls, data)
         if unknown:
-            raise ValueError(f"unknown network config keys: {sorted(unknown)}")
+            raise ValueError(f"unknown network config keys: {unknown}")
         disp = data.get("dispersion", {})
         data["dispersion"] = disp if isinstance(disp, DispersionConfig) else DispersionConfig.from_dict(disp)
+        part = data.get("particles", {})
+        data["particles"] = part if isinstance(part, ParticlesConfig) else ParticlesConfig.from_dict(part)
         data["sources"] = tuple(dict(r) for r in data.get("sources", ()))
         return cls(**data)
 
@@ -346,6 +529,7 @@ class NetworkConfig:
         # Deep copy: a caller editing an emitted row's nested curve must not reach the frozen config.
         d["sources"] = [copy.deepcopy(dict(r)) for r in self.sources]
         d["dispersion"] = self.dispersion.to_dict()
+        d["particles"] = self.particles.to_dict()
         for name in ("start_time", "end_time"):
             if d[name] is not None:
                 d[name] = str(np.datetime64(d[name], "s"))
@@ -378,6 +562,36 @@ model = "fischer"             # "fischer", "constant", or "none"
 scale = 1.0                   # multiplier on the Fischer coefficient
 # cap = 1000.0                # optional upper bound (m2/s)
 # value = 10.0                # K for model = "constant"
+# background = 0.0            # m2/s added to K on every wet reach (the 2D/3D "lev")
+# shear_correction = "auto"   # "auto", "on", "off": remove the shear-dispersion part of K for models
+#                             # that resolve the vertical (they generate it themselves)
+
+# Vertical mixing and velocity profiles, used only by models that resolve the vertical (model = "drift").
+# [network.dispersion.vertical]
+# profile = "parabolic"       # "parabolic": Kz = kappa u* h z(1-z); "constant": Kz = beta u* h; "value"
+# kappa = 0.41                # parabolic profile and log law
+# beta = 0.067                # constant profile (the 2D/3D default; the parabolic depth mean)
+# value = 0.01                # m2/s, required for profile = "value"
+# background = 0.0            # m2/s added to Kz
+# scale = 1.0                 # multiplier on Kz
+# velocity_profile = "log"    # "log" or "uniform"
+
+# Particle model: absent means "passive", the transport kernel alone.
+# [network.particles]
+# model = "passive"            # or "drift"; or "package.module:Class" subclassing NetworkSolver
+# Drift model parameters (model = "drift"):
+# settling_velocity = 0.0      # m/s, positive down
+# swim_velocity = 0.0          # m/s, positive up
+# deposition_velocity = 0.0    # m/s; 0 is a reflecting bed
+# critical_ustar = 0.2         # m/s; Krone: deposition scaled by 1 - (ustar / critical_ustar)^2, none above it
+# zeta_min = 0.001             # velocity-factor clip and bed contact-layer thickness (fraction of depth)
+# substep_fraction = 0.03      # fraction of the column mixing time per vertical sub-step
+# max_substeps = 1000
+# initial_zeta = "uniform"     # or a number
+# [network.particles.diel]    # optional sinusoidal vertical velocity
+# amplitude = 0.005            # m/s
+# period = 86400.0             # s
+# phase = 0.0                  # radians
 
 # Sources: a slug (instantaneous mass), a loading (mass rate), or a concentration at the release point.
 [[network.sources]]

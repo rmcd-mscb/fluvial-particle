@@ -10,6 +10,9 @@ from fluvial_particle.network.run import run_network_simulation
 from tests.network.support import three_reach_dataset, write_network_file
 
 
+T0 = np.datetime64("1979-01-01", "ns")
+
+
 @pytest.fixture(scope="module")
 def run(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("res")
@@ -243,3 +246,107 @@ def test_to_vtp_all_unreleased(tmp_path, run):
     pvd = run.to_vtp(tmp_path / "vtk0", times=[0])
     assert len(list((tmp_path / "vtk0" / "vtp").glob("*.vtp"))) == 0
     assert pvd.exists()
+
+
+def test_terminal_status_frames(tmp_path):
+    from fluvial_particle.network.results import NetworkResults
+    from fluvial_particle.network.sources import ParticleSchedule
+    from fluvial_particle.network.writer import OUTPUT_FILENAME, NetworkWriter
+
+    # Three particles released in reach 0: one exits (2), one settles (3), one stays active (1).
+    sch = ParticleSchedule(
+        np.array([0, 0, 0], dtype=np.int32),
+        np.array([0.0, 5.0, 10.0]),
+        np.array([0.0, 0.0, 0.0]),
+        np.array([1.0, 2.0, 3.0]),
+        np.array([0, 0, 0], dtype=np.int32),
+    )
+    attrs = {"dt": 60.0, "sources": "[]", "mass_units": "kg"}
+    path = tmp_path / OUTPUT_FILENAME
+    with NetworkWriter(path, n_particles=3, reach_id=np.array([101, 102]), start_time=T0, attrs=attrs) as w:
+        w.write_schedule(sch, 0, 3)
+        w.write_step(
+            0,
+            0.0,
+            np.array([0, 0, 0], dtype=np.int32),
+            np.array([0.0, 5.0, 10.0]),
+            np.array([1, 1, 1], dtype=np.int8),
+            0,
+            3,
+        )
+        w.write_step(
+            1,
+            60.0,
+            np.array([-1, 0, 0], dtype=np.int32),
+            np.array([np.nan, 65.0, 70.0]),
+            np.array([2, 3, 1], dtype=np.int8),
+            0,
+            3,
+        )
+        w.write_exits(np.array([42.0, 60.0, np.nan]), np.array([1, 0, -1], dtype=np.int32), 0, 3)
+    with NetworkResults(path) as res:
+        settled = res.terminal(3)
+        assert list(settled["particle"]) == [1]
+        assert settled.loc[0, "exit_time"] == 60.0 and settled.loc[0, "exit_reach_id"] == 101
+        assert settled.loc[0, "mass"] == 2.0 and settled.loc[0, "release_reach_id"] == 101
+        arrivals = res.arrival_times()
+        assert list(arrivals["particle"]) == [0]
+        assert res.terminal(2).equals(arrivals)
+        assert res.terminal(4).empty and list(res.terminal(4).columns) == list(arrivals.columns)
+        ds = res.positions()
+        assert ds["status"].attrs["flag_meanings"] == "unreleased active exited settled removed"
+        assert list(ds["status"].attrs["flag_values"]) == [0, 1, 2, 3, 4]
+
+
+def test_positions_include_declared_state(tmp_path):
+    from fluvial_particle.network.particles import StateVar
+    from fluvial_particle.network.results import NetworkResults
+    from fluvial_particle.network.sources import ParticleSchedule
+    from fluvial_particle.network.writer import OUTPUT_FILENAME, NetworkWriter
+
+    specs = (
+        StateVar("zeta"),
+        StateVar("c", shape=(2,), dim="constituent", labels=("a", "b"), kind="extensive"),
+        StateVar("v3", shape=(3,), dim="component"),
+    )
+    state = {
+        "zeta": np.array([0.1, 0.2]),
+        "c": np.array([[1.0, 2.0], [3.0, 4.0]]),
+        "v3": np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+    }
+    sch = ParticleSchedule(
+        np.zeros(2, dtype=np.int32), np.zeros(2), np.zeros(2), np.ones(2), np.zeros(2, dtype=np.int32)
+    )
+    path = tmp_path / OUTPUT_FILENAME
+    attrs = {"dt": 60.0, "sources": "[]", "mass_units": "kg"}
+    with NetworkWriter(
+        path, n_particles=2, reach_id=np.array([101]), start_time=T0, attrs=attrs, state_specs=specs
+    ) as w:
+        w.write_schedule(sch, 0, 2)
+        w.write_step(0, 0.0, np.zeros(2, dtype=np.int32), np.zeros(2), np.ones(2, dtype=np.int8), 0, 2, state=state)
+    with NetworkResults(path) as res:
+        assert res.state_variables == ("zeta", "c", "v3")
+        df = res.positions(0)
+        assert list(df.columns) == [
+            "particle",
+            "reach_index",
+            "reach_id",
+            "s",
+            "status",
+            "mass",
+            "zeta",
+            "c_a",
+            "c_b",
+            "v3_0",
+            "v3_1",
+            "v3_2",
+        ]
+        assert list(df["zeta"]) == [0.1, 0.2] and list(df["c_b"]) == [2.0, 4.0] and list(df["v3_2"]) == [3.0, 6.0]
+        ds = res.positions()
+        assert {"zeta", "c", "v3"} <= set(ds.data_vars)
+        long = res.to_dataframe()
+        assert "c_a" in long.columns
+
+
+def test_state_variables_empty_for_the_passive_run(run):
+    assert run.state_variables == ()

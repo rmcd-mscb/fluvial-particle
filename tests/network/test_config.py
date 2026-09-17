@@ -6,7 +6,13 @@ import sys
 import numpy as np
 import pytest
 
-from fluvial_particle.network.config import DispersionConfig, NetworkConfig, get_network_config_template, parse_datetime
+from fluvial_particle.network.config import (
+    DispersionConfig,
+    NetworkConfig,
+    ParticlesConfig,
+    get_network_config_template,
+    parse_datetime,
+)
 
 
 if sys.version_info >= (3, 11):
@@ -180,3 +186,135 @@ def test_guard_rails_on_scalars():
         DispersionConfig(scale=0.0)
     with pytest.raises(ValueError, match="dispersion cap must be positive"):
         DispersionConfig(cap=-1.0)
+
+
+def test_particles_config_defaults_and_flattening():
+    assert ParticlesConfig() == ParticlesConfig(model="passive")
+    assert ParticlesConfig.from_dict({}).model == "passive"
+    pc = ParticlesConfig.from_dict({"model": "tests.network.support:HalfSpeed"})
+    assert pc.params == {} and pc.to_dict() == {"model": "tests.network.support:HalfSpeed"}
+    with pytest.raises(ValueError, match="x"):  # the passive model takes no parameters
+        ParticlesConfig.from_dict({"model": "passive", "x": 1})
+    with pytest.raises(KeyError, match="passive"):
+        ParticlesConfig(model="bogus")
+    with pytest.raises(TypeError):
+        pc.params["y"] = 2
+
+
+def test_particles_config_stores_effective_params_and_freezes_nested_tables(tmp_path):
+    pc = ParticlesConfig.from_dict({
+        "model": "drift",
+        "settling_velocity": np.float64(0.01),
+        "diel": {"amplitude": 0.001, "period": 3600},
+    })
+    assert pc.params["zeta_min"] == 0.001 and pc.params["max_substeps"] == 1000  # defaults filled in
+    assert pc.params["diel"] == {"amplitude": 0.001, "period": 3600.0, "phase": 0.0}
+    with pytest.raises(TypeError):
+        pc.params["diel"]["amplitude"] = -5.0  # type: ignore[index]
+    out = pc.to_dict()
+    assert isinstance(out["diel"], dict) and isinstance(out["settling_velocity"], float)
+    json.dumps(out)
+    assert ParticlesConfig.from_dict(out) == pc
+    with pytest.raises(ValueError, match="settling_velocity"):
+        NetworkConfig.from_dict({**MINIMAL, "particles": {"model": "drift", "settling_velocity": -1.0}})
+    lines = [
+        "[network]",
+        'hydraulics_file = "net.nc"',
+        "particle_mass = 1.0",
+        "[network.particles]",
+        'model = "drift"',
+        "settling_velocity = 0.005",
+        "[network.particles.diel]",
+        "amplitude = 0.002",
+        "period = 86400.0",
+        "[[network.sources]]",
+        "reach_id = 101",
+        'form = "slug"',
+        "time = 0.0",
+        "mass = 1.0",
+    ]
+    path = tmp_path / "drift.toml"
+    path.write_text("\n".join(lines) + "\n")
+    cfg = NetworkConfig.from_toml(path)
+    assert cfg.particles.params["diel"]["period"] == 86400.0
+    assert NetworkConfig.from_dict(cfg.to_dict()) == cfg
+
+
+def test_network_config_particles_table():
+    cfg = NetworkConfig.from_dict(MINIMAL)
+    assert cfg.particles == ParticlesConfig()
+    assert cfg.to_dict()["particles"] == {"model": "passive"}
+    cfg = NetworkConfig.from_dict({**MINIMAL, "particles": {"model": "tests.network.support:HalfSpeed"}})
+    assert cfg.particles.model == "tests.network.support:HalfSpeed"
+    assert NetworkConfig.from_dict(cfg.to_dict()) == cfg
+    json.dumps(cfg.to_dict())
+    with pytest.raises(ValueError, match="x"):
+        NetworkConfig.from_dict({**MINIMAL, "particles": {"x": 1}})
+
+
+def test_template_mentions_particles_table():
+    text = get_network_config_template()
+    assert "[network.particles]" in text and "drift" in text
+
+
+def test_vertical_dispersion_config_defaults_and_validation():
+    from fluvial_particle.network.config import VerticalDispersionConfig
+
+    v = VerticalDispersionConfig()
+    assert (v.profile, v.kappa, v.beta, v.value, v.background, v.scale, v.velocity_profile) == (
+        "parabolic",
+        0.41,
+        0.067,
+        None,
+        0.0,
+        1.0,
+        "log",
+    )
+    with pytest.raises(ValueError, match="profile"):
+        VerticalDispersionConfig(profile="cubic")
+    with pytest.raises(ValueError, match="velocity_profile"):
+        VerticalDispersionConfig(velocity_profile="power")
+    with pytest.raises(ValueError, match="value"):
+        VerticalDispersionConfig(profile="value")
+    with pytest.raises(ValueError, match="value"):
+        VerticalDispersionConfig(profile="value", value=-1.0)
+    assert VerticalDispersionConfig(profile="value", value=0.0).value == 0.0
+    for key in ("kappa", "beta", "scale"):
+        with pytest.raises(ValueError, match=key):
+            VerticalDispersionConfig(**{key: 0.0})
+    with pytest.raises(ValueError, match="background"):
+        VerticalDispersionConfig(background=-1e-3)
+    with pytest.raises(ValueError, match="unknown"):
+        VerticalDispersionConfig.from_dict({"kappa": 0.4, "bogus": 1})
+    with pytest.raises(ValueError, match="kappa must be a number"):
+        VerticalDispersionConfig(kappa="kappa")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="only used by profile 'value'"):
+        VerticalDispersionConfig(value=0.01)
+    assert VerticalDispersionConfig(kappa=1).kappa == 1.0
+
+
+def test_dispersion_config_new_fields_and_nesting():
+    from fluvial_particle.network.config import VerticalDispersionConfig
+
+    d = DispersionConfig()
+    assert d.background == 0.0 and d.shear_correction == "auto" and d.vertical == VerticalDispersionConfig()
+    with pytest.raises(ValueError, match="background"):
+        DispersionConfig(background=-1.0)
+    with pytest.raises(ValueError, match="shear_correction"):
+        DispersionConfig(shear_correction="maybe")
+    nested = {
+        "model": "fischer",
+        "background": 0.5,
+        "shear_correction": "off",
+        "vertical": {"profile": "constant", "beta": 0.05, "velocity_profile": "uniform"},
+    }
+    d = DispersionConfig.from_dict(nested)
+    assert d.vertical.profile == "constant" and d.vertical.beta == 0.05 and d.vertical.velocity_profile == "uniform"
+    out = d.to_dict()
+    assert out["vertical"]["profile"] == "constant" and out["background"] == 0.5
+    json.dumps(out)
+    assert DispersionConfig.from_dict(out) == d
+    assert DispersionConfig.from_dict({"vertical": VerticalDispersionConfig(kappa=0.4)}).vertical.kappa == 0.4
+    cfg = NetworkConfig.from_dict({**MINIMAL, "dispersion": nested})
+    assert NetworkConfig.from_dict(cfg.to_dict()) == cfg
+    assert "[network.dispersion.vertical]" in get_network_config_template()
