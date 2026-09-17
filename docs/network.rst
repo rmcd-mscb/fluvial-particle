@@ -114,8 +114,8 @@ step hits it (one shallow, high-shear reach holding particles throttles every pa
 
 **Deposition** is a Robin boundary condition: the flux into the bed is a deposition velocity
 ``deposition_velocity`` (m/s) times the near-bed concentration. Zero is a reflecting bed (a dissolved
-tracer, or sediment above its critical shear); a very large value is a perfectly absorbing bed
-(attachment on first contact). For a larva the deposition velocity is how readily a competent
+tracer, or sediment above its critical shear); a large value approaches the absorbing bed
+(attachment on first contact) up to the cap below. For a larva the deposition velocity is how readily a competent
 individual attaches on contact, and ``critical_ustar`` is the flow above which it cannot hold: the
 deposition velocity is multiplied by Krone's factor ``max(0, 1 - (u* / critical_ustar)^2)`` (Krone
 1962), so nothing deposits where the reach shear exceeds it. The per-contact probability is derived,

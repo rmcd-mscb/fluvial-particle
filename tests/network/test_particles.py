@@ -1,5 +1,7 @@
 """Tests for declared particle state, the model registry, and the drift model."""
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -371,6 +373,62 @@ def test_drift_upward_velocity_does_not_switch_deposition_off():
         for _ in range(5):
             up.step()
     assert 0 < int((up.status == SETTLED).sum()) < 400
+
+
+@pytest.mark.filterwarnings("ignore:the per-contact deposition probability clipped")
+@pytest.mark.filterwarnings("ignore:the vertical walk hit max_substeps")
+def test_drift_deposition_time_is_exact_including_mid_step_releases(monkeypatch):
+    # No mixing: a particle at 0.3 settling 0.01 of the column per second touches the layer on the
+    # 30th one-second sub-step; released at 50 s its sub-steps are 0.5 s, so the 60th at 80 s; on the
+    # next step (t = 100, released at 150) it lands at 180 s.
+    monkeypatch.setattr(VerticalProfiles, "mix", lambda self, zeta, ustar, h, dt, rng: zeta)  # noqa: ARG005
+    sch = ParticleSchedule(
+        np.zeros(3, dtype=np.int32), np.zeros(3), np.array([0.0, 50.0, 150.0]), np.ones(3), np.zeros(3, dtype=np.int32)
+    )
+    params = {
+        "initial_zeta": 0.3,
+        "settling_velocity": 0.01,
+        "deposition_velocity": 1e9,
+        "max_substeps": 100,
+        "substep_fraction": 1e-6,
+    }
+    sol = make(DriftParticles, three_reach_dataset(), sch, dt=100.0, params=params)
+    sol.step()
+    assert sol.last_substeps == 100
+    np.testing.assert_allclose(sol.exit_time[:2], [30.0, 80.0])
+    sol.step()
+    assert sol.status[2] == SETTLED and sol.exit_time[2] == pytest.approx(180.0)
+
+
+def test_drift_substep_cap_at_the_exact_count_does_not_warn():
+    ref = make(DriftParticles, three_reach_dataset(), slug(2), dt=100.0)
+    ref.step()
+    n = ref.last_substeps  # the uncapped count for this reach and dt
+    exact = make(DriftParticles, three_reach_dataset(), slug(2), dt=100.0, params={"max_substeps": n})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        exact.step()
+    assert exact.steps_at_cap == 0 and exact.last_substeps == n
+    below = make(DriftParticles, three_reach_dataset(), slug(2), dt=100.0, params={"max_substeps": n - 1})
+    with pytest.warns(UserWarning, match="max_substeps"):
+        below.step()
+    assert below.steps_at_cap == 1 and below.last_substeps == n - 1
+
+
+@pytest.mark.filterwarnings("ignore:the per-contact deposition probability clipped")
+@pytest.mark.filterwarnings("ignore:the vertical walk hit max_substeps")
+def test_drift_upward_velocity_leaves_the_contact_set_unchanged():
+    # With one sub-step and the same seed, the particles in contact are exactly those a still column
+    # would have: an upward velocity neither adds nor removes contacts.
+    def settled(swim):
+        p = {"swim_velocity": swim, "deposition_velocity": 1e9, "zeta_min": 0.05, "max_substeps": 1}
+        sol = make(DriftParticles, three_reach_dataset(), slug(2000), dt=100.0, params=p)
+        sol.step()
+        return sol.status == SETTLED
+
+    still, up = settled(0.0), settled(0.001)
+    assert 50 < still.sum() < 400
+    np.testing.assert_array_equal(up, still)
 
 
 def test_drift_deposition_time_is_stamped_at_the_sub_step():

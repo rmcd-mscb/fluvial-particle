@@ -220,7 +220,7 @@ from fluvial_particle.network.network import Network  # noqa: E402
 from fluvial_particle.network.particles import DriftParticles  # noqa: E402
 from fluvial_particle.network.solver import ACTIVE, SETTLED  # noqa: E402
 from fluvial_particle.network.sources import ParticleSchedule  # noqa: E402
-from fluvial_particle.network.vertical import VerticalProfiles, substep_count  # noqa: E402
+from fluvial_particle.network.vertical import VerticalProfiles  # noqa: E402
 from tests.network.support import ArrayHydraulicsProvider, uniform_reach_dataset  # noqa: E402
 
 
@@ -294,6 +294,8 @@ def test_drift_rouse_profile():
     sol = _advance(_drift(params={"settling_velocity": w, "substep_fraction": 0.01}), 3 * 3600.0)
     ks = stats.kstest(sol.state["zeta"], stats.beta(1.0 - p_rouse, 1.0 + p_rouse).cdf)
     assert ks.statistic < 0.06, f"P = {p_rouse}: KS D = {ks.statistic:.4f} (p = {ks.pvalue:.3g})"
+    # the Beta(1 - P, 1 + P) mean (1 - P) / 2 is a seed-insensitive check on the settling split's bias
+    assert abs(sol.state["zeta"].mean() - 0.5 * (1.0 - p_rouse)) < 0.01
 
 
 def test_drift_mean_advection_is_the_reach_velocity():
@@ -398,30 +400,34 @@ def test_drift_deposition_against_the_robin_condition():
     times = np.array([1200.0, 1800.0])
     reference = _robin_reference(k_d, w, kz, DEPTH, times)
     fraction = 0.003
-    dt_sub = 60.0 / substep_count(60.0, np.array([kz]), np.array([DEPTH]), c=fraction)
 
-    def deposited_fraction(params):
-        sol = _drift(dispersion=DispersionConfig(model="none", vertical=vert), params=params)
+    def deposited_fraction(params, at=times):
+        sol = _drift(dispersion=DispersionConfig(model="none", vertical=vert), params=params, dt=min(60.0, at[0]))
         out = []
-        for t_out in times:
+        for t_out in at:
             _advance(sol, t_out - sol.time)
             out.append(float((sol.status == SETTLED).mean()))
-        return np.array(out)
+        return np.array(out), sol
 
-    got = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": fraction})
+    got, _ = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": fraction})
     assert np.all(np.abs(got - reference) < 0.02), f"particles {got} vs Robin reference {reference}"
-    coarse = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": 2 * fraction})
+    coarse, _ = deposited_fraction({
+        "settling_velocity": w,
+        "deposition_velocity": k_d,
+        "substep_fraction": 2 * fraction,
+    })
     assert np.all(np.abs(coarse - got) < 0.01), f"sub-step doubled: {coarse} vs {got}"
     # A clipped probability is not an absorbing bed: every contact deposits, which is a Robin bed with
-    # the effective velocity k_eff = w + zeta_min h / dt_sub, with and without settling.
-    for settling in (w, 0.0):
-        clipped = deposited_fraction({
-            "settling_velocity": settling,
-            "deposition_velocity": 1e6,
-            "substep_fraction": fraction,
-        })
-        k_eff = settling + 0.001 * DEPTH / dt_sub
-        reference = _robin_reference(k_eff, settling, kz, DEPTH, times)
+    # the effective velocity k_eff = w + zeta_min h / dt_sub, with and without settling. With settling
+    # the column empties within minutes, so that case is sampled early enough for the reference to
+    # discriminate (at 60 s: 0.56 at k_eff, 0.51 without the layer term, 0.85 for an absorbing bed).
+    for settling, at in ((w, np.array([60.0, 120.0, 180.0])), (0.0, times)):
+        clipped, sol = deposited_fraction(
+            {"settling_velocity": settling, "deposition_velocity": 1e6, "substep_fraction": fraction}, at
+        )
+        dt_sub = sol.dt / sol.last_substeps
+        k_eff = settling + sol.params["zeta_min"] * DEPTH / dt_sub
+        reference = _robin_reference(k_eff, settling, kz, DEPTH, at)
         assert np.all(np.abs(clipped - reference) < 0.02), (
             f"clipped, w = {settling}: {clipped} vs k_eff {k_eff:.4g}: {reference}"
         )

@@ -181,7 +181,16 @@ def test_shear_table_covers_every_ratio():
     for r, ci in zip(ratios, c, strict=True):
         ref = shear_dispersion_coefficient(VerticalDispersionConfig(), 0.001, ratio=float(r))
         assert ci == pytest.approx(ref, rel=0.03), (r, ci, ref)
-    assert c[-1] < c[0] and vp.shear_coefficient(np.array([1e6]), np.array([1.0]))[0] < 1e-3
+    sweep = vp.shear_coefficient(np.logspace(-1.3, 3, 50), np.ones(50))
+    assert np.all(np.diff(sweep) <= 0.0) and sweep[-1] < 1e-3  # tends to 0 as the ratio grows
+    # a denormal velocity overflows the ratio; it is a still reach, not a NaN in the correction
+    assert vp.shear_coefficient(np.array([1.0]), np.array([5e-324]))[0] == 0.0
+
+
+def test_vmf_concentration_small_kappa_limit():
+    # coth k - 1 / k ~ k / 3 there, so kappa ~ 3 exp(-2 tau); the old evaluation cancelled to noise
+    tau = np.array([7.0, 9.0, 11.5])
+    np.testing.assert_allclose(vmf_concentration(tau), 3.0 * np.exp(-2.0 * tau), rtol=5e-3)
 
 
 def test_vmf_table_is_monotone_up_to_tau_max():

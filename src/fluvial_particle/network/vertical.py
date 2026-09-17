@@ -429,7 +429,8 @@ class VerticalProfiles:
         ok = (v > 0.0) & (ustar > 0.0)
         if not ok.any():
             return c
-        ratio = ustar[ok] / v[ok]
+        with np.errstate(over="ignore"):
+            ratio = np.minimum(ustar[ok] / v[ok], np.finfo(np.float64).max)  # a denormal v: a still reach, c = 0
         if not self._per_reach:
             c[ok] = np.interp(ratio / (1.0 + ratio), self._x, self._shear)
             return c

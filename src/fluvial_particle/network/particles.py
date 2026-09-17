@@ -312,9 +312,9 @@ class DriftParticles(NetworkSolver):
                         if not self._warned_clip:
                             self._warned_clip = True
                             warnings.warn(
-                                f"the per-contact deposition probability clipped at 1 at t = {t:.0f} s: the bed is "
-                                "absorbing there and the deposition rate depends on the sub-step count "
-                                "(raise zeta_min or lower substep_fraction)",
+                                f"the per-contact deposition probability clipped at 1 at t = {t:.0f} s: every "
+                                "contact deposits, a Robin bed with k_eff = w + zeta_min h / dt_sub rather than the "
+                                "requested deposition velocity (raise zeta_min or lower substep_fraction)",
                                 UserWarning,
                                 stacklevel=2,
                             )
