@@ -65,14 +65,16 @@ class NetworkWriter:
         v.attrs["units"] = "s"
         v.attrs["long_name"] = "seconds since start_time"
         v = f.create_variable("reach_index", ("time", "particle"), dtype="i4", chunks=chunk, fillvalue=-1)
-        v.attrs["long_name"] = "reach index of the particle, -1 when not active"
+        v.attrs["long_name"] = (
+            "reach index of the particle, -1 when unreleased or exited (settled particles keep theirs)"
+        )
         # -1 is a real, in-range value here (not a "missing data" marker), so drop the CF _FillValue
         # attribute h5netcdf wrote from fillvalue=-1: otherwise xarray's default CF decoding would mask
         # every -1 to NaN and upcast the variable to float64.
         del v.attrs["_FillValue"]
         v = f.create_variable("s", ("time", "particle"), dtype=np.dtype(dtype), chunks=chunk, fillvalue=np.nan)
         v.attrs["units"] = "m"
-        v.attrs["long_name"] = "distance from the reach's upstream end, NaN when not active"
+        v.attrs["long_name"] = "distance from the reach's upstream end, NaN when unreleased or exited"
         v = f.create_variable("status", ("time", "particle"), dtype="i1", chunks=chunk, fillvalue=0)
         v.attrs["long_name"] = "particle status"
         v.attrs["flag_values"] = np.array([0, 1, 2, 3, 4], dtype=np.int8)
@@ -188,8 +190,8 @@ class NetworkWriter:
         Args:
             itime: output time index.
             time_seconds: seconds since start_time for this output time.
-            reach: reach index per particle, -1 when not active.
-            s: distance from the reach's upstream end per particle, NaN when not active.
+            reach: reach index per particle, -1 when unreleased or exited.
+            s: distance from the reach's upstream end per particle, NaN when unreleased or exited.
             status: particle status per particle (0 unreleased, 1 active, 2 exited, 3 settled, 4 removed).
             lo: first particle index (inclusive).
             hi: last particle index (exclusive).
@@ -220,8 +222,8 @@ class NetworkWriter:
         """Write terminal times and reaches for particles lo..hi-1 (called once at the end of the run).
 
         Args:
-            exit_time: seconds since start_time at the terminal status per particle, NaN if still active.
-            exit_reach: reach index at the terminal status per particle, -1 if still active.
+            exit_time: seconds since start_time at the terminal status per particle, NaN unless reached.
+            exit_reach: reach index at the terminal status per particle, -1 unless reached.
             lo: first particle index (inclusive).
             hi: last particle index (exclusive).
         """

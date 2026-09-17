@@ -134,6 +134,12 @@ def _dimensionless_kz(cfg: VerticalDispersionConfig, z: FloatArray, ustar_depth:
     return q
 
 
+def _check_ustar_depth(ustar_depth: float | None) -> None:
+    """Raise unless ``ustar_depth`` is absent or a positive finite number."""
+    if ustar_depth is not None and not (np.isfinite(ustar_depth) and ustar_depth > 0.0):
+        raise ValueError(f"ustar_depth must be positive and finite, got {ustar_depth}")
+
+
 def shear_dispersion_coefficient(
     cfg: VerticalDispersionConfig,
     zeta_min: float,
@@ -165,6 +171,7 @@ def shear_dispersion_coefficient(
     """
     if cfg.velocity_profile == "uniform":
         return 0.0
+    _check_ustar_depth(ustar_depth)
     z = _grid(n)
     q = _dimensionless_kz(cfg, z, ustar_depth)
     if not np.all(q > 0.0):
@@ -194,6 +201,8 @@ def vmf_concentration(tau: FloatArray) -> FloatArray:
     above ``TAU_MAX`` (a fresh uniform direction); interpolated in log-log between.
     """
     tau = np.asarray(tau, dtype=np.float64)
+    if not np.all(np.isfinite(tau) & (tau >= 0.0)):
+        raise ValueError("the sphere step needs a finite, non-negative tau = a dt (non-finite ustar or depth?)")
     out = np.zeros_like(tau)
     small = (tau > 0.0) & (tau < TAU_MIN)
     out[small] = 0.5 / tau[small]
@@ -272,7 +281,13 @@ class VerticalProfiles:
         n_quad: int = 20001,
         n_reach_quad: int = 2001,
     ) -> None:
-        """Build the shear-coefficient table."""
+        """Build the shear-coefficient table.
+
+        Raises:
+            ValueError: ``zeta_min`` is not in ``(0, 0.5)``.
+        """
+        if not 0.0 < float(zeta_min) < 0.5:
+            raise ValueError(f"zeta_min must lie in (0, 0.5), got {zeta_min}")
         self.cfg = cfg
         self.zeta_min = float(zeta_min)
         self.n_reach_quad = int(n_reach_quad)
@@ -407,7 +422,12 @@ class VerticalProfiles:
             return c
         if h is None:
             raise ValueError(f"the {self.cfg.profile!r} profile or a vertical background needs depth per reach")
-        uh = ustar[ok] * np.asarray(h, dtype=np.float64)[ok]
+        hh = np.asarray(h, dtype=np.float64)[ok]
+        bad = ~(np.isfinite(hh) & (hh > 0.0))
+        if bad.any():
+            where = np.nonzero(ok)[0][bad]
+            raise ValueError(f"reaches {where.tolist()[:10]} have velocity and ustar but no positive depth")
+        uh = ustar[ok] * hh
         c[ok] = [
             shear_dispersion_coefficient(self.cfg, self.zeta_min, float(r), ustar_depth=float(s), n=self.n_reach_quad)
             for r, s in zip(ratio, uh, strict=True)
@@ -465,7 +485,7 @@ def deposition_probability(
     ``k_d / w`` when settling dominates. Clipped to 1 the bed absorbs every particle that reaches it
     (the perfectly absorbing bed: the settling flux plus the mixing supply, the latter growing with
     the sub-step count, which is the bias bound the docs state). The probability is derived, never a
-    user parameter. Where the layer has no thickness (a dry reach) it is 0.
+    user parameter. Where the layer has no thickness (a dry reach) it is 0, whatever the settling velocity.
 
     Args:
         k_d: deposition velocity per particle (m/s), after any critical-shear suppression.
@@ -481,6 +501,6 @@ def deposition_probability(
     dts = np.broadcast_to(np.asarray(dt_sub, dtype=np.float64), k_d.shape)
     reach = layer + max(float(settling), 0.0) * dts
     p = np.zeros_like(k_d)
-    ok = reach > 0.0
+    ok = (layer > 0.0) & (reach > 0.0)
     p[ok] = k_d[ok] * dts[ok] / reach[ok]
     return np.clip(p, 0.0, 1.0)

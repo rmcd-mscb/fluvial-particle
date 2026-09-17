@@ -201,6 +201,45 @@ def test_particles_config_defaults_and_flattening():
         pc.params["y"] = 2
 
 
+def test_particles_config_stores_effective_params_and_freezes_nested_tables(tmp_path):
+    pc = ParticlesConfig.from_dict({
+        "model": "drift",
+        "settling_velocity": np.float64(0.01),
+        "diel": {"amplitude": 0.001, "period": 3600},
+    })
+    assert pc.params["zeta_min"] == 0.001 and pc.params["max_substeps"] == 1000  # defaults filled in
+    assert pc.params["diel"] == {"amplitude": 0.001, "period": 3600.0, "phase": 0.0}
+    with pytest.raises(TypeError):
+        pc.params["diel"]["amplitude"] = -5.0  # type: ignore[index]
+    out = pc.to_dict()
+    assert isinstance(out["diel"], dict) and isinstance(out["settling_velocity"], float)
+    json.dumps(out)
+    assert ParticlesConfig.from_dict(out) == pc
+    with pytest.raises(ValueError, match="settling_velocity"):
+        NetworkConfig.from_dict({**MINIMAL, "particles": {"model": "drift", "settling_velocity": -1.0}})
+    lines = [
+        "[network]",
+        'hydraulics_file = "net.nc"',
+        "particle_mass = 1.0",
+        "[network.particles]",
+        'model = "drift"',
+        "settling_velocity = 0.005",
+        "[network.particles.diel]",
+        "amplitude = 0.002",
+        "period = 86400.0",
+        "[[network.sources]]",
+        "reach_id = 101",
+        'form = "slug"',
+        "time = 0.0",
+        "mass = 1.0",
+    ]
+    path = tmp_path / "drift.toml"
+    path.write_text("\n".join(lines) + "\n")
+    cfg = NetworkConfig.from_toml(path)
+    assert cfg.particles.params["diel"]["period"] == 86400.0
+    assert NetworkConfig.from_dict(cfg.to_dict()) == cfg
+
+
 def test_network_config_particles_table():
     cfg = NetworkConfig.from_dict(MINIMAL)
     assert cfg.particles == ParticlesConfig()
@@ -247,6 +286,11 @@ def test_vertical_dispersion_config_defaults_and_validation():
         VerticalDispersionConfig(background=-1e-3)
     with pytest.raises(ValueError, match="unknown"):
         VerticalDispersionConfig.from_dict({"kappa": 0.4, "bogus": 1})
+    with pytest.raises(ValueError, match="kappa must be a number"):
+        VerticalDispersionConfig(kappa="kappa")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="only used by profile 'value'"):
+        VerticalDispersionConfig(value=0.01)
+    assert VerticalDispersionConfig(kappa=1).kappa == 1.0
 
 
 def test_dispersion_config_new_fields_and_nesting():

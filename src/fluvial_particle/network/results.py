@@ -185,6 +185,37 @@ class NetworkResults:
             **self._state_columns(i),
         })
 
+    def profile(self, time: int | np.datetime64 | str, bin_length: float = np.inf, n_zeta: int = 20) -> xr.DataArray:
+        """Histogram of the drift model's relative elevation per bin: counts on dims ``(bin, zeta)``.
+
+        Active particles only; ``zeta`` bins are ``n_zeta`` equal classes over ``[0, 1]`` with their
+        centres as the coordinate. ``bin_length = np.inf`` gives one bin per reach.
+
+        Raises:
+            ValueError: the run's particle model did not declare ``zeta``.
+        """
+        if "zeta" not in self.state_variables:
+            raise ValueError("profile() needs a particle model with a 'zeta' state (the drift model)")
+        i = self.time_index(time)
+        bins = self.bins(bin_length)
+        ri = self._ds["reach_index"].values[i].astype(np.int64)
+        si = self._ds["s"].values[i].astype(np.float64)
+        zi = self._ds["zeta"].values[i].astype(np.float64)
+        act = self._ds["status"].values[i] == 1
+        b = bins.bin_of(ri[act], si[act])
+        zc = np.clip((zi[act] * n_zeta).astype(np.int64), 0, n_zeta - 1)
+        counts = np.zeros((bins.n_bins, n_zeta), dtype=np.int64)
+        np.add.at(counts, (b, zc), 1)
+        coords = self._bin_coords(bins)
+        coords["zeta"] = (np.arange(n_zeta) + 0.5) / n_zeta
+        return xr.DataArray(
+            counts,
+            dims=("bin", "zeta"),
+            coords=coords,
+            name="profile",
+            attrs={"units": "-", "time": str(self.times[i])},
+        )
+
     def map_positions(self, time: int | np.datetime64 | str) -> pd.DataFrame:
         """positions(time) with x, y from the polylines.
 
@@ -274,6 +305,8 @@ class NetworkResults:
         if isinstance(smoothing, str):
             if smoothing != "auto":
                 raise ValueError("smoothing must be None, a bandwidth in meters, or 'auto'")
+            # The smoothing bandwidth uses the configured K; the shear correction a drift run applied
+            # to it is not reproduced here (a smoothing heuristic, not the run's kick).
             d = json.loads(self._ds.attrs["dispersion"])
             h = self.provider.hydraulics(self.times[i])
             k = dispersion_coefficient(

@@ -71,7 +71,7 @@ def test_constant_and_value_profiles():
 
 def test_constant_profile_matches_parabolic_depth_mean_at_defaults():
     # kappa / 6 = 0.0683 against beta = 0.067
-    vp = VerticalProfiles(VerticalDispersionConfig(), zeta_min=0.0)
+    vp = VerticalProfiles(VerticalDispersionConfig(), zeta_min=0.001)  # Kz does not depend on the clip
     z = np.linspace(0.0, 1.0, 100001)
     mean = np.trapezoid(vp.kz(z, np.ones_like(z), np.ones_like(z)), z)
     assert mean == pytest.approx(0.41 / 6)
@@ -151,9 +151,32 @@ def test_shear_coefficient_per_reach_for_value_and_background():
     cb = vpb.shear_coefficient(ustar, v, h)
     ref = shear_dispersion_coefficient(bg, 0.001, ratio=0.1 / 0.7, ustar_depth=0.05)
     assert cb[0] == pytest.approx(ref, rel=2e-2)
-    assert cb[0] < vp.shear_coefficient(ustar, v, h)[0] or True  # more mixing, less shear dispersion
+    # more vertical mixing means less shear dispersion: the background lowers c below the table value
+    table = VerticalProfiles(VerticalDispersionConfig(), zeta_min=0.001).shear_coefficient(ustar, v)
+    assert cb[0] < table[0]
     with pytest.raises(ValueError, match="depth"):
         vp.shear_coefficient(ustar, v)
+    with pytest.raises(ValueError, match="no positive depth"):
+        vp.shear_coefficient(ustar, v, np.array([0.5, 0.0]))
+
+
+def test_vertical_profiles_validates_zeta_min_and_tau():
+    with pytest.raises(ValueError, match="zeta_min"):
+        VerticalProfiles(VerticalDispersionConfig(), zeta_min=0.7)
+    with pytest.raises(ValueError, match="zeta_min"):
+        VerticalProfiles(VerticalDispersionConfig(), zeta_min=0.0)
+    with pytest.raises(ValueError, match="tau"):
+        vmf_concentration(np.array([0.1, np.nan]))
+    with pytest.raises(ValueError, match="tau"):
+        sphere_step(np.array([0.5]), np.array([-1.0]), np.random.RandomState(0))
+    with pytest.raises(ValueError, match="ustar_depth"):
+        shear_dispersion_coefficient(VerticalDispersionConfig(profile="value", value=0.01), 0.001, ustar_depth=0.0)
+
+
+def test_shear_table_holds_above_ratio_max():
+    vp = VerticalProfiles(VerticalDispersionConfig(), zeta_min=0.001)
+    c = vp.shear_coefficient(np.array([2.0, 100.0]), np.array([1.0, 1.0]))
+    assert c[0] == c[1]
 
 
 def test_substep_count_at_drb_medians_and_cap():
@@ -240,6 +263,7 @@ def test_deposition_probability_formula_and_clip():
     assert p[1] == 1.0
     assert p[2] == 0.0
     assert p[3] == 0.0  # no layer (a dry reach): nothing deposits
+    assert deposition_probability(np.array([1e-3]), 1.0, np.array([0.0]), settling=0.01)[0] == 0.0  # even when settling
     per_particle = deposition_probability(np.array([1e-5, 1e-5]), np.array([5.0, 20.0]), np.array([1e-3, 1e-3]))
     assert per_particle[1] == pytest.approx(4.0 * per_particle[0])
     # settling adds contacts: the settling-limited probability is k_d / w

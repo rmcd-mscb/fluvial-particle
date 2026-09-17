@@ -3,6 +3,7 @@
 import json
 
 import numpy as np
+import pytest
 import xarray as xr
 
 from fluvial_particle.network.sources import ParticleSchedule
@@ -131,3 +132,28 @@ def test_declared_state_round_trip(tmp_path):
         assert "hidden" not in ds
         assert ds["stage"].dtype == np.int16 and list(ds["stage"].values[1]) == [0, 1, -1]
         assert ds["reach_index"].attrs.get("fluvial_particle_state") is None
+
+
+def test_write_step_requires_every_declared_state(tmp_path):
+    from fluvial_particle.network.particles import StateVar
+
+    path = tmp_path / OUTPUT_FILENAME
+    with NetworkWriter(
+        path, n_particles=2, reach_id=np.array([101]), start_time=T0, attrs={}, state_specs=(StateVar("zeta"),)
+    ) as w:
+        with pytest.raises(ValueError, match="zeta"):
+            w.write_step(0, 0.0, np.zeros(2, dtype=np.int32), np.zeros(2), np.ones(2, dtype=np.int8), 0, 2, state={})
+        # an MPI-style partial slice of a vector state
+        w2 = w
+        w2.write_step(
+            0,
+            0.0,
+            np.zeros(1, dtype=np.int32),
+            np.zeros(1),
+            np.ones(1, dtype=np.int8),
+            1,
+            2,
+            state={"zeta": np.array([0.3])},
+        )
+    with xr.open_dataset(path, engine="h5netcdf") as ds:
+        assert ds["zeta"].values[0, 1] == 0.3 and np.isnan(ds["zeta"].values[0, 0])

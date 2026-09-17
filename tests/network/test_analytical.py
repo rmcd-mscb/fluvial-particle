@@ -210,7 +210,7 @@ def test_first_passage_bias_bounded_at_default_dt(tmp_path):
 # ---- behavioral particles: the drift model against the vertical physics -------------------------
 #
 # All runs build DriftParticles directly on an in-memory uniform reach (ustar 0.1 m/s, depth 1 m,
-# velocity 0.7 m/s: the DRB export medians) with 20,000 particles released as a slug at s = 0 of one
+# velocity 0.7 m/s: near the DRB export medians, depth rounded up from 0.59 m) with 20,000 particles released as a slug at s = 0 of one
 # long reach, dt = 60 s, seed 12345. The vertical kernel keeps a uniform column exactly uniform at any
 # sub-step; the default sub-step fraction 0.03 resolves the within-step shear dispersion to about 2
 # percent (12 percent at the spec's original 0.1).
@@ -384,6 +384,7 @@ def _robin_reference(k_d, w, kz, h, times, *, n_cells=200, dt=0.5):
     return np.array(deposited)
 
 
+@pytest.mark.filterwarnings("ignore:the per-contact deposition probability clipped")
 def test_drift_deposition_against_the_robin_condition():
     """Test 7: the deposited fraction follows the Robin bed condition with the deposition velocity.
 

@@ -375,6 +375,18 @@ def test_terminate_marks_settled_and_keeps_position():
     assert sol.status[0] == ACTIVE and sol.s[0] == pytest.approx(200.0)
 
 
+def test_terminate_rejects_non_terminal_status_and_inactive_particles():
+    sol = make_solver(three_reach_dataset(), ParticleSchedule.simple(0, 100.0, 0.0), dt=200.0)
+    with pytest.raises(ValueError, match="terminal status"):
+        sol.terminate(np.array([0]), ACTIVE, 0.0)
+    with pytest.raises(ValueError, match="must be active"):
+        sol.terminate(np.array([0]), SETTLED, 0.0)  # still unreleased
+    sol.step()
+    sol.terminate(np.array([0]), SETTLED, sol.time)
+    with pytest.raises(ValueError, match="must be active"):
+        sol.terminate(np.array([0]), REMOVED, sol.time)  # already terminal
+
+
 def test_terminate_with_empty_index_is_a_no_op():
     sol = make_solver(three_reach_dataset(), ParticleSchedule.simple(0, 100.0, 0.0), dt=200.0)
     sol.step()
@@ -505,6 +517,11 @@ def test_shear_correction_resolution(mode, cls, velocity_profile, expected):
     disp = DispersionConfig(shear_correction=mode, vertical=VerticalDispersionConfig(velocity_profile=velocity_profile))
     sol = make_model(cls, three_reach_dataset(), ParticleSchedule.simple(0, 0.0, 0.0), dt=100.0, dispersion=disp)
     assert sol._shear_correction_active() is expected
+    none = DispersionConfig(
+        model="none", shear_correction=mode, vertical=VerticalDispersionConfig(velocity_profile=velocity_profile)
+    )
+    sol_none = make_model(cls, three_reach_dataset(), ParticleSchedule.simple(0, 0.0, 0.0), dt=100.0, dispersion=none)
+    assert sol_none._shear_correction_active() is False  # no longitudinal K to correct
 
 
 def test_shear_correction_on_requires_a_vertical_model():

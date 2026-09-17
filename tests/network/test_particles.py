@@ -93,6 +93,43 @@ def test_state_dtype_and_fill_are_honoured():
     assert sol.state["stage"].dtype == np.int16 and list(sol.state["stage"]) == [-1, -1]
 
 
+def test_statevar_validates_dtype_fill_and_vector_fields():
+    with pytest.raises(ValueError, match="integer fill"):
+        StateVar("count", dtype="i4")  # NaN fill in an integer dtype
+    with pytest.raises(ValueError, match="does not fit"):
+        StateVar("count", dtype="i1", fill=1000)
+    with pytest.raises(ValueError, match="numpy dtype"):
+        StateVar("x", dtype="not-a-dtype")
+    with pytest.raises(ValueError, match="vector state only"):
+        StateVar("x", dim="k")
+    with pytest.raises(ValueError, match="at least one component"):
+        StateVar("x", shape=(0,), dim="k")
+    sv = StateVar("c", shape=[2], dim="k", labels=["a", "b"])  # type: ignore[arg-type]
+    assert sv.shape == (2,) and sv.labels == ("a", "b") and hash(sv)
+
+
+def test_vector_state_dims_are_validated_at_construction():
+    class BadDim(NetworkSolver):
+        STATE = (StateVar("v", shape=(2,), dim="particle"),)
+
+    with pytest.raises(ValueError, match="dimension of the output file"):
+        make(BadDim, three_reach_dataset(), slug(1))
+
+    class Clash(NetworkSolver):
+        STATE = (StateVar("a", shape=(2,), dim="k", labels=("x", "y")), StateVar("b", shape=(2,), dim="k"))
+
+    with pytest.raises(ValueError, match="share dim"):
+        make(Clash, three_reach_dataset(), slug(1))
+
+    class Shared(NetworkSolver):
+        STATE = (
+            StateVar("a", shape=(2,), dim="k", labels=("x", "y")),
+            StateVar("b", shape=(2,), dim="k", labels=("x", "y")),
+        )
+
+    assert set(make(Shared, three_reach_dataset(), slug(1)).state) == {"a", "b"}
+
+
 @pytest.mark.parametrize("name", ["reach", "s", "status", "mass", "exit_time", "reach_index", "time"])
 def test_reserved_state_name_raises(name):
     class Bad(NetworkSolver):
@@ -139,6 +176,23 @@ def test_base_validate_params_rejects_every_key():
         make(NetworkSolver, three_reach_dataset(), slug(1), params={"x": 1})
     sol = make(NetworkSolver, three_reach_dataset(), slug(1))
     assert sol.params == {} and NetworkSolver.resolves_vertical is False and sol.resolves_vertical is False
+
+
+def test_behave_factor_is_validated():
+    class Short(NetworkSolver):
+        def behave(self, h, tau, t, dt):  # noqa: ARG002
+            return np.ones(self.n - 1)
+
+    class NotFinite(NetworkSolver):
+        def behave(self, h, tau, t, dt):  # noqa: ARG002
+            f = np.ones(self.n)
+            f[0] = np.nan
+            return f
+
+    with pytest.raises(ValueError, match="length"):
+        make(Short, three_reach_dataset(), slug(3)).step()
+    with pytest.raises(RuntimeError, match="non-finite velocity factor for particle 0"):
+        make(NotFinite, three_reach_dataset(), slug(3)).step()
 
 
 # ---- DriftParticles -------------------------------------------------------------
@@ -237,6 +291,7 @@ def test_drift_velocity_factor_moves_the_particle_at_its_depth():
     assert sol.state["velocity_factor"][0] == pytest.approx(f)
 
 
+@pytest.mark.filterwarnings("ignore:the per-contact deposition probability clipped")
 def test_drift_settles_with_an_absorbing_bed_and_not_above_critical_shear():
     ds = three_reach_dataset()  # depth 1 m, ustar ~ 0.099 m/s
     params = {"deposition_velocity": 1e9, "settling_velocity": 0.05}
@@ -255,6 +310,105 @@ def test_drift_settles_with_an_absorbing_bed_and_not_above_critical_shear():
     assert (held.state["zeta"] >= 0.0).all()
 
 
+def test_drift_mixing_only_deposition_settles_some_particles():
+    # w = 0: contacts come from the mixing kernel alone, the layer rule k_d dt / (zeta_min h)
+    # p = k_d dt_sub / (zeta_min h) ~ 0.3 per contact; about 0.1 percent of the particles are in the
+    # 1 mm layer after any sub-step, so a few dozen settle over ten steps
+    sol = make(DriftParticles, three_reach_dataset(), slug(400), dt=100.0, params={"deposition_velocity": 1e-4})
+    for _ in range(10):
+        sol.step()
+    settled = int((sol.status == SETTLED).sum())
+    assert 0 < settled < 400 and sol.clipped_contacts == 0
+    assert ((sol.status == ACTIVE) | (sol.status == SETTLED)).all()
+
+
+def test_drift_clipped_contacts_are_counted_and_warned():
+    params = {"deposition_velocity": 1e9, "settling_velocity": 0.05}
+    sol = make(DriftParticles, three_reach_dataset(), slug(20), dt=100.0, params=params)
+    with pytest.warns(UserWarning, match="clipped at 1"):
+        sol.step()
+    assert sol.clipped_contacts >= 20
+
+
+def test_drift_substep_cap_is_counted_and_warned():
+    sol = make(DriftParticles, three_reach_dataset(), slug(2), dt=900.0, params={"max_substeps": 5})
+    with pytest.warns(UserWarning, match="max_substeps"):
+        sol.step()
+    assert sol.steps_at_cap == 1 and sol.last_substeps == 5
+
+
+def test_drift_swimming_up_reflects_at_the_surface_and_never_deposits():
+    ds = chain_dataset(n_reach=2, length=10000.0, velocity=1.0)
+    params = {"initial_zeta": 0.5, "swim_velocity": 0.02, "deposition_velocity": 1e9}
+    up = make(DriftParticles, ds, slug(3), dt=30.0, dispersion=NO_MIXING, params=params)
+    up.step()  # 0.5 + 0.02 * 30 / depth (~0.42 m) reflects at the surface
+    depth = float(up.provider.hydraulics(T0)["depth"][0])
+    expected = 0.5 + 0.02 * 30.0 / depth
+    expected = 2.0 - expected if expected > 1.0 else expected
+    np.testing.assert_allclose(up.state["zeta"], expected)
+    assert (up.status == ACTIVE).all()
+
+
+def test_drift_partial_krone_suppression():
+    sol = make(
+        DriftParticles,
+        three_reach_dataset(),
+        slug(1),
+        dt=100.0,
+        params={"deposition_velocity": 1e-3, "critical_ustar": 0.2},
+    )
+    k_d = sol._deposition_velocity(np.array([0.1, 0.2, 0.3]))
+    np.testing.assert_allclose(k_d, [1e-3 * 0.75, 0.0, 0.0])
+
+
+def test_drift_diel_velocity_acts_through_behave_at_mid_step():
+    ds = chain_dataset(n_reach=2, length=10000.0, velocity=1.0)
+    depth = float(ArrayHydraulicsProvider.from_dataset(ds).hydraulics(T0)["depth"][0])
+    # period 200 s: at the mid-step time 50 s the sine is +1 (down), so zeta decreases by amplitude * dt / depth
+    params = {"initial_zeta": 0.5, "diel": {"amplitude": 0.001, "period": 200.0}}
+    sol = make(DriftParticles, ds, slug(1), dt=100.0, dispersion=NO_MIXING, params=params)
+    sol.step()
+    assert sol.state["zeta"][0] == pytest.approx(0.5 - 0.001 * 100.0 / depth)
+
+
+def test_drift_mid_step_release_walks_only_its_budget():
+    ds = chain_dataset(n_reach=2, length=10000.0, velocity=1.0)
+    depth = float(ArrayHydraulicsProvider.from_dataset(ds).hydraulics(T0)["depth"][0])
+    sch = ParticleSchedule(
+        np.zeros(2, dtype=np.int32), np.zeros(2), np.array([0.0, 50.0]), np.ones(2), np.zeros(2, dtype=np.int32)
+    )
+    sol = make(
+        DriftParticles,
+        ds,
+        sch,
+        dt=100.0,
+        dispersion=NO_MIXING,
+        params={"initial_zeta": 0.9, "settling_velocity": 0.001},
+    )
+    sol.step()
+    np.testing.assert_allclose(sol.state["zeta"], [0.9 - 0.1 / depth, 0.9 - 0.05 / depth])
+
+
+def test_correct_shear_floors_at_zero():
+    ds = chain_dataset(n_reach=2, length=1e6, velocity=1.0, k_target=10.0)
+    h = ArrayHydraulicsProvider.from_dataset(ds).hydraulics(T0)
+    sol = make(DriftParticles, ds, slug(1), dt=100.0, dispersion=DispersionConfig())
+    with pytest.warns(UserWarning, match="exceeds the longitudinal K"):
+        k = sol._correct_shear(np.array([0.1, 0.1]), h)
+    np.testing.assert_array_equal(k, [0.0, 0.0])
+    assert sol.last_shear_zeroed == 2
+
+
+def test_background_is_added_after_the_shear_correction():
+    # constant K = 0.1 is wiped by the correction; the background survives as the floor
+    ds = chain_dataset(n_reach=2, length=1e6, velocity=1.0, k_target=10.0)
+    disp = DispersionConfig(model="constant", value=0.1, background=0.5)
+    sol = make(DriftParticles, ds, slug(1), dt=100.0, dispersion=disp)
+    with pytest.warns(UserWarning, match="exceeds the longitudinal K"):
+        sol.step()
+    assert sol.last_shear_zeroed == 2  # the kick used K = 0 + 0.5 on both reaches
+
+
 def test_drift_deposition_is_partial_for_a_finite_deposition_velocity():
     ds = three_reach_dataset()
     # settling 0.05 m/s: every particle reaches the bed within the 100 s step and makes contact on
@@ -268,8 +422,10 @@ def test_drift_deposition_is_partial_for_a_finite_deposition_velocity():
 
 def test_drift_shear_table_follows_the_dispersion_config():
     ds = three_reach_dataset()
-    sol = make(DriftParticles, ds, slug(1), dt=100.0)
+    sol = make(DriftParticles, ds, slug(1), dt=100.0, dispersion=DispersionConfig())
     assert sol._shear_table is sol.profiles
+    none = DispersionConfig(model="none", shear_correction="on")
+    assert make(DriftParticles, ds, slug(1), dt=100.0, dispersion=none)._shear_table is None  # nothing to correct
     uniform = DispersionConfig(vertical=VerticalDispersionConfig(velocity_profile="uniform"))
     assert make(DriftParticles, ds, slug(1), dt=100.0, dispersion=uniform)._shear_table is None
     off = DispersionConfig(shear_correction="off")
@@ -304,9 +460,11 @@ def test_drift_diel_velocity_is_sinusoidal():
     assert sol._vertical_velocity(75.0) == pytest.approx(0.004)
 
 
+@pytest.mark.filterwarnings("ignore:the per-contact deposition probability clipped")
 def test_drift_dry_reach_particles_do_not_walk():
     ds = three_reach_dataset(velocity=[1.0, 0.0, 2.0], depth=[1.0, 0.0, 2.0], flow_out=[10.0, 0.0, 80.0])
-    sol = make(DriftParticles, ds, slug(5, reach=1), dt=100.0, params={"initial_zeta": 0.4})
+    params = {"initial_zeta": 0.4, "settling_velocity": 0.05, "deposition_velocity": 1e9}
+    sol = make(DriftParticles, ds, slug(5, reach=1), dt=100.0, params=params)
     sol.step()
     assert (sol.status == ACTIVE).all()
     np.testing.assert_allclose(sol.state["zeta"], 0.4)
@@ -330,10 +488,10 @@ def test_drift_does_not_change_the_passive_model():
 
 
 def test_drift_diagnostics_report_substeps_and_shear():
-    sol = make(DriftParticles, three_reach_dataset(), slug(1), dt=900.0)
+    sol = make(DriftParticles, three_reach_dataset(), slug(1), dt=900.0, dispersion=DispersionConfig())
     lines = sol.diagnostics(sol.provider.hydraulics(sol.start_time))
     text = "\n".join(lines)
-    assert "sub-steps" in text and "shear correction" in text and "active" in text
+    assert "sub-steps" in text and "shear correction: active" in text
     assert sol.last_substeps == 0
     sol.step()
     assert 150 <= sol.last_substeps <= 1000

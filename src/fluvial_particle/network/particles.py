@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
+import warnings
 from collections.abc import Mapping
 from typing import Any
 
@@ -63,8 +64,25 @@ class StateVar:
             raise ValueError(f"StateVar {self.name!r}: shape must be () or (k,), got {self.shape}")
         if self.shape and self.dim is None:
             raise ValueError(f"StateVar {self.name!r}: a vector state needs a dim name")
+        if self.shape and self.shape[0] < 1:
+            raise ValueError(f"StateVar {self.name!r}: a vector state needs at least one component")
+        if not self.shape and (self.dim is not None or self.labels is not None):
+            raise ValueError(f"StateVar {self.name!r}: dim and labels apply to a vector state only")
         if self.labels is not None and (not self.shape or len(self.labels) != self.shape[0]):
             raise ValueError(f"StateVar {self.name!r}: labels must have one entry per component ({self.shape})")
+        try:
+            dtype = np.dtype(self.dtype)
+        except TypeError as e:
+            raise ValueError(f"StateVar {self.name!r}: {self.dtype!r} is not a numpy dtype") from e
+        if dtype.kind in "iub":
+            fill = float(self.fill)
+            if not (np.isfinite(fill) and fill.is_integer()):
+                raise ValueError(f"StateVar {self.name!r}: dtype {self.dtype!r} needs an explicit integer fill")
+            if not np.can_cast(np.min_scalar_type(int(fill)), dtype):
+                raise ValueError(f"StateVar {self.name!r}: fill {self.fill!r} does not fit dtype {self.dtype!r}")
+        object.__setattr__(self, "shape", tuple(self.shape))
+        if self.labels is not None:
+            object.__setattr__(self, "labels", tuple(self.labels))
 
 
 # ---- drift model ---------------------------------------------------------------
@@ -72,7 +90,10 @@ DIEL_KEYS = ("amplitude", "period", "phase")
 
 
 def _validate_initial_zeta(init: Any, zeta_min: float) -> str | float:
-    """``"uniform"`` or a number strictly inside the walk's domain.
+    """``"uniform"`` (over the whole column) or a number strictly inside ``(zeta_min, 1 - zeta_min)``.
+
+    A fixed release inside the contact layer would be eligible to deposit on its first sub-step,
+    and one at the surface clip has no meaning, so the number is kept out of both clipped bands.
 
     Raises:
         ValueError: any other string, or a number on or outside the domain.
@@ -136,7 +157,12 @@ class DriftParticles(NetworkSolver):
     resolves_vertical = True
     STATE = (
         StateVar("zeta", units="1", long_name="relative elevation in the water column, 0 bed, 1 surface"),
-        StateVar("velocity_factor", units="1", long_name="mean of u(zeta)/v over the step's sub-steps", output=False),
+        StateVar(
+            "velocity_factor",
+            units="1",
+            long_name="mean of u(zeta)/v over the step's sub-steps; 1 for a particle that deposited this step",
+            output=False,
+        ),
     )
     PARAM_DEFAULTS: Mapping[str, Any] = {
         "settling_velocity": 0.0,
@@ -195,6 +221,10 @@ class DriftParticles(NetworkSolver):
         self.profiles = VerticalProfiles(self.dispersion.vertical, self.params["zeta_min"])
         self._shear_table = self.profiles if self._shear_correction_active() else None
         self.last_substeps = 0
+        self.steps_at_cap = 0  # steps whose sub-step count hit max_substeps
+        self.clipped_contacts = 0  # bed contacts whose deposition probability was clipped at 1
+        self._warned_cap = False
+        self._warned_clip = False
 
     # ---- parameters as functions ----------------------------------------------
     def _vertical_velocity(self, t_mid: float) -> float:
@@ -244,6 +274,16 @@ class DriftParticles(NetworkSolver):
             max_substeps=self.params["max_substeps"],
         )
         self.last_substeps = n_sub
+        if n_sub >= self.params["max_substeps"]:
+            self.steps_at_cap += 1
+            if not self._warned_cap:
+                self._warned_cap = True
+                warnings.warn(
+                    f"the vertical walk hit max_substeps = {n_sub} at t = {t:.0f} s (a shallow, high-shear reach "
+                    "holds active particles); the within-step shear dispersion is under-resolved there",
+                    UserWarning,
+                    stacklevel=2,
+                )
         w = self._vertical_velocity(t + 0.5 * dt)
         k_d = self._deposition_velocity(ustar)
         # A dry reach (depth 0) has nothing to walk in: its particles keep their zeta.
@@ -268,6 +308,18 @@ class DriftParticles(NetworkSolver):
                 contact = np.nonzero(za < zmin)[0]
                 if contact.size:
                     b = a[contact]
+                    n_clip = int((p_dep[b] >= 1.0).sum())
+                    if n_clip:
+                        self.clipped_contacts += n_clip
+                        if not self._warned_clip:
+                            self._warned_clip = True
+                            warnings.warn(
+                                f"the per-contact deposition probability clipped at 1 at t = {t:.0f} s: the bed is "
+                                "absorbing there and the deposition rate depends on the sub-step count "
+                                "(raise zeta_min or lower substep_fraction)",
+                                UserWarning,
+                                stacklevel=2,
+                            )
                     deposited = b[self.rng.uniform(size=b.size) < p_dep[b]]
                     alive[deposited] = False
             if w != 0.0:
@@ -298,8 +350,9 @@ class DriftParticles(NetworkSolver):
         ]
         n_cap = int((counts > cap).sum())
         lines = [
-            f"  vertical walk: sub-steps per step median {int(np.median(counts)) if counts.size else 0}, "
-            f"max {int(counts.max()) if counts.size else 0} (cap {cap}); {n_cap} wet reaches at the cap"
+            f"  vertical walk: sub-steps per step (first slice, over wet reaches) median "
+            f"{int(np.median(counts)) if counts.size else 0}, max {int(counts.max()) if counts.size else 0} "
+            f"(cap {cap}); {n_cap} wet reaches at the cap; the run uses the max over reaches holding particles"
         ]
         k_d = self.params["deposition_velocity"]
         if k_d > 0.0 and counts.size:
@@ -311,7 +364,10 @@ class DriftParticles(NetworkSolver):
                 settling=self._vertical_velocity(0.5 * self.dt),
             )
             note = "; clipped at 1 on some reaches: raise zeta_min or lower substep_fraction" if p.max() >= 1.0 else ""
-            lines.append(f"  deposition: per-contact probability median {np.median(p):.3g}, max {p.max():.3g}{note}")
+            lines.append(
+                f"  deposition: per-contact probability (at that sub-step) median {np.median(p):.3g}, "
+                f"max {p.max():.3g}{note}"
+            )
         if self._shear_table is None:
             lines.append("  shear correction: not active")
         else:

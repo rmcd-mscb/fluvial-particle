@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from enum import IntEnum
 from types import MappingProxyType
@@ -30,6 +31,10 @@ class ShearTable(Protocol):
         ...
 
 
+# Dimension names the output file owns; a vector state may not use them.
+RESERVED_DIMS = frozenset({"time", "particle", "reach"})
+
+
 class Status(IntEnum):
     """Particle status codes, stored as int8 in the state array and in the output file."""
 
@@ -47,7 +52,7 @@ EXITED = Status.EXITED
 SETTLED = Status.SETTLED
 REMOVED = Status.REMOVED
 # Every code above ACTIVE is terminal: the particle no longer moves and exit_time/exit_reach are set.
-TERMINAL_STATUSES = (EXITED, SETTLED, REMOVED)
+TERMINAL_STATUSES = tuple(code for code in Status if code > Status.ACTIVE)
 
 FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
@@ -75,7 +80,7 @@ RESERVED_NAMES = frozenset({
 
 
 def _readonly(arr: npt.NDArray[Any]) -> npt.NDArray[Any]:
-    """A non-writable view of ``arr`` that still tracks the backing array's contents."""
+    """A non-writable view of ``arr`` that tracks the backing array's contents (guards accidental writes)."""
     view = arr.view()
     view.setflags(write=False)
     return view
@@ -161,22 +166,36 @@ class NetworkSolver:
         self._length = network.length
         self._to_index = network.to_index.astype(np.int64)
         self._state: dict[str, npt.NDArray[Any]] = {}
+        dims: dict[str, StateVar] = {}
         for spec in self.STATE:
             if spec.name in RESERVED_NAMES:
                 raise ValueError(f"state name {spec.name!r} is reserved by the solver or the output file")
             if spec.name in self._state:
                 raise ValueError(f"duplicate state name {spec.name!r} in {type(self).__name__}.STATE")
+            if spec.dim is not None:
+                if spec.dim in RESERVED_DIMS:
+                    raise ValueError(f"state {spec.name!r}: dim {spec.dim!r} is a dimension of the output file")
+                first = dims.setdefault(spec.dim, spec)
+                if (first.shape, first.labels) != (spec.shape, spec.labels):
+                    raise ValueError(
+                        f"states {first.name!r} and {spec.name!r} share dim {spec.dim!r} with different shape or labels"
+                    )
             self._state[spec.name] = np.full((n, *spec.shape), spec.fill, dtype=np.dtype(spec.dtype))
         self._state_views: Mapping[str, npt.NDArray[Any]] = MappingProxyType({
             name: _readonly(arr) for name, arr in self._state.items()
         })
-        # Set by models that resolve the vertical to the object whose shear_coefficient(ustar, v)
+        # Set by models that resolve the vertical to the object whose shear_coefficient(ustar, v, h)
         # gives Taylor's coefficient per reach; None leaves the longitudinal K uncorrected.
         self._shear_table: ShearTable | None = None
+        self.last_shear_zeroed = 0  # reaches whose longitudinal K the correction took to 0 in the last step
+        self._warned_shear_zeroed = False
         self._shear_correction_active()  # "on" with a model that cannot honour it is a config error
 
     def _shear_correction_active(self) -> bool:
         """Resolve ``dispersion.shear_correction`` for this model (see DispersionConfig).
+
+        With ``dispersion.model = "none"`` there is no longitudinal K to correct, so the correction is
+        never active (the resolved vertical shear is then the run's only longitudinal dispersion).
 
         Raises:
             ValueError: ``"on"`` with a model that does not resolve the vertical.
@@ -189,8 +208,12 @@ class NetworkSolver:
                 raise ValueError(
                     "dispersion.shear_correction = 'on' requires a particle model that resolves the vertical"
                 )
-            return True
-        return self.resolves_vertical and self.dispersion.vertical.velocity_profile != "uniform"
+            return self.dispersion.model != "none"
+        return (
+            self.resolves_vertical
+            and self.dispersion.vertical.velocity_profile != "uniform"
+            and self.dispersion.model != "none"
+        )
 
     def _correct_shear(self, k: FloatArray, h: Hydraulics) -> FloatArray:
         """Remove the shear-dispersion part ``c ustar h`` from ``k`` when a model resolves the vertical."""
@@ -199,7 +222,19 @@ class NetworkSolver:
         ustar = np.asarray(h["ustar"], dtype=np.float64)
         depth = np.asarray(h["depth"], dtype=np.float64)
         c = self._shear_table.shear_coefficient(ustar, np.asarray(h["velocity"], dtype=np.float64), depth)
-        return np.maximum(k - c * ustar * depth, 0.0)
+        shear = c * ustar * depth
+        zeroed = (shear > 0.0) & (k < shear)
+        self.last_shear_zeroed = int(zeroed.sum())
+        if self.last_shear_zeroed and not self._warned_shear_zeroed:
+            self._warned_shear_zeroed = True
+            warnings.warn(
+                f"the resolved vertical shear exceeds the longitudinal K on {self.last_shear_zeroed} reaches "
+                f"(first: index {int(np.nonzero(zeroed)[0][0])}); their K is set to 0 there. The vertical walk "
+                "generates more shear dispersion than the longitudinal model claims exists.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return np.maximum(k - shear, 0.0)
 
     @classmethod
     def validate_params(cls, params: Mapping[str, Any]) -> dict[str, Any]:
@@ -229,18 +264,21 @@ class NetworkSolver:
 
     @property
     def state(self) -> Mapping[str, npt.NDArray[Any]]:
-        """Read-only views of the declared state arrays, keyed by name (shape ``(n, *spec.shape)``)."""
+        """Read-only views of the declared state arrays, keyed by name (shape ``(n, *spec.shape)``).
+
+        Models write through ``self._state[name][...]`` in place; rebinding an entry would detach the view.
+        """
         return self._state_views
 
     # ---- particle state (read-only views of the solver's own arrays) --------
     @property
     def reach(self) -> npt.NDArray[np.int32]:
-        """Reach index of each particle, -1 when unreleased or exited (settled particles keep theirs)."""
+        """Reach index of each particle, -1 when unreleased or exited (particles terminated by a model keep theirs)."""
         return self._views["reach"]
 
     @property
     def s(self) -> npt.NDArray[Any]:
-        """Distance from the upstream end of ``reach`` (m), NaN when unreleased or exited (settled keep theirs)."""
+        """Distance from the upstream end of ``reach`` (m), NaN when unreleased or exited (terminated by a model: kept)."""
         return self._views["s"]
 
     @property
@@ -264,18 +302,27 @@ class NetworkSolver:
         return self._views["exit_reach"]
 
     def terminate(self, idx: IntArray, status: int, t_end: float) -> None:
-        """Give particles ``idx`` a terminal status at time ``t_end``; they keep their reach and ``s``.
+        """Give active particles ``idx`` a terminal status at time ``t_end``; they keep their reach and ``s``.
 
         Used by behavioral models (a settled particle has a position on the bed). The base solver's
         exits keep their own inline bookkeeping in ``_advect`` and ``_disperse``.
 
         Args:
-            idx: particle indices.
+            idx: particle indices; every one must be active.
             status: one of ``TERMINAL_STATUSES``.
             t_end: solver time (s) at which the particles reached the status.
+
+        Raises:
+            ValueError: ``status`` is not terminal, or a particle in ``idx`` is not active.
         """
+        if status not in TERMINAL_STATUSES:
+            raise ValueError(
+                f"terminate needs a terminal status {tuple(int(s) for s in TERMINAL_STATUSES)}, got {status}"
+            )
         if idx.size == 0:
             return
+        if not np.all(self._status[idx] == ACTIVE):
+            raise ValueError("terminate: every particle must be active (a terminal or unreleased one was given)")
         self._status[idx] = status
         self._exit_time[idx] = t_end
         self._exit_reach[idx] = self._reach[idx]
@@ -302,13 +349,36 @@ class NetworkSolver:
         h = self.provider.hydraulics(self.midpoint_time())
         tau = self._release(t, dt, h)
         factor = self.behave(h, tau, t, dt)
+        if factor is not None:
+            self._check_factor(factor)
         v = np.asarray(h["velocity"], dtype=np.float64)
         d = self.dispersion
-        k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value, background=d.background)
-        k = self._correct_shear(k, h)
+        if self._shear_table is None:
+            k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value, background=d.background)
+        else:
+            # Correct the model's K, then add the background so it stays the floor it is documented as.
+            k = dispersion_coefficient(h, d.model, scale=d.scale, cap=d.cap, value=d.value)
+            k = self._correct_shear(k, h)
+            if d.background > 0.0:
+                k += np.where(np.asarray(h["flow_out"], dtype=np.float64) > 0.0, d.background, 0.0)
         self._advect(v, tau, t, dt, factor)
         self._disperse(k, tau, t, dt, np.asarray(h["flow_out"], dtype=np.float64))
         self.time = t + dt
+
+    def _check_factor(self, factor: FloatArray) -> None:
+        """Reject a velocity factor of the wrong length or with a non-finite entry on an active particle.
+
+        Raises:
+            ValueError: the factor is not a length-``n`` array.
+            RuntimeError: an active particle's factor is NaN or infinite (a model bug or bad hydraulics).
+        """
+        if np.shape(factor) != (self.n,):
+            raise ValueError(f"behave must return a length-{self.n} array or None, got shape {np.shape(factor)}")
+        act = self._status == ACTIVE
+        bad = act & ~np.isfinite(np.asarray(factor, dtype=np.float64))
+        if bad.any():
+            i = int(np.nonzero(bad)[0][0])
+            raise RuntimeError(f"non-finite velocity factor for particle {i} in reach {int(self._reach[i])}")
 
     # ---- model hooks (no-ops in the base; the passive model draws nothing here) ----
     def on_release(self, idx: IntArray, h: Hydraulics) -> None:

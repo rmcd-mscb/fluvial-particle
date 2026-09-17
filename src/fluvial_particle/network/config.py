@@ -52,7 +52,8 @@ class VerticalDispersionConfig:
 
     Read only by particle models that resolve the vertical. It mirrors the 2D/3D solver's
     ``lev + beta * ustar * depth`` parameterization: ``beta`` for the constant profile, ``background``
-    for ``lev``; the parabolic profile's depth mean at ``kappa = 0.41`` equals ``beta = 0.067``.
+    for ``lev``; the parabolic profile's depth mean at ``kappa = 0.41`` (``kappa / 6 = 0.068``) is within
+    2 percent of ``beta = 0.067``.
 
     Args:
         profile: ``"parabolic"`` (``Kz = kappa ustar h zeta (1 - zeta)``), ``"constant"``
@@ -78,8 +79,17 @@ class VerticalDispersionConfig:
 
         Raises:
             ValueError: an unknown profile, non-positive kappa, beta or scale, a negative
-                background, or the ``"value"`` profile without a non-negative value.
+                background, a non-numeric field, ``value`` given with another profile, or the
+                ``"value"`` profile without a non-negative value.
         """
+        for name in ("kappa", "beta", "scale", "background", "value"):
+            raw = getattr(self, name)
+            if raw is None:
+                continue
+            try:
+                object.__setattr__(self, name, float(raw))
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"vertical {name} must be a number, got {raw!r}") from e
         if self.profile not in VERTICAL_PROFILES:
             raise ValueError(f"vertical profile must be one of {VERTICAL_PROFILES}, got {self.profile!r}")
         if self.velocity_profile not in VELOCITY_PROFILES:
@@ -93,6 +103,8 @@ class VerticalDispersionConfig:
             raise ValueError("vertical background must be non-negative")
         if self.profile == "value" and (self.value is None or self.value < 0.0):
             raise ValueError("vertical profile 'value' requires a non-negative value")
+        if self.profile != "value" and self.value is not None:
+            raise ValueError(f"vertical value is only used by profile 'value' (profile is {self.profile!r})")
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> VerticalDispersionConfig:
@@ -123,8 +135,8 @@ class DispersionConfig:
         background: m^2/s added to the longitudinal K on every wet reach, for every model.
         shear_correction: ``"auto"`` removes the shear-dispersion part of K (which a model that
             resolves the vertical generates itself) whenever such a model runs with a non-uniform
-            velocity profile; ``"on"`` and ``"off"`` override; ``"on"`` with a model that does not
-            resolve the vertical is a config error.
+            velocity profile and a longitudinal model other than ``"none"``; ``"on"`` and ``"off"``
+            override; ``"on"`` with a model that does not resolve the vertical is a config error.
         vertical: the ``[network.dispersion.vertical]`` table.
     """
 
@@ -204,18 +216,20 @@ class ParticlesConfig:
     params: Mapping[str, Any] = dataclasses.field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Resolve the model and validate its parameters (unknown keys raise); freeze ``params``.
+        """Resolve the model and validate its parameters (unknown keys raise); store them complete and frozen.
 
-        ``resolve_model`` raises KeyError for an unknown registry name and TypeError for a dotted
-        path that is not a ``NetworkSolver`` subclass; the model's ``validate_params`` raises
-        ValueError for a parameter it rejects.
+        ``params`` holds the validated table with the model's defaults filled in (so the output file
+        records the effective values), frozen through nested tables. ``resolve_model`` raises
+        KeyError for an unknown registry name, ImportError for a dotted path that cannot be
+        imported, and TypeError for one that is not a ``NetworkSolver`` subclass; the model's
+        ``validate_params`` raises ValueError for a parameter it rejects.
         """
         # Imported here: config -> particles -> solver, and solver imports config for types only.
         from .particles import resolve_model
 
         cleaned = {k: _jsonify_nested(v) for k, v in self.params.items()}
-        resolve_model(self.model).validate_params(cleaned)
-        object.__setattr__(self, "params", types.MappingProxyType(cleaned))
+        validated = resolve_model(self.model).validate_params(cleaned)
+        object.__setattr__(self, "params", _freeze(validated))
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> ParticlesConfig:
@@ -225,8 +239,26 @@ class ParticlesConfig:
         return cls(model=model, params=data)
 
     def to_dict(self) -> dict[str, Any]:
-        """The flat, JSON-safe table that ``from_dict`` accepts."""
-        return {"model": self.model, **{k: copy.deepcopy(v) for k, v in self.params.items()}}
+        """The flat, JSON-safe table that ``from_dict`` accepts (the effective, defaulted parameters)."""
+        return {"model": self.model, **{k: _thaw(v) for k, v in self.params.items()}}
+
+
+def _freeze(value: Any) -> Any:
+    """Recursively read-only: mappings become ``MappingProxyType``, lists become tuples."""
+    if isinstance(value, Mapping):
+        return types.MappingProxyType({str(k): _freeze(v) for k, v in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_freeze(v) for v in value)
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    """The plain, editable copy of a frozen value (mappings to dicts, tuples to lists)."""
+    if isinstance(value, Mapping):
+        return {str(k): _thaw(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_thaw(v) for v in value]
+    return value
 
 
 def _jsonify_nested(value: Any) -> Any:
@@ -539,7 +571,7 @@ scale = 1.0                   # multiplier on the Fischer coefficient
 # settling_velocity = 0.0      # m/s, positive down
 # swim_velocity = 0.0          # m/s, positive up
 # deposition_velocity = 0.0    # m/s; 0 is a reflecting bed
-# critical_ustar = 0.2         # m/s; no deposition where the reach ustar exceeds it
+# critical_ustar = 0.2         # m/s; Krone: deposition scaled by 1 - (ustar / critical_ustar)^2, none above it
 # zeta_min = 0.001             # velocity-factor clip and bed contact-layer thickness (fraction of depth)
 # substep_fraction = 0.03      # fraction of the column mixing time per vertical sub-step
 # max_substeps = 1000
