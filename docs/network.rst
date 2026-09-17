@@ -87,22 +87,28 @@ reach velocity exactly. Per step the vertical walk runs ``n_sub`` sub-steps, eac
 
 1. mixing by a kernel that leaves a uniform column *exactly* uniform at any step: for the parabolic
    profile the walk is the polar angle of Brownian motion on a sphere (the Jacobi diffusion identity,
-   Karlin and Taylor 1981), so one sub-step is a random rotation, a von Mises-Fisher step (Fisher
-   1953) calibrated so the first spherical mode decays as the heat kernel does; for a constant
-   profile it is a Gaussian displacement mirror-reflected at the bed and the surface;
+   Karlin and Taylor 1981, ch. 15 sec. 13; Mijatovic, Mramor and Uribe Bravo 2018), so one sub-step
+   is a random rotation, a von Mises-Fisher step (Fisher 1953) calibrated so the first spherical mode
+   decays as the heat kernel does (the higher modes then match to second order in the step); for a
+   constant profile it is a Gaussian displacement mirror-reflected at the bed and the surface;
 2. the vertical velocity ``w`` (positive down: ``settling_velocity - swim_velocity`` plus the optional
-   ``diel`` sinusoid ``amplitude * sin(2 pi t / period + phase)``) as a displacement reflected at the
-   surface and the bed;
-3. deposition: a particle whose shifted position lies in the bed contact layer ``zeta < zeta_min`` (or
-   below the bed) has made contact and deposits with the derived probability below, else reflects.
+   ``diel`` sinusoid ``amplitude * sin(2 pi t / period + phase)``, evaluated once per step at its
+   midpoint) as a displacement reflected at the surface and the bed;
+3. deposition: a particle whose position after the downward part of that shift, before reflection,
+   lies in the bed contact layer ``zeta < zeta_min`` (or below the bed) has made contact and deposits
+   with the derived probability below, else reflects; an upward velocity does not remove the contacts
+   mixing makes.
 
 The sub-step count is ``ceil(dt / (substep_fraction * h^2 / Kz_max))`` per reach, one count for all
 active particles (the maximum, capped by ``max_substeps``). Because the kernels keep the column well
-mixed at any step, the fraction only sets how well the shear dispersion within a step is resolved:
-about 2 percent at the default 0.03, 12 percent at 0.1. At the Delaware River Basin medians (depth
-0.59 m, ``u*`` 0.10 m/s) the default is about 520 sub-steps per 900 s step, roughly 4 s of vectorized
-numpy per step for 100,000 particles; settling equilibria near the bed need a finer fraction (0.01
-reproduces the Rouse profile at Rouse number 0.5 to a Kolmogorov-Smirnov distance of 0.02). The
+mixed at any step, the fraction sets how well the shear dispersion within a step is resolved (about
+1 percent over at the default 0.03, 8 percent at 0.1: the error of sampling the velocity once per
+sub-step) and, through the sub-step length, the deposition cap below. At the Delaware River Basin
+medians (depth 0.59 m, ``u*`` 0.10 m/s) the default is about 520 sub-steps per 900 s step, roughly 4 s
+of vectorized numpy per step for 100,000 particles; settling equilibria near the bed converge slowly
+(the split flattens the singular bed layer each sub-step, so the error goes as the sub-step to the
+power ``1 - P``: the Rouse profile at Rouse number 0.5 is reproduced to a Kolmogorov-Smirnov distance
+of about 0.09 at 0.03, 0.05 at 0.01, and 0.03 at 0.003). The
 startup report prints the count and the reaches that hit the cap, and the solver warns once when a
 step hits it (one shallow, high-shear reach holding particles throttles every particle that step).
 
@@ -114,11 +120,16 @@ individual attaches on contact, and ``critical_ustar`` is the flow above which i
 deposition velocity is multiplied by Krone's factor ``max(0, 1 - (u* / critical_ustar)^2)`` (Krone
 1962), so nothing deposits where the reach shear exceeds it. The per-contact probability is derived,
 never a parameter: the particles making contact in a sub-step are those within
-``zeta_min h + w dt_sub`` of the bed, so removing each with
-``p = k_d dt_sub / (zeta_min h + w dt_sub)`` gives the Robin flux (the layer rule when contact is by
-mixing, ``k_d / w`` when settling dominates). A deposited particle gets status 3 (``settled``), keeps
-its position on the bed (``s`` is kept, ``zeta`` is 0), and ``exit_time`` and ``exit_reach`` record
-where and when; ``NetworkResults.terminal(3)`` lists them.
+``zeta_min h + max(w, 0) dt_sub`` of the bed, so removing each with
+``p = k_d dt_sub / (zeta_min h + max(w, 0) dt_sub)`` gives the Robin flux (the layer rule when contact
+is by mixing, ``k_d / w`` when settling dominates; Erban and Chapman's 2007 per-contact probability
+for a diffusive wall contact agrees within 1 percent while ``p < 1``). When ``p`` clips at 1 every
+contact deposits, which is not an absorbing bed but a Robin bed with the effective velocity
+``w + zeta_min h / dt_sub``: that is the largest deposition velocity the rule can represent (about
+2e-4 m/s in a 1 m column at the defaults without settling), and it depends on the sub-step. A
+deposited particle gets status 3 (``settled``), keeps its position on the bed (``s`` is kept,
+``zeta`` is 0), and ``exit_time`` (stamped at the sub-step of contact) and ``exit_reach`` record when
+and where; ``NetworkResults.terminal(3)`` lists them.
 
 .. list-table::
    :header-rows: 1
@@ -184,8 +195,9 @@ depth mean at ``kappa = 0.41`` (``kappa / 6 = 0.068``) is the 2D/3D vertical def
      - ``"auto"``, ``"on"``, ``"off"``; see below
    * - ``vertical.profile``
      - ``"parabolic"``
-     - ``"parabolic"``: ``Kz = kappa u* h zeta (1 - zeta)`` (van Rijn 1984); ``"constant"``:
-       ``Kz = beta u* h``, the 2D/3D form; ``"value"``: a fixed ``Kz`` in m2/s
+     - ``"parabolic"``: ``Kz = kappa u* h zeta (1 - zeta)`` (Rouse 1937; Fischer et al. 1979, whose
+       depth mean 0.067 u* h is the constant default; van Rijn 1984 for the parabolic-constant
+       variant); ``"constant"``: ``Kz = beta u* h``, the 2D/3D form; ``"value"``: a fixed ``Kz`` in m2/s
    * - ``vertical.kappa``
      - 0.41
      - parabolic profile and log law
@@ -207,7 +219,8 @@ depth mean at ``kappa = 0.41`` (``kappa / 6 = 0.068``) is the 2D/3D vertical def
 
 **Shear dispersion and the Fischer coefficient.** Longitudinal dispersion in a river is the sum of
 what vertical shear produces (Elder's term, ``5.86 h u*`` for the log law with parabolic mixing at
-``kappa = 0.41``, 5.93 in Fischer et al.'s tabulation; Elder 1959) and what transverse shear
+``kappa = 0.41``; Elder's often-quoted 5.93 adds his longitudinal turbulent diffusion ``kappa / 6``,
+which this correction does not remove; Elder 1959) and what transverse shear
 produces, the larger part in a wide channel; Fischer's formula (Fischer et al. 1979) is an empirical
 fit to the total and contains both. A model that resolves the vertical generates the vertical-shear
 part from its own kinematics, so the kick must supply only the transverse remainder or the vertical
@@ -217,7 +230,8 @@ correction is applied whenever the model resolves the vertical, the velocity pro
 uniform, and a longitudinal model other than ``"none"`` is on (with ``"none"`` there is nothing to
 correct and the resolved shear is the run's only longitudinal dispersion); ``"on"`` and ``"off"``
 override, and ``"on"`` with a model that does not resolve the vertical is a configuration error. The corrected coefficient is
-``max(K - c u* h, 0)`` with ``c`` Taylor's dimensionless shear-dispersion integral (Taylor 1953) for
+``max(K - c u* h, 0)`` with ``c`` Taylor's dimensionless shear-dispersion integral (Taylor 1954;
+Fischer et al. 1979, eq. 4.32) for
 the configured velocity and mixing profiles, computed by quadrature on the walk's own domain: the
 full column, with the velocity factor clipped at ``zeta_min``, floored and renormalized exactly as
 the walk applies it; the correction is applied to the model's K before ``background`` is added, so
@@ -225,9 +239,10 @@ the background stays a floor. Where the resolved shear exceeds the model's K the
 and the solver warns once (the vertical walk then generates more shear dispersion than the
 longitudinal model claims exists). On the full column with the unclipped log law ``c`` is Elder's
 ``0.404 / kappa^3 = 5.86``; the clip at 0.001 gives 5.83 and at 0.01 gives 5.58; the constant profile
-at ``beta = 0.067`` gives 6.58; the floor costs a few percent at typical ``u* / v`` (5.23 at the
-Delaware median ratio 0.143). For the parabolic and constant profiles without a vertical background
-``c`` depends on the reach only through ``u* / v`` and is tabulated once at start-up; the ``"value"``
+at ``beta = 0.067`` gives 6.58 unclipped (``2 / (27 kappa^2 beta)``); the floor costs a few percent at
+typical ``u* / v`` (5.23 at the Delaware median ratio 0.143). For the parabolic and constant profiles
+without a vertical background ``c`` depends on the reach only through ``u* / v`` and is tabulated once
+at start-up on a grid of ``u* / v / (1 + u* / v)`` that covers every ratio; the ``"value"``
 profile and a non-zero ``vertical.background`` also depend on ``u* h`` and are evaluated per reach on
 every step by a coarser quadrature, a visible cost on a large network. The acceptance tests show the
 resolved shear reproduces ``2 c u* h t`` within 10 percent and that, with Fischer on and the
@@ -284,21 +299,26 @@ the dispersive kick dominates the step's displacement (``sqrt(2 K dt) >> v * dt`
 smaller when advection dominates, because most exits then occur in the exactly monitored advective
 substep. The exit-time bias scales as ``sqrt(dt)``, not ``dt``.
 
-For the drift model: a deposited particle keeps the ``s`` it had at the start of the step and is
-stamped ``exit_time = t + dt`` (a first-order timing approximation). The per-contact deposition
-probability samples the mean concentration over the contact reach ``zeta_min h + w dt_sub`` rather
-than the bed concentration, so the deposition rate is low by about
-``w (zeta_min h + w dt_sub) / (2 Kz)`` relative: 3 percent at the default sub-step for a 1 cm/s
-settling velocity in a 0.0067 m2/s column, shrinking with the sub-step and as ``w^2``. When
-``(k_d - w) dt_sub`` exceeds ``zeta_min h`` the probability clips at 1 and the rate depends on the
-sub-step count; the startup report prints the probability for the first hydraulics slice, and the
-solver warns once and counts the clipped contacts (``clipped_contacts``) when it happens in a run
-(raise ``zeta_min`` or lower ``substep_fraction``). A dry reach has no contact layer and deposits
-nothing. A perfectly absorbing bed carries the ``sqrt(dt)`` bias of absorbing random walks. Rouse
-numbers ``w / (kappa u*)`` of 1 and above concentrate particles in a bed layer thinner than any
-affordable sub-step resolves; the model then reproduces the near-bed profile only qualitatively.
-When the sub-step count hits ``max_substeps`` the vertical walk resolves less of the shear
-dispersion than the fraction implies. The first design used the Euler-Ito walk with the gradient
+For the drift model: a deposited particle is stamped with the time of its contact sub-step but keeps
+the ``s`` it had at the start of the step, on average ``v dt / 2`` upstream of where it touched the
+bed (about 300 m at the Delaware medians with a 900 s step, up to a reach length). The vertical
+velocity is evaluated once per step at the midpoint. The per-contact deposition probability samples
+the mean concentration over the contact reach ``zeta_min h + max(w, 0) dt_sub`` rather than the bed
+concentration, so the deposition rate is low by about ``w (zeta_min h + w dt_sub) / (2 Kz)``
+relative: 3 percent at the default sub-step for a 1 cm/s settling velocity in a 0.0067 m2/s column,
+shrinking with the sub-step. When ``(k_d - max(w, 0)) dt_sub`` exceeds ``zeta_min h`` the
+probability clips at 1: the bed then behaves as a Robin bed with the effective velocity
+``w + zeta_min h / dt_sub``, which depends on the sub-step count; the startup report prints the
+probability for the first hydraulics slice, and the solver warns once and counts the clipped
+contacts (``clipped_contacts``) when it happens in a run (raise ``zeta_min`` or lower
+``substep_fraction``). A dry reach has no contact layer and deposits nothing. The mixing kernel's
+higher modes match the heat kernel to second order in the sub-step, and the velocity is sampled once
+per sub-step, so the within-step shear dispersion is over-predicted by about 1 percent at the
+default fraction and 8 percent at 0.1. Settling equilibria converge as the sub-step to the power
+``1 - P``; Rouse numbers ``w / (kappa u*)`` of 1 and above concentrate particles in a bed layer that
+no affordable sub-step resolves, and the model then reproduces the near-bed profile only
+qualitatively. When the sub-step count hits ``max_substeps`` the vertical walk resolves less of the
+shear dispersion than the fraction implies. The first design used the Euler-Ito walk with the gradient
 drift term and a reflecting wall at ``zeta_min`` (Visser 1997; Ross and Sharples 2004); with a
 mixing coefficient that vanishes at the wall it could not keep a column uniform at any affordable
 sub-step, which is why the kernels above were built instead.
@@ -306,23 +326,32 @@ sub-step, which is why the kernels above were built instead.
 References
 ----------
 
-* Elder, J.W. (1959). The dispersion of marked fluid particles in turbulent shear flow. *Journal of
-  Fluid Mechanics* 5(4), 544-560.
+* Elder, J.W. (1959). The dispersion of marked fluid in turbulent shear flow. *Journal of Fluid
+  Mechanics* 5(4), 544-560.
+* Erban, R., Chapman, S.J. (2007). Reactive boundary conditions for stochastic simulations of
+  reaction-diffusion processes. *Physical Biology* 4(1), 16-28.
 * Fischer, H.B., List, E.J., Koh, R.C.Y., Imberger, J., Brooks, N.H. (1979). *Mixing in Inland and
   Coastal Waters*. Academic Press.
 * Fisher, R.A. (1953). Dispersion on a sphere. *Proceedings of the Royal Society A* 217, 295-305.
-* Karlin, S., Taylor, H.M. (1981). *A Second Course in Stochastic Processes*. Academic Press, ch. 15.
+* Fisher, N.I., Lewis, T., Embleton, B.J.J. (1987). *Statistical Analysis of Spherical Data*.
+  Cambridge University Press.
+* Jakob, W. (2012). Numerically stable sampling of the von Mises Fisher distribution on S2 (and
+  other tricks). Technical note, Mitsuba renderer.
+* Karlin, S., Taylor, H.M. (1981). *A Second Course in Stochastic Processes*. Academic Press, ch. 15
+  sec. 13, p. 338 (eq. 13.33).
+* Mijatovic, A., Mramor, V., Uribe Bravo, G. (2018). Projections of spherical Brownian motion.
+  *Electronic Communications in Probability* 23, paper 12, 1-12.
 * Krone, R.B. (1962). *Flume studies of the transport of sediment in estuarial shoaling processes*.
   Hydraulic Engineering Laboratory, University of California, Berkeley.
 * Ross, O.N., Sharples, J. (2004). Recipe for 1-D Lagrangian particle tracking models in
   space-varying diffusivity. *Limnology and Oceanography: Methods* 2, 289-302.
 * Rouse, H. (1937). Modern conceptions of the mechanics of fluid turbulence. *Transactions ASCE*
-  102, 463-543.
+  102, 463-505 (discussion to 543).
 * Taylor, G.I. (1953). Dispersion of soluble matter in solvent flowing slowly through a tube.
-  *Proceedings of the Royal Society A* 219, 186-203.
-* Ulrich, G. (1984). Computer generation of distributions on the m-sphere. *Applied Statistics*
-  33(2), 158-163; Wood, A.T.A. (1994). Simulation of the von Mises Fisher distribution.
-  *Communications in Statistics, Simulation and Computation* 23(1), 157-164.
+  *Proceedings of the Royal Society A* 219, 186-203; (1954). The dispersion of matter in turbulent
+  flow through a pipe. *Proceedings of the Royal Society A* 223, 446-468.
+* Ulrich, G. (1984). Computer generation of distributions on the m-sphere. *Journal of the Royal
+  Statistical Society C (Applied Statistics)* 33(2), 158-163.
 * van Rijn, L.C. (1984). Sediment transport, part II: suspended load transport. *Journal of
   Hydraulic Engineering* 110(11), 1613-1641.
 * Visser, A.W. (1997). Using random walk models to simulate the vertical distribution of particles

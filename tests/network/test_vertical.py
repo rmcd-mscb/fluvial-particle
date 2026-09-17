@@ -173,10 +173,21 @@ def test_vertical_profiles_validates_zeta_min_and_tau():
         shear_dispersion_coefficient(VerticalDispersionConfig(profile="value", value=0.01), 0.001, ustar_depth=0.0)
 
 
-def test_shear_table_holds_above_ratio_max():
+def test_shear_table_covers_every_ratio():
+    # tabulated in x = ratio / (1 + ratio), so slow steep reaches (ustar / v > 2) are not clamped
     vp = VerticalProfiles(VerticalDispersionConfig(), zeta_min=0.001)
-    c = vp.shear_coefficient(np.array([2.0, 100.0]), np.array([1.0, 1.0]))
-    assert c[0] == c[1]
+    ratios = np.array([0.073, 0.5, 2.0, 5.0, 10.0])
+    c = vp.shear_coefficient(ratios, np.ones(5))
+    for r, ci in zip(ratios, c, strict=True):
+        ref = shear_dispersion_coefficient(VerticalDispersionConfig(), 0.001, ratio=float(r))
+        assert ci == pytest.approx(ref, rel=0.03), (r, ci, ref)
+    assert c[-1] < c[0] and vp.shear_coefficient(np.array([1e6]), np.array([1.0]))[0] < 1e-3
+
+
+def test_vmf_table_is_monotone_up_to_tau_max():
+    taus = np.logspace(-4, np.log10(11.9), 300)  # inside (TAU_MIN, TAU_MAX)
+    kappa = vmf_concentration(taus)
+    assert np.all(np.diff(kappa) < 0.0) and kappa[-1] > 0.0
 
 
 def test_substep_count_at_drb_medians_and_cap():

@@ -297,7 +297,7 @@ class NetworkSolver:
         """Reach at the terminal status (the outlet for exited, the bed reach for settled), -1 otherwise."""
         return self._views["exit_reach"]
 
-    def terminate(self, idx: IntArray, status: int, t_end: float) -> None:
+    def terminate(self, idx: IntArray, status: int, t_end: float | FloatArray) -> None:
         """Give active particles ``idx`` a terminal status at time ``t_end``; they keep their reach and ``s``.
 
         Used by behavioral models (a settled particle has a position on the bed). The base solver's
@@ -306,7 +306,7 @@ class NetworkSolver:
         Args:
             idx: particle indices; every one must be active.
             status: one of ``TERMINAL_STATUSES``.
-            t_end: solver time (s) at which the particles reached the status.
+            t_end: solver time (s) at which the particles reached the status, a scalar or one per particle.
 
         Raises:
             ValueError: ``status`` is not terminal, or a particle in ``idx`` is not active.

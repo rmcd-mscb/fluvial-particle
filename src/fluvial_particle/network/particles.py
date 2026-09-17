@@ -12,7 +12,7 @@ import numpy as np
 
 from ..random_walk import reflect_interval
 from .solver import ACTIVE, SETTLED, FloatArray, Hydraulics, IntArray, NetworkSolver
-from .vertical import SUBSTEP_FRACTION, VerticalProfiles, deposition_probability, substep_count, substep_counts
+from .vertical import SUBSTEP_FRACTION, VerticalProfiles, deposition_probability, substep_counts
 
 
 STATE_KINDS = ("extensive", "intensive")
@@ -267,15 +267,11 @@ class DriftParticles(NetworkSolver):
         ustar = np.asarray(h["ustar"], dtype=np.float64)[r]
         depth = np.asarray(h["depth"], dtype=np.float64)[r]
         v = np.asarray(h["velocity"], dtype=np.float64)[r]
-        n_sub = substep_count(
-            dt,
-            self.profiles.kz_max(ustar, depth),
-            depth,
-            c=self.params["substep_fraction"],
-            max_substeps=self.params["max_substeps"],
-        )
+        counts = substep_counts(dt, self.profiles.kz_max(ustar, depth), depth, c=self.params["substep_fraction"])
+        n_uncapped = int(counts.max()) if counts.size else 1
+        n_sub = int(min(max(n_uncapped, 1), self.params["max_substeps"]))
         self.last_substeps = n_sub
-        if n_sub >= self.params["max_substeps"]:
+        if n_uncapped > self.params["max_substeps"]:
             self.steps_at_cap += 1
             if not self._warned_cap:
                 self._warned_cap = True
@@ -297,16 +293,17 @@ class DriftParticles(NetworkSolver):
         zmin = self.params["zeta_min"]
         p_dep = deposition_probability(k_d, dts, zmin * depth, settling=w)
         check_bed = np.any(p_dep > 0.0)
-        for _ in range(n_sub):
+        t_dep = np.full(idx.size, t + dt)  # deposition time per particle, stamped at its sub-step
+        for k in range(n_sub):
             a = np.nonzero(alive)[0]
             if a.size == 0:
                 break
             za = self.profiles.mix(zeta[a], ustar[a], depth[a], dts[a], self.rng)
-            if w != 0.0:
-                za -= w * dts[a] * inv_depth[a]
+            shift = w * dts[a] * inv_depth[a]  # positive down
             if check_bed:
-                # contact: the shifted position, before reflection, is in the layer [0, zeta_min) or below
-                contact = np.nonzero(za < zmin)[0]
+                # contact: the position after the downward part of the shift, before reflection, is in the
+                # layer [0, zeta_min) or below; an upward velocity does not remove contacts made by mixing
+                contact = np.nonzero(za - np.maximum(shift, 0.0) < zmin)[0]
                 if contact.size:
                     b = a[contact]
                     n_clip = int((p_dep[b] >= 1.0).sum())
@@ -323,8 +320,9 @@ class DriftParticles(NetworkSolver):
                             )
                     deposited = b[self.rng.uniform(size=b.size) < p_dep[b]]
                     alive[deposited] = False
+                    t_dep[deposited] = t + dt - tau[idx[deposited]] + (k + 1) * dts[deposited]
             if w != 0.0:
-                za = reflect_interval(za, 0.0, 1.0)
+                za = reflect_interval(za - shift, 0.0, 1.0)
             zeta[a] = za
             live = a[alive[a]]
             fsum[live] += self.profiles.velocity_factor(zeta[live], ustar[live], v[live])
@@ -333,9 +331,10 @@ class DriftParticles(NetworkSolver):
         factor = np.ones(self.n)
         factor[idx[alive]] = fsum[alive] / n_sub
         if not alive.all():
-            # Deposited particles keep the s they had at the start of the step (a first-order timing
-            # approximation, documented) and are excluded from this step's advection.
-            self.terminate(idx[~alive], SETTLED, t + dt)
+            # Deposited particles are stamped with their sub-step time but keep the s they had at the
+            # start of the step (on average v dt / 2 upstream of the true spot, documented) and are
+            # excluded from this step's advection.
+            self.terminate(idx[~alive], SETTLED, t_dep[~alive])
         self._state["velocity_factor"][idx] = factor[idx]
         return factor
 

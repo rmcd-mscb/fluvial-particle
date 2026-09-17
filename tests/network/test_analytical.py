@@ -212,15 +212,15 @@ def test_first_passage_bias_bounded_at_default_dt(tmp_path):
 # All runs build DriftParticles directly on an in-memory uniform reach (ustar 0.1 m/s, depth 1 m,
 # velocity 0.7 m/s: near the DRB export medians, depth rounded up from 0.59 m) with 20,000 particles released as a slug at s = 0 of one
 # long reach, dt = 60 s, seed 12345. The vertical kernel keeps a uniform column exactly uniform at any
-# sub-step; the default sub-step fraction 0.03 resolves the within-step shear dispersion to about 2
-# percent (12 percent at the spec's original 0.1).
+# sub-step; the default sub-step fraction 0.03 over-predicts the within-step shear dispersion by about
+# 1 percent (8 percent at the spec's original 0.1), the error of sampling the velocity once per sub-step.
 
 from fluvial_particle.network.config import DispersionConfig, VerticalDispersionConfig  # noqa: E402
 from fluvial_particle.network.network import Network  # noqa: E402
 from fluvial_particle.network.particles import DriftParticles  # noqa: E402
 from fluvial_particle.network.solver import ACTIVE, SETTLED  # noqa: E402
 from fluvial_particle.network.sources import ParticleSchedule  # noqa: E402
-from fluvial_particle.network.vertical import VerticalProfiles  # noqa: E402
+from fluvial_particle.network.vertical import VerticalProfiles, substep_count  # noqa: E402
 from tests.network.support import ArrayHydraulicsProvider, uniform_reach_dataset  # noqa: E402
 
 
@@ -277,34 +277,23 @@ def test_drift_uniform_column_stays_uniform(monkeypatch):
     assert _uniform_pvalue(sol.state["zeta"]) < 1e-6
 
 
-def _rouse_cdf(p_rouse, a, n=200001):
-    """CDF of the Rouse profile ((1 - z) / z * a / (1 - a))^P on [a, 1 - a]."""
-    z = np.linspace(a, 1.0 - a, n)
-    pdf = ((1.0 - z) / z * a / (1.0 - a)) ** p_rouse
-    cdf = np.concatenate([[0.0], np.cumsum(0.5 * (pdf[1:] + pdf[:-1]) * np.diff(z))])
-    cdf /= cdf[-1]
-    return z, cdf
-
-
 def test_drift_rouse_profile():
     """Test 2: a settling particle column equilibrates to the Rouse profile (P = 0.5).
 
-    ``settling_velocity = P kappa ustar`` with a reflecting bed. The settling step is a first-order
-    operator split, so the achieved accuracy is a Kolmogorov-Smirnov distance rather than a p-value
-    (at 20,000 particles a p-value of 0.01 would demand the CDF within 1.2 points everywhere): D is
-    0.049 at the default sub-step fraction 0.03 and 0.022 at 0.01, where it has converged (0.023 at
-    0.003). Rouse numbers of 1 and above are out of reach: their profile is not integrable at the
-    bed, so a third of the truncated reference mass sits below zeta 0.01 (D is 0.14 at 0.003). The
-    reference is the profile truncated to [zeta_min, 1 - zeta_min]; the sample is clipped the same way.
+    ``settling_velocity = P kappa ustar`` with a reflecting bed. The stationary density of the
+    continuous process is the Rouse profile ((1 - zeta) / zeta)^P, i.e. Beta(1 - P, 1 + P), which
+    is normalizable only for P < 1. The split (mix, shift, reflect) flattens the singular bed layer
+    of thickness about a dt_sub each sub-step, so the Kolmogorov-Smirnov distance to the exact
+    profile converges as dt_sub^(1 - P), not linearly: about 0.085 at the default fraction 0.03,
+    0.05 at 0.01 and 0.03 at 0.003 (measured in the review of this PR). The test runs at 0.01
+    against the untruncated Beta CDF with a threshold of 0.06. Rouse numbers of 1 and above are
+    out of reach: their profile is not integrable at the bed.
     """
     p_rouse = 0.5
     w = p_rouse * 0.41 * USTAR
     sol = _advance(_drift(params={"settling_velocity": w, "substep_fraction": 0.01}), 3 * 3600.0)
-    a = 0.001
-    zeta = np.clip(sol.state["zeta"], a, 1.0 - a)
-    z, cdf = _rouse_cdf(p_rouse, a)
-    ks = stats.kstest(zeta, lambda x: np.interp(x, z, cdf))
-    assert ks.statistic < 0.03, f"P = {p_rouse}: KS D = {ks.statistic:.4f} (p = {ks.pvalue:.3g})"
+    ks = stats.kstest(sol.state["zeta"], stats.beta(1.0 - p_rouse, 1.0 + p_rouse).cdf)
+    assert ks.statistic < 0.06, f"P = {p_rouse}: KS D = {ks.statistic:.4f} (p = {ks.pvalue:.3g})"
 
 
 def test_drift_mean_advection_is_the_reach_velocity():
@@ -399,14 +388,17 @@ def test_drift_deposition_against_the_robin_condition():
     shrinks: 0.024, 0.014, 0.007 absolute at 30 min for fractions 0.03, 0.01, 0.003). The test runs
     at 0.003 after the initial transient; doubling the sub-step moves the answer by less than
     0.01, which shows the derived probability, not the sub-step count, sets the rate. A huge
-    deposition velocity is the absorbing bed, where the particle rate carries the sqrt(dt) bias of
-    absorbing random walks.
+    deposition velocity clips the probability at 1, which is a Robin bed with the effective
+    velocity ``w + zeta_min h / dt_sub`` rather than an absorbing bed; that case is checked against
+    the reference at ``k_eff`` with and without settling.
     """
     w, k_d = 0.01, 1e-3
     vert = VerticalDispersionConfig(profile="constant")
     kz = 0.067 * USTAR * DEPTH
     times = np.array([1200.0, 1800.0])
     reference = _robin_reference(k_d, w, kz, DEPTH, times)
+    fraction = 0.003
+    dt_sub = 60.0 / substep_count(60.0, np.array([kz]), np.array([DEPTH]), c=fraction)
 
     def deposited_fraction(params):
         sol = _drift(dispersion=DispersionConfig(model="none", vertical=vert), params=params)
@@ -416,10 +408,20 @@ def test_drift_deposition_against_the_robin_condition():
             out.append(float((sol.status == SETTLED).mean()))
         return np.array(out)
 
-    got = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": 0.003})
+    got = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": fraction})
     assert np.all(np.abs(got - reference) < 0.02), f"particles {got} vs Robin reference {reference}"
-    coarse = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": 0.006})
+    coarse = deposited_fraction({"settling_velocity": w, "deposition_velocity": k_d, "substep_fraction": 2 * fraction})
     assert np.all(np.abs(coarse - got) < 0.01), f"sub-step doubled: {coarse} vs {got}"
-    absorbing = deposited_fraction({"settling_velocity": w, "deposition_velocity": 1e6, "substep_fraction": 0.003})
-    reference = _robin_reference(1e6, w, kz, DEPTH, times)
-    assert np.all(np.abs(absorbing - reference) < 0.05), f"absorbing bed: {absorbing} vs {reference}"
+    # A clipped probability is not an absorbing bed: every contact deposits, which is a Robin bed with
+    # the effective velocity k_eff = w + zeta_min h / dt_sub, with and without settling.
+    for settling in (w, 0.0):
+        clipped = deposited_fraction({
+            "settling_velocity": settling,
+            "deposition_velocity": 1e6,
+            "substep_fraction": fraction,
+        })
+        k_eff = settling + 0.001 * DEPTH / dt_sub
+        reference = _robin_reference(k_eff, settling, kz, DEPTH, times)
+        assert np.all(np.abs(clipped - reference) < 0.02), (
+            f"clipped, w = {settling}: {clipped} vs k_eff {k_eff:.4g}: {reference}"
+        )

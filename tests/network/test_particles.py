@@ -310,7 +310,8 @@ def test_drift_settles_with_an_absorbing_bed_and_not_above_critical_shear():
     sol = make(DriftParticles, ds, slug(20), dt=100.0, params=params)
     sol.step()  # settling 5 m in a 1 m column: every particle touches the bed and sticks
     assert (sol.status == SETTLED).all()
-    assert np.isfinite(sol.s).all() and (sol.exit_reach == sol.reach).all() and (sol.exit_time == 100.0).all()
+    assert np.isfinite(sol.s).all() and (sol.exit_reach == sol.reach).all()
+    assert (sol.exit_time > 0.0).all() and (sol.exit_time <= 100.0).all()  # stamped at the contact sub-step
     np.testing.assert_allclose(sol.state["zeta"], 0.0)  # on the bed
     s_before = sol.s.copy()
     sol.step()
@@ -359,6 +360,31 @@ def test_drift_swimming_up_reflects_at_the_surface_and_never_deposits():
     expected = 2.0 - expected if expected > 1.0 else expected
     np.testing.assert_allclose(up.state["zeta"], expected)
     assert (up.status == ACTIVE).all()
+
+
+def test_drift_upward_velocity_does_not_switch_deposition_off():
+    # Mixing still brings particles into the contact layer while they swim up; the contact test is
+    # made before the upward shift, so a k_d that clips deposits a share of them.
+    ds = three_reach_dataset()
+    up = make(DriftParticles, ds, slug(400), dt=100.0, params={"swim_velocity": 0.001, "deposition_velocity": 1e9})
+    with pytest.warns(UserWarning, match="clipped at 1"):
+        for _ in range(5):
+            up.step()
+    assert 0 < int((up.status == SETTLED).sum()) < 400
+
+
+def test_drift_deposition_time_is_stamped_at_the_sub_step():
+    sol = make(
+        DriftParticles,
+        three_reach_dataset(),
+        slug(50),
+        dt=100.0,
+        params={"deposition_velocity": 1e9, "settling_velocity": 0.05},
+    )
+    with pytest.warns(UserWarning, match="clipped at 1"):
+        sol.step()
+    et = sol.exit_time[sol.status == SETTLED]
+    assert et.size == 50 and (et > 0.0).all() and (et <= 100.0).all() and et.std() > 0.0
 
 
 def test_drift_partial_krone_suppression():

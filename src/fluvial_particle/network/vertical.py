@@ -15,10 +15,12 @@ holds by construction rather than to some order in the step):
   sqrt(2 a zeta (1 - zeta)) dW`` with ``a = kappa ustar / h`` is a Jacobi (Wright-Fisher) diffusion,
   and with ``zeta = (1 - cos theta) / 2`` it is the polar angle of Brownian motion on the unit sphere
   with generator ``a`` times the spherical Laplacian (Karlin and Taylor 1981, ch. 15). One sub-step
-  is therefore a random rotation: a von Mises-Fisher step about the current direction (Fisher 1953),
+  is therefore a random rotation: a von Mises-Fisher step about the current direction (Fisher 1953;
+  the identity is Karlin and Taylor 1981, ch. 15 sec. 13, and Mijatovic, Mramor and Uribe Bravo 2018),
   whose cosine has a closed-form inverse CDF, with the concentration calibrated so the first
   spherical mode decays as the heat kernel does, ``E[cos psi] = exp(-2 a dt)``. Isotropy makes the
-  uniform measure invariant for every step; higher modes are approximated to first order in ``a dt``.
+  uniform measure invariant for every step; the higher modes then match the heat kernel to second
+  order (local error ``O((a dt)^3)``, with a constant that grows with the mode number).
 - constant or fixed ``Kz``: a Gaussian displacement mirror-reflected at 0 and 1, exact for a
   constant coefficient.
 
@@ -47,7 +49,7 @@ FloatArray = npt.NDArray[np.float64]
 
 # The quadrature grid never touches zeta = 0 (ln 0) or 1 (parabolic Kz = 0 in 1 / Kz).
 _EPS = 1e-9
-RATIO_MAX = 2.0  # ustar / v above which the shear table is held at its last value (near-still reaches)
+N_RATIO = 129  # points of the shear table in x = ratio / (1 + ratio), which covers every ustar / v
 SUBSTEP_FRACTION = 0.03  # default fraction of the column mixing time h^2 / Kz_max per sub-step
 # von Mises-Fisher calibration table: dimensionless step tau = a dt in [TAU_MIN, TAU_MAX]; below it the
 # small-step limit kappa = 1 / (2 tau) holds to 1e-5, above it the step is a fresh uniform direction.
@@ -101,11 +103,12 @@ def _deviation(z: FloatArray, kappa: float, ratio: float | None, lo: float, hi: 
 
 
 def _taylor(z: FloatArray, gt: FloatArray, q: FloatArray) -> float:
-    """Taylor's dimensionless shear-dispersion integral on the column ``z`` (Taylor 1953; Elder 1959).
+    """Taylor's dimensionless shear-dispersion integral on the column ``z`` (Taylor 1954; Elder 1959).
 
     ``K_shear = c ustar h`` with ``c = -(1 / W) int gt * G2``, ``G1 = int gt``, ``G2 = int G1 / q``,
-    ``W`` the domain width, ``gt`` the zero-mean velocity deviation in units of ustar and
-    ``q = Kz / (ustar h)``. The ``1 / W`` is the cross-sectional average.
+    ``W`` the column height in zeta (1 up to the grid's end points), ``gt`` the zero-mean velocity
+    deviation in units of ustar and ``q = Kz / (ustar h)``. The ``1 / W`` is the cross-sectional
+    average (Taylor 1954; Fischer et al. 1979, eq. 4.32).
     """
     g1 = cumulative_trapezoid(gt, z, initial=0.0)
     g2 = cumulative_trapezoid(g1 / q, z, initial=0.0)
@@ -185,9 +188,14 @@ def _vmf_concentration_table(n: int = 400) -> tuple[FloatArray, FloatArray]:
     """``kappa(tau)`` solving ``coth kappa - 1 / kappa = exp(-2 tau)`` on a log grid of ``tau``."""
     taus = np.logspace(np.log10(TAU_MIN), np.log10(TAU_MAX), n)
     kappas = np.empty(n)
+
+    def langevin(k: float) -> float:
+        # coth k - 1 / k, by its series below 1e-3 where the difference cancels
+        return k / 3.0 - k**3 / 45.0 if k < 1e-3 else 1.0 / np.tanh(k) - 1.0 / k
+
     for i, tau in enumerate(taus):
         target = float(np.exp(-2.0 * tau))
-        kappas[i] = optimize.brentq(lambda k, t=target: (1.0 / np.tanh(k) - 1.0 / k) - t, 1e-9, 1e7)
+        kappas[i] = optimize.brentq(lambda k, t=target: langevin(k) - t, 1e-12, 1e7)
     return taus, kappas
 
 
@@ -215,7 +223,9 @@ def vmf_concentration(tau: FloatArray) -> FloatArray:
 def vmf_cosine(kappa: FloatArray, u: FloatArray) -> FloatArray:
     """Cosine of the von Mises-Fisher step angle on the sphere by inverse CDF: ``w ~ exp(kappa w)`` on [-1, 1].
 
-    ``w = 1 + ln(1 - u (1 - exp(-2 kappa))) / kappa`` (Ulrich 1984; Wood 1994), written with ``expm1``
+    ``w = 1 + ln(1 - u (1 - exp(-2 kappa))) / kappa``: the tangent-normal decomposition of Ulrich (1984)
+    with the closed-form inversion of the S^2 marginal (Fisher, Lewis and Embleton 1987; Jakob 2012),
+    written with ``expm1``
     and ``log1p`` so it is exact as ``kappa -> 0`` (uniform ``w``) and ``kappa -> inf`` (``w = 1``).
     """
     kappa = np.asarray(kappa, dtype=np.float64)
@@ -257,8 +267,10 @@ def sphere_step(zeta: FloatArray, tau: FloatArray, rng: np.random.RandomState) -
 class VerticalProfiles:
     """Velocity factor, mixing profile and kernel, and shear coefficient for one ``VerticalDispersionConfig``.
 
-    Taylor's coefficient ``c(ratio)`` is tabulated at construction on a grid of ``ratio = ustar / v``
-    in ``[0, RATIO_MAX]`` and interpolated per reach and step, so the per-step cost is nil; the
+    Taylor's coefficient ``c(ratio)`` is tabulated at construction on a uniform grid of
+    ``x = ratio / (1 + ratio)`` in ``[0, 1]`` (``ratio = ustar / v``; ``x = 1`` is a still reach where
+    ``c = 0``) and interpolated per reach and step, so the per-step cost is nil and no ratio is out of
+    range; the
     normalization of the floored log-law factor is exact (closed form). The ``"value"`` profile and
     a non-zero ``background`` make ``c`` depend on ``ustar * h`` as well; for those
     ``shear_coefficient`` runs the quadrature per reach on a coarser grid (``n_reach`` x
@@ -267,7 +279,7 @@ class VerticalProfiles:
     Args:
         cfg: the vertical profiles.
         zeta_min: clip of the velocity factor; the walk itself lives on ``[0, 1]``.
-        n_ratio: table points in ``ratio``.
+        n_ratio: table points in ``x = ratio / (1 + ratio)``.
         n_quad: quadrature points for the table.
         n_reach_quad: quadrature points for the per-reach path.
     """
@@ -277,7 +289,7 @@ class VerticalProfiles:
         cfg: VerticalDispersionConfig,
         zeta_min: float,
         *,
-        n_ratio: int = 65,
+        n_ratio: int = N_RATIO,
         n_quad: int = 20001,
         n_reach_quad: int = 2001,
     ) -> None:
@@ -295,13 +307,14 @@ class VerticalProfiles:
         self._per_reach = cfg.profile == "value" or cfg.background > 0.0
         self._lo = max(self.zeta_min, _EPS)
         self._hi = 1.0 - self._lo
-        self._ratios = np.linspace(0.0, RATIO_MAX, n_ratio)
+        self._x = np.linspace(0.0, 1.0, n_ratio)
         if self._log and not self._per_reach:
             z = _grid(n_quad)
             q = _dimensionless_kz(cfg, z, None)
-            self._shear = np.array([
-                _taylor(z, _deviation(z, cfg.kappa, r, self._lo, self._hi), q) for r in self._ratios
-            ])
+            ratios = self._x[:-1] / (1.0 - self._x[:-1])
+            self._shear = np.append(
+                [_taylor(z, _deviation(z, cfg.kappa, float(r), self._lo, self._hi), q) for r in ratios], 0.0
+            )
         else:
             self._shear = np.zeros(n_ratio)
 
@@ -418,7 +431,7 @@ class VerticalProfiles:
             return c
         ratio = ustar[ok] / v[ok]
         if not self._per_reach:
-            c[ok] = np.interp(ratio, self._ratios, self._shear)
+            c[ok] = np.interp(ratio / (1.0 + ratio), self._x, self._shear)
             return c
         if h is None:
             raise ValueError(f"the {self.cfg.profile!r} profile or a vertical background needs depth per reach")
@@ -454,8 +467,10 @@ def substep_count(
 
     One count for all active particles (the maximum over their reaches) keeps the walk vectorized.
     The kernels keep the column well mixed at any step; ``c`` sets how well the within-step shear
-    dispersion is resolved (2 percent at 0.03, 12 percent at 0.1 for the log law with the parabolic
-    profile). Reaches with no depth or no mixing do not constrain the count; the result is at least 1.
+    dispersion is resolved (about 1 percent over at 0.03 and 8 percent at 0.1 for the log law with the
+    parabolic profile, the error of sampling the velocity once per sub-step) and, through the sub-step
+    length, the deposition cap ``k_d <= w + zeta_min h / dt_sub``. Reaches with no depth or no mixing
+    do not constrain the count; the result is at least 1.
 
     Args:
         dt: the solver step (s).
@@ -482,9 +497,11 @@ def deposition_probability(
     within ``layer + w dt_sub`` of the bed (``layer = zeta_min h``, ``w`` the downward velocity), so
     removing each with probability ``p = k_d dt_sub / (layer + w dt_sub)`` gives the Robin flux
     ``k_d C_bed`` while ``p < 1``: the layer rule ``k_d dt_sub / layer`` when contact is by mixing,
-    ``k_d / w`` when settling dominates. Clipped to 1 the bed absorbs every particle that reaches it
-    (the perfectly absorbing bed: the settling flux plus the mixing supply, the latter growing with
-    the sub-step count, which is the bias bound the docs state). The probability is derived, never a
+    ``k_d / w`` when settling dominates. Clipped to 1 every contact deposits, which is not an
+    absorbing bed but a Robin bed with the effective velocity ``k_eff = w + layer / dt_sub``: the
+    deposition velocity the rule can represent is capped there, and the cap depends on the sub-step
+    (the docs state it). Erban and Chapman's (2007) per-contact probability for a diffusive wall
+    contact agrees with this rule within 1 percent while ``p < 1``. The probability is derived, never a
     user parameter. Where the layer has no thickness (a dry reach) it is 0, whatever the settling velocity.
 
     Args:
